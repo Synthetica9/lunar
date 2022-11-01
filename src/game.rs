@@ -307,11 +307,10 @@ impl Game {
         let friendly_pieces = self.board.get_color(&self.to_move);
 
         let mut res = vec![];
-        let mut magic_moves = |magic: &[u64; 64], attacks: &[&[u64]; 64], masks: &[u64; 64]| {
+        let mut magic_moves = |magic_tbl: &[(u64, u64, &[u64]); 64]| {
             for src in srcs.iter_squares() {
-                let mask = Bitboard(masks[src.as_index()]);
-                let attack = attacks[src.as_index()];
-                let magic = magic[src.as_index()];
+                let (magic, mask, attack) = magic_tbl[src.as_index()];
+                let mask = Bitboard(mask);
 
                 let bits = attack.len().trailing_zeros() ;
 
@@ -330,16 +329,12 @@ impl Game {
         if rook_magics {
             magic_moves(
                 &magics::ROOK_MAGIC,
-                &magics::ROOK_ATTACKS,
-                &magics::ROOK_MASKS,
             );
         }
 
         if bishop_magics {
             magic_moves(
                 &magics::BISHOP_MAGIC,
-                &magics::BISHOP_ATTACKS,
-                &magics::BISHOP_MASKS,
             );
         }
 

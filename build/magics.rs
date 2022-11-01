@@ -218,28 +218,27 @@ pub fn gen_magics_file(file: &mut std::fs::File) -> std::io::Result<()> {
         let bits = if *is_bishop { BISHOP_BITS } else { ROOK_BITS };
         let name = if *is_bishop { "BISHOP" } else { "ROOK" };
 
-        let mut magics = Vec::new();
-        let mut masks = Vec::new();
-
+        writeln!(file, "// Magic, mask, LUT for {}", name)?;
+        writeln!(file, "pub const {}_MAGIC: [(u64, u64, &[u64]); 64] = [", name)?;
         for square in 0..64 {
             let (magic, used) = find_magic(square, bits[square as usize], *is_bishop);
-            magics.push(magic);
-            masks.push(if *is_bishop {
+            let mask = if *is_bishop {
                 bishop_premask(square)
             } else {
                 rook_premask(square)
-            });
+            };
 
-            dump_table(file, &format!("{}_{}_ATTACKS", name, square), &used, false)?;
-        }
+            writeln!(file, "    (")?;
+            writeln!(file, "        0x{:016x},", magic)?;
+            writeln!(file, "        0x{:016x},", mask)?;
+            writeln!(file, "        &[")?;
 
-        // TODO: Array-of-structs?
-        dump_table(file, &format!("{}_MAGIC", name), &magics, true)?;
-        dump_table(file, &format!("{}_MASKS", name), &masks, true)?;
+            for i in 0..used.len() {
+                writeln!(file, "            0x{:016x},", used[i])?;
+            }
 
-        writeln!(file, "pub const {}_ATTACKS: [&[u64]; 64] = [", name)?;
-        for square in 0..64 {
-            writeln!(file, "  &{},", format!("{}_{}_ATTACKS", name, square))?;
+            writeln!(file, "        ],")?;
+            writeln!(file, "    ),")?;
         }
         writeln!(file, "];\n")?;
     }
