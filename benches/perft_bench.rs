@@ -1,6 +1,13 @@
-use lunar::game::Game;
-
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
+use lunar::game::Game;
+use std::time::Duration;
+
+criterion_group!{
+  name = benches;
+  config = Criterion::default().measurement_time(Duration::from_secs(150));
+  targets = perft_bench
+}
 
 fn perft_bench(c: &mut Criterion) {
     let game = Game::new();
@@ -8,5 +15,5 @@ fn perft_bench(c: &mut Criterion) {
     c.bench_function("perft_5", |b| b.iter(|| black_box(&game).perft(5)));
 }
 
-criterion_group!(benches, perft_bench);
+
 criterion_main!(benches);

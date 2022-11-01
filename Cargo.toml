@@ -20,8 +20,9 @@ strum_macros = "0.24"
 version = "0.8"
 features = ["small_rng"]
 
-[dev-dependencies]
-criterion = "0.3"
+[dev-dependencies.criterion]
+version = "0.4"
+features = ["html_reports"]
 
 [[bench]]
 name = "perft_bench"
