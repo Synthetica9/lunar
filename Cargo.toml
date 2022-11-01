@@ -1,0 +1,28 @@
+[package]
+name = "lunar"
+version = "0.1.0"
+edition = "2021"
+build = "build/main.rs"
+
+[profile.release]
+lto = true
+opt-level = 3
+
+# Make the build script run faster.
+[profile.dev.build_override]
+opt-level = 3
+
+[dependencies]
+strum = "0.24"
+strum_macros = "0.24"
+
+[build-dependencies.rand]
+version = "0.8"
+features = ["small_rng"]
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "perft_bench"
+harness = false
