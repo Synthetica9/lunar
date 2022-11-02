@@ -19,7 +19,7 @@ impl ApplyPly for ZobristHash {
         self.hash ^= hashes::COLOR_PIECE_SQUARE[idx];
     }
 
-    fn update_castle_rights(&mut self, rights: CastleRights) {
+    fn toggle_castle_rights(&mut self, rights: CastleRights) {
         for right in rights.iter() {
             let idx = right.1.as_index() + right.0.as_index() * 2;
             self.hash ^= hashes::CASTLE_RIGHTS[idx];
@@ -52,7 +52,7 @@ impl ZobristHash {
             }
         }
 
-        hash.update_castle_rights(game.castle_rights());
+        hash.toggle_castle_rights(game.castle_rights());
 
         if let Some(square) = game.en_passant() {
             hash.toggle_en_passant(square);

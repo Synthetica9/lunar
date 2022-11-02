@@ -321,6 +321,34 @@ impl Board {
         (knights.and(CENTRAL_16)).popcount()
     }
 
+    pub fn attacked_squares_by_piece(&self, color: &Color, piece: &Piece) -> Bitboard {
+        use Piece::*;
+
+        let occupancy = self.get_occupied();
+        let mut res = Bitboard::new();
+        for sqr in self.get(color, piece).iter_squares() {
+            res |= match piece {
+                Pawn => Bitboard::pawn_attacks(sqr, *color),
+                Knight => Bitboard::knight_attacks(sqr),
+                Bishop => Bitboard::bishop_attacks(sqr, occupancy),
+                Rook => Bitboard::rook_attacks(sqr, occupancy),
+                Queen => Bitboard::queen_attacks(sqr, occupancy),
+                King => Bitboard::king_attacks(sqr),
+            }
+        }
+        res
+    }
+
+    pub fn attacked_squares(&self, color: &Color) -> Bitboard {
+        let mut result = Bitboard::new();
+
+        for piece in Piece::iter() {
+            result |= self.attacked_squares_by_piece(color, &piece);
+        }
+
+        result
+    }
+
     pub fn simple_render(&self) -> String {
         let mut res = String::new();
         for rank in (0..8).rev() {

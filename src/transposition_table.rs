@@ -24,8 +24,8 @@ const ENTRY_SIZE: usize = mem::size_of::<Option<TranspositionEntry>>();
 impl TranspositionTable {
     fn new(bytes: usize) -> TranspositionTable {
         let mut tbl = TranspositionTable {
-            Vec::with_capacity(TranspositionTable::num_entries(bytes));
-        }
+            table: Vec::with_capacity(TranspositionTable::num_entries(bytes)),
+        };
         tbl.resize(bytes);
         tbl
     }
@@ -54,6 +54,6 @@ impl TranspositionTable {
 impl TranspositionEntry {
     fn should_replace(&self, other: &TranspositionEntry) -> bool {
         // TODO: implement. Currently use always_replace
-        return true
+        return true;
     }
 }

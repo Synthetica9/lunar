@@ -6,6 +6,7 @@ use crate::bitboard_map::BitboardMap;
 use crate::castlerights::CastleRights;
 use crate::game::Game;
 use crate::piece::Piece;
+use crate::plyset::PlySet;
 use crate::square::{files, Square};
 
 // Based on stockfish. From their implementation:
@@ -79,6 +80,12 @@ impl Ply {
         Ply::new(src, dst, None)
     }
 
+    pub const fn promotion(src: Square, dst: Square, piece: Piece) -> Ply {
+        // TODO: add special constructor for other cases.
+        debug_assert!(piece.is_promotable());
+        Ply::new(src, dst, Some(SpecialFlag::Promotion(piece)))
+    }
+
     pub const fn normalize(self) -> Ply {
         Ply::new(self.dst(), self.src(), self.flag())
     }
@@ -89,6 +96,10 @@ impl Ply {
 
     pub const fn dst(&self) -> Square {
         Square::from_index((self.0 >> 6) as u8 & 0x3F)
+    }
+
+    pub fn long_name(&self) -> String {
+        format!("{}{}", self.src().to_fen_part(), self.dst().to_fen_part())
     }
 
     pub const fn promotion_piece(&self) -> Option<Piece> {
@@ -178,7 +189,13 @@ impl Ply {
     }
 }
 
-pub fn combination_moves(srcs: &Bitboard, dsts: &Bitboard, move_table: &BitboardMap) -> Vec<Ply> {
+pub fn _combination_moves(
+    plyset: &mut PlySet,
+    srcs: &Bitboard,
+    dsts: &Bitboard,
+    move_table: &BitboardMap,
+    can_promote: bool,
+) {
     // TODO: terrible name.
 
     // Takes a bitboard of valid starting locations, a bitboard of valid ending
@@ -186,19 +203,19 @@ pub fn combination_moves(srcs: &Bitboard, dsts: &Bitboard, move_table: &Bitboard
 
     // srcs is typically where pieces/pawns are
     // dsts is empty/enemy squares
-    let mut res = Vec::new();
+    // can_promote determines whether we can promote.
 
     for src in srcs.iter_squares() {
         let potential = move_table[src];
 
-        res.extend(
-            (potential & *dsts)
-                .iter_squares()
-                .map(|dst| Ply::simple(src, dst)),
-        )
+        for dst in (potential & *dsts).iter_squares() {
+            if can_promote {
+                plyset.push_mk_promotion(src, dst);
+            } else {
+                plyset.push(Ply::simple(src, dst));
+            }
+        }
     }
-
-    res
 }
 
 impl PartialEq for Ply {
@@ -212,7 +229,7 @@ impl PartialEq for Ply {
 pub trait ApplyPly {
     // TODO: should probably be called "toggle"
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square);
-    fn update_castle_rights(&mut self, castle_rights: CastleRights);
+    fn toggle_castle_rights(&mut self, castle_rights: CastleRights);
     fn toggle_en_passant(&mut self, en_passant: Square);
     fn flip_side(&mut self);
 
@@ -318,10 +335,10 @@ pub trait ApplyPly {
             };
 
             if oo && disable_oo {
-                self.update_castle_rights(CastleRights::single(to_move, CastleDirection::Kingside));
+                self.toggle_castle_rights(CastleRights::single(to_move, CastleDirection::Kingside));
             }
             if ooo && disable_ooo {
-                self.update_castle_rights(CastleRights::single(
+                self.toggle_castle_rights(CastleRights::single(
                     to_move,
                     CastleDirection::Queenside,
                 ));

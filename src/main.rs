@@ -1,18 +1,16 @@
 // Import board
 
+use lunar::bitboard::Bitboard;
+use lunar::build::magics;
 use lunar::game::Game;
+use lunar::ply::Ply;
 
 fn main() {
+    use lunar::square::squares::*;
     let mut game = Game::new();
-    game.make_move("d4");
-    game.make_move("d5");
-
-    for mv in game.legal_moves() {
-        println!("{}", game.ply_name(&mv));
-    }
-    game.make_move("Bf4");
-    println!("{}", game.board().simple_render());
-
-    game.make_move("Qd6");
-    println!("{}", game.board().simple_render());
+    // position startpos moves b1a3 h7h6
+    game.apply_ply(&Ply::simple(B1, A3));
+    game.apply_ply(&Ply::simple(H7, H6));
+    game.perft(1, true);
+    println!("{}", game.to_fen());
 }

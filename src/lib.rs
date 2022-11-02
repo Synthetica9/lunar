@@ -9,9 +9,11 @@ pub mod game;
 pub mod millipawns;
 pub mod piece;
 pub mod ply;
+pub mod plyset;
 pub mod square;
 pub mod values;
 pub mod zobrist_hash;
 
-// mod build;
+pub mod build;
+
 mod generated;

@@ -7,7 +7,8 @@ use crate::bitboard_map::BitboardMap;
 use crate::board::Board;
 use crate::castlerights::CastleRights;
 use crate::piece::Piece;
-use crate::ply::{combination_moves, ApplyPly, Ply, SpecialFlag};
+use crate::ply::{ApplyPly, Ply, SpecialFlag, _combination_moves};
+use crate::plyset::PlySet;
 use crate::square::Square;
 use crate::zobrist_hash::ZobristHash;
 
@@ -155,12 +156,13 @@ impl Game {
 
     // Pseudo-legal moves
     #[inline(always)]
-    fn step_moves_for(
+    fn _step_moves_for(
         &self,
+        plyset: &mut PlySet,
         piece_type: &Piece,
         move_table: &BitboardMap,
         capture_policy: CapturePolicy,
-    ) -> Vec<Ply> {
+    ) {
         let board = &self.board;
         let color = &self.to_move;
         let srcs = board.get(color, piece_type);
@@ -169,12 +171,14 @@ impl Game {
             CapturePolicy::Must => board.get_color(&color.other()),
             CapturePolicy::Cannot => !board.get_occupied(),
         };
+        let can_promote = piece_type == &Piece::Pawn;
 
-        combination_moves(&srcs, &dsts, move_table)
+        _combination_moves(plyset, &srcs, &dsts, move_table, can_promote)
     }
 
-    pub fn knight_moves(&self) -> Vec<Ply> {
-        self.step_moves_for(
+    pub fn _knight_moves(&self, plyset: &mut PlySet) {
+        self._step_moves_for(
+            plyset,
             &Piece::Knight,
             &bitboard_map::KNIGHT_MOVES,
             CapturePolicy::Can,
@@ -182,21 +186,27 @@ impl Game {
     }
 
     // Disregards castling
-    pub fn simple_king_moves(&self) -> Vec<Ply> {
-        self.step_moves_for(&Piece::King, &bitboard_map::KING_MOVES, CapturePolicy::Can)
+    pub fn _simple_king_moves(&self, plyset: &mut PlySet) {
+        self._step_moves_for(
+            plyset,
+            &Piece::King,
+            &bitboard_map::KING_MOVES,
+            CapturePolicy::Can,
+        )
     }
 
-    pub fn castle_moves(&self) -> Vec<Ply> {
+    pub fn _castle_moves(&self, plyset: &mut PlySet) {
         use CastleDirection::*;
         let color = self.to_move;
-        self.castle_rights()
-            .iter()
-            .filter(|(clr, _)| *clr == self.to_move)
-            .filter(|(clr, dir)| {
+        for (color, direction) in self.castle_rights().iter() {
+            if color != self.to_move {
+                continue;
+            }
+            {
                 use crate::square::files::*;
-                let empty_files = match dir {
-                    Kingside => &KINGSIDE_CASTLE_MUST_BE_EMPTY,
-                    Queenside => &QUEENSIDE_CASTLE_MUST_BE_EMPTY,
+                let empty_files: &[File] = match direction {
+                    Kingside => &[F, G],
+                    Queenside => &[B, C, D],
                 };
 
                 let empty_squares = Bitboard::from_squares(
@@ -206,41 +216,54 @@ impl Game {
                         .collect::<Vec<_>>(),
                 );
 
-                (self.board.get_color(&color) & empty_squares).is_empty()
-            })
-            .map(|(clr, dir)| dir.to_ply(&clr))
-            .collect()
+                if self.board.get_color(&color).intersects(empty_squares) {
+                    continue;
+                }
+            }
+
+            plyset.push(direction.to_ply(&color));
+        }
     }
 
-    pub fn king_moves(&self) -> Vec<Ply> {
-        [self.simple_king_moves(), self.castle_moves()].concat()
+    pub fn _king_moves(&self, plyset: &mut PlySet) {
+        self._simple_king_moves(plyset);
+        self._castle_moves(plyset);
     }
 
-    fn pawn_pushes(&self) -> Vec<Ply> {
+    fn _pawn_pushes(&self, plyset: &mut PlySet) {
         let color = self.to_move;
-        let move_table = &match color {
-            Color::White => bitboard_map::WHITE_PAWN_MOVES,
-            Color::Black => bitboard_map::BLACK_PAWN_MOVES,
-        };
+        let srcs = self.board.get(&color, &Piece::Pawn);
+        let direction = color.pawn_move_direction();
+        let occupied = self.board.get_occupied();
+        let single_pushes = srcs.shift(direction).and(!occupied);
+        let double_pushes = single_pushes
+            .and(color.en_passant_rank().as_bitboard())
+            .shift(direction);
+        let dsts = single_pushes
+            .or(double_pushes)
+            .and(!self.board.get_occupied());
 
-        // This disregards promotion.
-        self.step_moves_for(&Piece::Pawn, move_table, CapturePolicy::Cannot)
+        let tbl = match color {
+            Color::White => &bitboard_map::WHITE_PAWN_MOVES,
+            Color::Black => &bitboard_map::BLACK_PAWN_MOVES,
+        };
+        _combination_moves(plyset, &srcs, &dsts, tbl, true);
     }
 
-    fn pawn_captures(&self) -> Vec<Ply> {
+    fn _pawn_captures(&self, plyset: &mut PlySet) {
         let move_table = &match self.to_move {
             Color::White => bitboard_map::WHITE_PAWN_ATTACKS,
             Color::Black => bitboard_map::BLACK_PAWN_ATTACKS,
         };
 
-        self.step_moves_for(&Piece::Pawn, move_table, CapturePolicy::Must)
+        self._step_moves_for(plyset, &Piece::Pawn, move_table, CapturePolicy::Must)
     }
 
-    fn en_passant_captures(&self) -> Vec<Ply> {
+    fn _en_passant_captures(&self, plyset: &mut PlySet) {
         // println!("Checking en passant captures");
         let ep = match self.en_passant {
             Some(ep) => ep,
-            None => return vec![],
+            None => return,
         };
 
         // println!("En passant square: {:?}", ep);
@@ -261,134 +284,113 @@ impl Game {
 
         let eligible_pawns = friendly_pawns & attacking_squares;
 
-        let mut res = vec![];
         for pawn in eligible_pawns.iter_squares() {
             let ply = Ply::new(pawn, ep, Some(SpecialFlag::EnPassant));
             // println!("En passant capture: {:?}", ply);
-            res.push(ply);
+            plyset.push(ply);
         }
-        res
     }
 
-    pub fn pawn_moves(&self) -> Vec<Ply> {
-        let partial = [self.pawn_pushes(), self.pawn_captures()].concat();
-
-        let mut res = Vec::new();
-        for ply in partial.iter() {
-            let src = ply.src();
-            let dst = ply.dst();
-            if dst.rank() == self.to_move.pawn_promotion_rank() {
-                for piece in Piece::iter().filter(|x| x.is_promotable()) {
-                    let new_ply = Ply::new(src, dst, Some(SpecialFlag::Promotion(piece)));
-                    res.push(new_ply);
-                }
-            } else {
-                res.push(*ply);
-            }
-        }
-        res.extend(self.en_passant_captures());
-        return res;
+    fn _pawn_moves(&self, plyset: &mut PlySet) {
+        self._pawn_pushes(plyset);
+        self._pawn_captures(plyset);
+        self._en_passant_captures(plyset);
     }
 
     #[inline(always)]
-    fn magic_moves(&self, piece: Piece) -> Vec<Ply> {
-        use crate::generated::magics;
+    fn _magic_moves(&self, plyset: &mut PlySet, piece: Piece) {
+        let friends = self.board.get_color(&self.to_move);
+        let enemies = self.board.get_color(&self.to_move.other());
+        let occupied = friends | enemies;
 
-        let (rook_magics, bishop_magics) = match piece {
-            Piece::Rook => (true, false),
-            Piece::Bishop => (false, true),
-            Piece::Queen => (true, true),
-            _ => panic!("Invalid piece for magic moves"),
-        };
-
-        let srcs = self.board.get(&self.to_move, &piece);
-
-        let occupancy = self.board.get_occupied();
-        let friendly_pieces = self.board.get_color(&self.to_move);
-
-        let mut res = vec![];
-        let mut magic_moves = |magic_tbl: &[(u64, u64, &[u64]); 64]| {
-            for src in srcs.iter_squares() {
-                let (magic, mask, attack) = magic_tbl[src.as_index()];
-                let mask = Bitboard(mask);
-
-                let bits = attack.len().trailing_zeros() ;
-
-                debug_assert!(1 << bits == attack.len());
-
-                let index = ((occupancy & mask).0.wrapping_mul(magic)) >> (64 - bits);
-
-                let dsts = Bitboard(attack[index as usize]) & !friendly_pieces;
-
-                for dst in dsts.iter_squares() {
-                    res.push(Ply::simple(src, dst));
-                }
+        for src in self.board.get(&self.to_move, &piece).iter_squares() {
+            let dsts = Bitboard::magic_attacks(src, piece, occupied) & !friends;
+            for dst in dsts.iter_squares() {
+                plyset.push(Ply::simple(src, dst));
             }
-        };
-
-        if rook_magics {
-            magic_moves(
-                &magics::ROOK_MAGIC,
-            );
         }
+    }
 
-        if bishop_magics {
-            magic_moves(
-                &magics::BISHOP_MAGIC,
-            );
-        }
+    fn magic_moves(&self, piece: Piece) -> Vec<Ply> {
+        let mut plyset = PlySet::new();
+        self._magic_moves(&mut plyset, piece);
+        plyset.iter().map(|x| *x).collect()
+    }
 
-        res
+    fn _bishop_moves(&self, plyset: &mut PlySet) {
+        self._magic_moves(plyset, Piece::Bishop);
     }
 
     pub fn bishop_moves(&self) -> Vec<Ply> {
         self.magic_moves(Piece::Bishop)
     }
 
+    pub fn _rook_moves(&self, plyset: &mut PlySet) {
+        self._magic_moves(plyset, Piece::Rook);
+    }
+
     pub fn rook_moves(&self) -> Vec<Ply> {
         self.magic_moves(Piece::Rook)
+    }
+
+    pub fn _queen_moves(&self, plyset: &mut PlySet) {
+        self._magic_moves(plyset, Piece::Queen);
     }
 
     pub fn queen_moves(&self) -> Vec<Ply> {
         self.magic_moves(Piece::Queen)
     }
 
-    pub fn pseudo_legal_moves(&self) -> Vec<Ply> {
-        [
-            self.pawn_moves(),
-            self.knight_moves(),
-            self.king_moves(),
-            self.bishop_moves(),
-            self.rook_moves(),
-            self.queen_moves(),
-        ]
-        .concat()
+    pub fn pseudo_legal_moves(&self) -> PlySet {
+        let mut plyset = PlySet::new();
+        self._king_moves(&mut plyset);
+        self._pawn_moves(&mut plyset);
+        self._knight_moves(&mut plyset);
+        self._bishop_moves(&mut plyset);
+        self._rook_moves(&mut plyset);
+        self._queen_moves(&mut plyset);
+        plyset
     }
 
     pub fn is_legal(&self, ply: &Ply) -> bool {
-        // TODO: write
-        return true;
+        // TODO: don't clone self.
+        let mut cpy = self.clone();
+
+        cpy.apply_ply(ply);
+        let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
+        let attacked = cpy.board.attacked_squares(&cpy.to_move);
+
+        !king.intersects(attacked)
     }
 
     pub fn legal_moves(&self) -> Vec<Ply> {
         let mut res = self.pseudo_legal_moves();
-        res
+        res.iter()
+            .filter(|x| self.is_legal(x))
+            .map(|x| *x)
+            .collect()
     }
 
-    pub fn is_check(&self) -> bool {
+    pub fn is_check(&self, ply: &Ply) -> bool {
+        let mut cpy = self.clone();
+
+        cpy.apply_ply(ply);
+        let king = cpy.board.get(&cpy.to_move, &Piece::King);
+        let attacked = cpy.board.attacked_squares(&cpy.to_move.other());
+
+        king.intersects(attacked)
+    }
+
+    pub fn is_mate(&self, ply: &Ply) -> bool {
         todo!();
     }
 
-    pub fn is_mate(&self) -> bool {
-        todo!();
+    pub fn is_checkmate(&self, ply: &Ply) -> bool {
+        self.is_check(ply) && self.is_mate(ply)
     }
 
-    pub fn is_checkmate(&self) -> bool {
-        self.is_check() && self.is_mate()
-    }
-
-    pub fn is_stalemate(&self) -> bool {
-        !self.is_check() && self.is_mate()
+    pub fn is_stalemate(&self, ply: &Ply) -> bool {
+        !self.is_check(ply) && self.is_mate(ply)
     }
 
     pub fn ply_name(&self, ply: &Ply) -> String {
@@ -404,8 +406,7 @@ impl Game {
         let is_capture = ply.is_capture(self);
         let is_pawn_move = ply.moved_piece(self) == Piece::Pawn;
         let is_pawn_capture = is_pawn_move && is_capture;
-        // let is_check = ply.is_check(self);
-        let is_check = false;
+        let is_check = self.is_check(ply);
         // let is_checkmate = ply.is_checkmate(self);
         let is_checkmate = false;
         let piece = ply.moved_piece(self);
@@ -426,37 +427,36 @@ impl Game {
         let is_en_passant = ply.is_en_passant();
         let empty_string = String::new();
 
-        format!(
-            "{}{}{}{}{}{}{}{}",
-            if !is_pawn_move {
-                piece.to_char().to_ascii_uppercase().to_string()
+        let mut res = String::new();
+
+        if !is_pawn_move {
+            res.push(piece.to_char().to_ascii_uppercase());
+        }
+        if other_on_file || is_pawn_capture {
+            res.push(src.file().as_char());
+        }
+        if other_on_rank {
+            res.push(src.rank().as_char());
+        }
+        if is_capture {
+            res.push('x');
+        }
+        res.push_str(&dst.to_fen_part());
+        if let Some(piece) = ply.promotion_piece() {
+            res.push('=');
+            res.push(piece.to_char().to_ascii_uppercase());
+        }
+        if is_check {
+            if is_checkmate {
+                res.push('#');
             } else {
-                "".to_string()
-            },
-            if other_on_file || is_pawn_capture {
-                src.file().as_char().to_string()
-            } else {
-                "".to_string()
-            },
-            if other_on_rank {
-                src.rank().as_char().to_string()
-            } else {
-                "".to_string()
-            },
-            if is_capture { "x" } else { "" },
-            dst.to_fen_part(),
-            if let Some(piece) = ply.promotion_piece() {
-                format!("={}", piece.to_char().to_ascii_uppercase())
-            } else {
-                "".to_string()
-            },
-            match (is_check, is_checkmate) {
-                (true, true) => "#",
-                (true, false) => "+",
-                _ => "",
-            },
-            if is_en_passant { " e.p." } else { "" },
-        )
+                res.push('+');
+            }
+        }
+        if is_en_passant {
+            res.push_str(" e.p.");
+        }
+        res
     }
 
     pub fn ply_from_name(&self, name: &str) -> Option<Ply> {
@@ -489,15 +489,23 @@ impl Game {
         self.board.simple_render()
     }
 
-    pub fn perft(&self, depth: u8) -> u64 {
+    pub fn perft(&self, depth: u8, print: bool) -> u64 {
         if depth == 0 {
             return 1;
         }
         let mut count = 0;
         for ply in self.legal_moves() {
             let mut game = self.clone();
+            let name = ply.long_name();
             game.apply_ply(&ply);
-            count += &game.perft(depth - 1);
+            let subres = &game.perft(depth - 1, false);
+            if print {
+                println!("{}: {}", name, subres);
+            }
+            count += subres;
+        }
+        if print {
+            println!("{} nodes at depth {}", count, depth);
         }
         count
     }
@@ -519,9 +527,9 @@ impl ApplyPly for Game {
         self.hash.toggle_piece(color, piece, square);
     }
 
-    fn update_castle_rights(&mut self, castle_rights: CastleRights) {
+    fn toggle_castle_rights(&mut self, castle_rights: CastleRights) {
         self.castle_rights = self.castle_rights.xor(castle_rights);
-        self.hash.update_castle_rights(castle_rights);
+        self.hash.toggle_castle_rights(castle_rights);
     }
 
     fn toggle_en_passant(&mut self, en_passant: Square) {
@@ -564,25 +572,25 @@ fn test_from_to_fen() {
     assert_eq!(game.to_fen(), double_bongcloud);
 }
 
-#[test]
-fn test_move_generation_basic() {
-    use crate::square::squares::*;
+// #[test]
+// fn test_move_generation_basic() {
+//     use crate::square::squares::*;
 
-    let mut game = Game::new();
+//     let mut game = Game::new();
 
-    let start_knight_moves = game.knight_moves();
-    println!("{:?}", start_knight_moves);
-    assert_eq!(start_knight_moves.len(), 4);
+//     let start_knight_moves = game.knight_moves();
+//     println!("{:?}", start_knight_moves);
+//     assert_eq!(start_knight_moves.len(), 4);
 
-    let start_pawn_moves = game.pawn_moves();
-    println!("{:?}", start_pawn_moves);
-    assert_eq!(start_pawn_moves.len(), 16);
+//     let start_pawn_moves = game.pawn_moves();
+//     println!("{:?}", start_pawn_moves);
+//     assert_eq!(start_pawn_moves.len(), 16);
 
-    game.apply_ply(&Ply::simple(E2, E4));
-    game.apply_ply(&Ply::simple(E7, E5));
-    // bongcloud available.
-    assert_eq!(game.simple_king_moves().len(), 1);
-}
+//     game.apply_ply(&Ply::simple(E2, E4));
+//     game.apply_ply(&Ply::simple(E7, E5));
+//     // bongcloud available.
+//     assert_eq!(game.simple_king_moves().len(), 1);
+// }
 
 macro_rules! simple_move_test(
     ($name:ident, $fen:expr, $ply:expr, $expected_fen:expr) => {
@@ -623,11 +631,67 @@ macro_rules! simple_move_test(
     }
 );
 
+macro_rules! illegal_move_test(($name:ident, $fen:expr, $ply:expr) => {
+    #[test]
+    fn $name() {
+        let mut game = match Game::from_fen($fen) {
+            Ok(game) => game,
+            Err(e) => panic!("Error parsing fen: {}", e),
+        };
+        println!("Starting fen: {}", $fen);
+
+        for ply in game.legal_moves() {
+            println!("Legal move: {} ({:?})", game.ply_name(&ply), ply);
+        }
+        print!("{}", game.simple_render());
+
+        if let(Some(ply)) = game.ply_from_name($ply) {
+            game.apply_ply(&ply);
+            println!("Fen after applying (illegal) ply: {}", game.to_fen());
+            print!("{}", game.simple_render());
+            panic!("Ply {} was legal!", $ply);
+        }
+
+    }
+});
+
 simple_move_test!(
     test_simple_move,
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
     "e4",
     "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+);
+
+illegal_move_test!(test_illegal_move_misparse, STARTING_POSITION, "HADOUKEN!");
+
+illegal_move_test!(test_illegal_move_pawn, STARTING_POSITION, "e5");
+illegal_move_test!(
+    test_double_push_through_blocker,
+    "4k3/8/8/8/8/4K3/4P3/8 w - - 0 1",
+    "e4"
+);
+
+illegal_move_test!(test_illegal_move_bishop, STARTING_POSITION, "Bc4");
+
+illegal_move_test!(test_illegal_move_knight, STARTING_POSITION, "Nd2");
+
+illegal_move_test!(test_illegal_move_rook, STARTING_POSITION, "Ra3");
+illegal_move_test!(
+    test_illegal_move_rook_sharing,
+    "rnbqkbnr/ppppppp1/7p/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2",
+    "Ra7"
+);
+
+illegal_move_test!(test_illegal_move_queen, STARTING_POSITION, "Qd4");
+
+illegal_move_test!(test_illegal_move_king, STARTING_POSITION, "Ke2");
+illegal_move_test!(test_illegal_move_long_castle, STARTING_POSITION, "O-O-O");
+
+// Even though white can't capture the king, due to the pin, it's still an illegal move.
+illegal_move_test!(
+    move_into_check_pin,
+    "8/k7/8/8/8/8/8/K4B1r b - - 25 13",
+    "Ka6"
 );
 
 simple_move_test!(
@@ -652,9 +716,16 @@ simple_move_test!(
 );
 
 simple_move_test!(
+    test_make_check,
+    "rnbqkbnr/ppp1pppp/8/3p4/8/2P5/PP1PPPPP/RNBQKBNR w KQkq - 0 2",
+    "Qa4+",
+    "rnbqkbnr/ppp1pppp/8/3p4/Q7/2P5/PP1PPPPP/RNB1KBNR b KQkq - 1 2"
+);
+
+simple_move_test!(
     test_underpromotion,
     "8/4P1k1/8/8/8/8/8/4K3 w - - 1 5",
-    "e8=N",
+    "e8=N+",
     "4N3/6k1/8/8/8/8/8/4K3 b - - 0 5"
 );
 
@@ -696,14 +767,7 @@ macro_rules! perft_test(
             };
             println!("Starting fen: {}", $fen);
 
-            let mut nodes = 0;
-            for ply in game.legal_moves() {
-                let mut cpy = game.clone();
-                cpy.apply_ply(&ply);
-                let local = cpy.perft($depth - 1);
-                println!("{}: {}", game.ply_name(&ply), local);
-                nodes += local;
-            }
+            let nodes = game.perft($depth, true);
             println!("{} nodes at depth {}", nodes, $depth);
 
             assert_eq!(nodes, $expected_nodes);
@@ -711,11 +775,10 @@ macro_rules! perft_test(
     }
 );
 
+pub const POS_KIWIPETE: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
 perft_test!(test_perft_1, STARTING_POSITION, 1, 20);
 perft_test!(test_perft_3, STARTING_POSITION, 3, 8902);
-perft_test!(
-    test_kiwipete_1,
-    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
-    1,
-    48
-);
+perft_test!(test_perft_5, STARTING_POSITION, 5, 4865609);
+perft_test!(test_kiwipete_1, POS_KIWIPETE, 1, 48);
+perft_test!(test_kiwipete_2, POS_KIWIPETE, 2, 2039);
+perft_test!(test_kiwipete_3, POS_KIWIPETE, 3, 97862);

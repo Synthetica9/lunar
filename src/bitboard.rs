@@ -1,7 +1,9 @@
 use std::fmt::{Debug, Formatter};
 
+use crate::basic_enums::Color;
 use crate::byteboard::Byteboard;
 use crate::direction::Direction;
+use crate::piece::Piece;
 use crate::square::{files, ranks, squares, Square, SquareIter};
 
 #[derive(Copy, Clone, PartialEq)]
@@ -236,6 +238,77 @@ impl Bitboard {
 
     pub const fn intersects(self, other: Bitboard) -> bool {
         !self.and(other).is_empty()
+    }
+
+    pub fn simple_attacks(square: Square, piece: Piece) -> Bitboard {
+        use crate::bitboard_map::{KING_MOVES, KNIGHT_MOVES};
+
+        let table = match piece {
+            Piece::Knight => KNIGHT_MOVES,
+            Piece::King => KING_MOVES,
+            _ => panic!("simple_attacks: piece must be knight or king"),
+        };
+
+        table[square]
+    }
+
+    pub fn knight_attacks(square: Square) -> Bitboard {
+        Bitboard::simple_attacks(square, Piece::Knight)
+    }
+
+    pub fn king_attacks(square: Square) -> Bitboard {
+        Bitboard::simple_attacks(square, Piece::King)
+    }
+
+    pub fn pawn_attacks(square: Square, color: Color) -> Bitboard {
+        use crate::bitboard_map::{BLACK_PAWN_ATTACKS, WHITE_PAWN_ATTACKS};
+
+        let table = match color {
+            Color::White => WHITE_PAWN_ATTACKS,
+            Color::Black => BLACK_PAWN_ATTACKS,
+        };
+
+        table[square]
+    }
+
+    pub fn magic_attacks(square: Square, piece: Piece, occupancy: Bitboard) -> Bitboard {
+        let magics = {
+            use crate::generated::magics::*;
+            match piece {
+                Piece::Bishop => &BISHOP_MAGICS,
+                Piece::Rook => &ROOK_MAGICS,
+                Piece::Queen => {
+                    return Bitboard::magic_attacks(square, Piece::Bishop, occupancy)
+                        | (Bitboard::magic_attacks(square, Piece::Rook, occupancy));
+                }
+                _ => panic!("Not a magic piece: {:?}", piece),
+            }
+        };
+
+        let (magic, premask, postmask, attack) = magics[square.as_index()];
+
+        let bits = attack.len().leading_zeros() + 1;
+
+        debug_assert!(1 << (64 - bits) == attack.len());
+
+        let index = ((occupancy.0 & premask).wrapping_mul(magic) >> bits) as usize;
+
+        debug_assert!(index < attack.len());
+
+        // TODO: remove bounds check.
+        Bitboard(attack[index] & postmask)
+    }
+
+    pub fn rook_attacks(square: Square, occupancy: Bitboard) -> Bitboard {
+        Bitboard::magic_attacks(square, Piece::Rook, occupancy)
+    }
+
+    pub fn bishop_attacks(square: Square, occupancy: Bitboard) -> Bitboard {
+        Bitboard::magic_attacks(square, Piece::Bishop, occupancy)
+    }
+
+    pub fn queen_attacks(square: Square, occupancy: Bitboard) -> Bitboard {
+        Bitboard::magic_attacks(square, Piece::Queen, occupancy)
     }
 }
 

@@ -144,21 +144,17 @@ pub fn find_magic(square: Square, bits: isize, is_bishop: bool) -> (u64, Vec<Bit
             continue;
         }
 
-        let mut used = vec![None; 1 << bits];
+        // used: (bits used, result)
+        let mut used = vec![0; 1 << bits];
         for &(blockers, attacks) in &blockers_attacks {
             let j = transform(blockers, magic, bits);
-            if used[j].is_some() && used[j].unwrap() != attacks {
-                // Collision.
+            let existing = used[j];
+            if existing != 0 && existing != attacks {
                 continue 'outer;
             }
-            used[j] = Some(attacks);
+            used[j] = attacks;
         }
-        return (
-            magic,
-            used.iter()
-                .map(|x| x.unwrap_or(0xDEADBEEFDEADBEEF))
-                .collect(),
-        );
+        return (magic, used);
     }
     panic!(
         "Failed to find {} magic for square {}",
@@ -180,6 +176,31 @@ const ROOK_BITS: [isize; 64] = [
     12, 11, 11, 11, 11, 11, 11, 12, //
 ];
 
+
+// Original:
+const ROOK_SHARING: [usize; 64] = [
+    00, 01, 02, 03, 04, 05, 06, 07, //
+    01, 00, 03, 02, 05, 04, 07, 06, //
+    08, 09, 10, 11, 12, 13, 14, 15, //
+    09, 08, 11, 10, 13, 12, 15, 14, //
+    16, 17, 18, 19, 20, 21, 22, 23, //
+    17, 16, 19, 18, 21, 20, 23, 22, //
+    24, 25, 26, 27, 28, 29, 30, 31, //
+    25, 24, 27, 26, 29, 28, 31, 30, //
+];
+
+// Mine:
+// const ROOK_SHARING: [usize; 64] = [
+//     00, 01, 02, 03, 04, 05, 06, 07, //
+//     01, 02, 03, 04, 05, 06, 08, 14, //
+//     09, 10, 11, 12, 13, 08, 14, 15, //
+//     10, 09, 12, 11, 32, 13, 15, 16, //
+//     20, 21, 22, 23, 24, 25, 16, 17, //
+//     21, 20, 23, 22, 25, 24, 17, 18, //
+//     26, 31, 27, 28, 29, 30, 18, 19, //
+//     07, 26, 28, 27, 30, 29, 19, 00, //
+// ];
+
 const BISHOP_BITS: [isize; 64] = [
     6, 5, 5, 5, 5, 5, 5, 6, //
     5, 5, 5, 5, 5, 5, 5, 5, //
@@ -191,25 +212,16 @@ const BISHOP_BITS: [isize; 64] = [
     6, 5, 5, 5, 5, 5, 5, 6, //
 ];
 
-pub fn dump_table(
-    file: &mut std::fs::File,
-    name: &str,
-    content: &[u64],
-    public: bool,
-) -> std::io::Result<()> {
-    writeln!(
-        file,
-        "{}const {}: [u64; {}] = [",
-        if public { "pub " } else { "" },
-        name,
-        content.len()
-    )?;
-    for i in content {
-        writeln!(file, "  0x{:016x},", i)?;
-    }
-    writeln!(file, "];\n")?;
-    Ok(())
-}
+const BISHOP_SHARING: [usize; 64] = [
+    00, 02, 04, 04, 04, 04, 12, 14, //
+    00, 02, 05, 05, 05, 05, 12, 14, //
+    00, 02, 06, 06, 06, 06, 12, 14, //
+    00, 02, 07, 07, 07, 07, 12, 14, //
+    01, 03, 08, 08, 08, 08, 13, 15, //
+    01, 03, 09, 09, 09, 09, 13, 15, //
+    01, 03, 10, 10, 10, 10, 13, 15, //
+    01, 03, 11, 11, 11, 11, 13, 15, //
+];
 
 pub fn gen_magics_file(file: &mut std::fs::File) -> std::io::Result<()> {
     println!("cargo:warning=Generating magics.rs");
@@ -217,30 +229,69 @@ pub fn gen_magics_file(file: &mut std::fs::File) -> std::io::Result<()> {
     for is_bishop in &[false, true] {
         let bits = if *is_bishop { BISHOP_BITS } else { ROOK_BITS };
         let name = if *is_bishop { "BISHOP" } else { "ROOK" };
+        let sharing_idx = if *is_bishop {
+            BISHOP_SHARING
+        } else {
+            ROOK_SHARING
+        };
 
-        writeln!(file, "// Magic, mask, LUT for {}", name)?;
-        writeln!(file, "pub const {}_MAGIC: [(u64, u64, &[u64]); 64] = [", name)?;
+        // TODO: explicit struct
+        writeln!(file, "// Magic, premask, postmask, LUT for {}", name)?;
+        writeln!(
+            file,
+            "pub const {}_MAGICS: [(u64, u64, u64, &[u64]); 64] = [",
+            name
+        )?;
+
+        // init sharing db
+        let mut sharing_db = vec![vec![]; sharing_idx.iter().max().unwrap() + 1];
+        for square in 0..64i64 {
+            let target = 1 << bits[square as usize];
+            let group = sharing_idx[square as usize];
+            let mut db = &mut sharing_db[group];
+            println!("{}. Current length: {}", square, db.len());
+            while db.len() < target {
+                db.push(0);
+            }
+        }
+
         for square in 0..64 {
-            let (magic, used) = find_magic(square, bits[square as usize], *is_bishop);
-            let mask = if *is_bishop {
-                bishop_premask(square)
+            let sharing = sharing_idx[square as usize];
+            let mut db = &mut sharing_db[sharing];
+            let (magic, used) = find_magic(
+                square,
+                (db.len().trailing_zeros()).try_into().unwrap(),
+                *is_bishop,
+            );
+
+            // merge into sharing db
+            for (i, &u) in used.iter().enumerate() {
+                db[i] |= u;
+            }
+
+            let (premask, postmask) = if *is_bishop {
+                (bishop_premask(square), bishop_postmask(square))
             } else {
-                rook_premask(square)
+                (rook_premask(square), rook_postmask(square))
             };
 
             writeln!(file, "    (")?;
             writeln!(file, "        0x{:016x},", magic)?;
-            writeln!(file, "        0x{:016x},", mask)?;
-            writeln!(file, "        &[")?;
-
-            for i in 0..used.len() {
-                writeln!(file, "            0x{:016x},", used[i])?;
-            }
-
-            writeln!(file, "        ],")?;
+            writeln!(file, "        0x{:016x},", premask)?;
+            writeln!(file, "        0x{:016x},", postmask)?;
+            writeln!(file, "        &SHARED_{}_MAGIC_{}", name, sharing)?;
             writeln!(file, "    ),")?;
         }
         writeln!(file, "];\n")?;
+
+        // write sharing db
+        for (i, db) in sharing_db.iter().enumerate() {
+            writeln!(file, "const SHARED_{}_MAGIC_{}: &[u64] = &[", name, i)?;
+            for (j, &entry) in db.iter().enumerate() {
+                writeln!(file, "    0x{:016x},", entry)?;
+            }
+            writeln!(file, "];")?;
+        }
     }
     Ok(())
 }

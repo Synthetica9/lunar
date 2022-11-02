@@ -9,12 +9,16 @@ lto = true
 opt-level = 3
 
 # Make the build script run faster.
-[profile.dev.build_override]
+[profile.dev]
 opt-level = 3
 
 [dependencies]
 strum = "0.24"
 strum_macros = "0.24"
+
+[dependencies.rand]
+version = "0.8"
+features = ["small_rng"]
 
 [build-dependencies.rand]
 version = "0.8"
