@@ -379,6 +379,18 @@ impl Game {
     }
 
     pub fn legal_moves(&self) -> Vec<Ply> {
+        let leaves_own_king_in_check = |ply| {
+            // At the top to not accidentally shadow any variables.
+            let mut cpy = self.clone();
+            cpy.apply_ply(ply);
+
+            let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
+            let king_sq = king.iter_squares().next().unwrap();
+            let attackers = cpy.board.squares_attacking(&cpy.to_move, king_sq);
+
+            !attackers.is_empty()
+        };
+
         let candidates = self.pseudo_legal_moves();
         let mut res = Vec::with_capacity(candidates.len());
         // res.iter()
@@ -396,19 +408,11 @@ impl Game {
         let mut partial_oo_legal = false;
         let mut partial_ooo_legal = false;
 
-        let leaves_own_king_in_check = |ply| {
-            let mut cpy = self.clone();
-            cpy.apply_ply(ply);
-
-            let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
-            let king_sq = king.iter_squares().next().unwrap();
-            let attackers = cpy.board.squares_attacking(&cpy.to_move, king_sq);
-
-            !attackers.is_empty()
-        };
+        let king = self.board.get(&self.to_move, &Piece::King);
+        let king_sq = king.iter_squares().next().unwrap();
 
         for ply in candidates.iter() {
-            if ply.moved_piece(self) == Piece::King {
+            if ply.src() == king_sq {
                 use crate::square::files;
                 // We can't just assume that king moves are legal, we need to
                 // do the full check.
@@ -544,7 +548,9 @@ impl Game {
     }
 
     pub fn is_mate(&self, ply: &Ply) -> bool {
-        todo!();
+        let mut cpy = self.clone();
+        cpy.apply_ply(ply);
+        cpy.legal_moves().len() == 0
     }
 
     pub fn is_checkmate(&self, ply: &Ply) -> bool {
@@ -569,8 +575,7 @@ impl Game {
         let is_pawn_move = ply.moved_piece(self) == Piece::Pawn;
         let is_pawn_capture = is_pawn_move && is_capture;
         let is_check = self.is_check(ply);
-        // let is_checkmate = ply.is_checkmate(self);
-        let is_checkmate = false;
+        let is_checkmate = self.is_checkmate(ply);
         let piece = ply.moved_piece(self);
         let other_on_rank = legal_moves
             .iter()
@@ -926,6 +931,13 @@ simple_move_test!(
     "r3k2r/8/8/8/8/6N1/8/4K2r w kq - 0 1",
     "Nxh1",
     "r3k2r/8/8/8/8/8/8/4K2N b kq - 0 1"
+);
+
+simple_move_test!(
+    test_checkmate,
+    "4k3/R7/7R/8/8/8/8/4K3 w - - 0 1",
+    "Rh8#",
+    "4k2R/R7/8/8/8/8/8/4K3 b - - 1 1"
 );
 
 macro_rules! perft_test(

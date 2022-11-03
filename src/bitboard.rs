@@ -264,8 +264,8 @@ impl Bitboard {
         use crate::bitboard_map::{BLACK_PAWN_ATTACKS, WHITE_PAWN_ATTACKS};
 
         let table = match color {
-            Color::White => WHITE_PAWN_ATTACKS,
-            Color::Black => BLACK_PAWN_ATTACKS,
+            Color::White => &WHITE_PAWN_ATTACKS,
+            Color::Black => &BLACK_PAWN_ATTACKS,
         };
 
         table[square]
