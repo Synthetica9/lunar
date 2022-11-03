@@ -40,6 +40,10 @@ impl PlySet {
         self.size = 0;
     }
 
+    pub fn len(&self) -> usize {
+        return self.size;
+    }
+
     pub fn iter<'a>(&'a self) -> std::slice::Iter<'a, Ply> {
         self.moves[..self.size].iter()
     }

@@ -373,9 +373,14 @@ impl Game {
         legal_moves.contains(ply)
     }
 
+    pub fn is_pseudo_legal(&self, ply: &Ply) -> bool {
+        let pseudo_legal_moves = self.pseudo_legal_moves();
+        pseudo_legal_moves.iter().collect::<Vec<_>>().contains(&ply)
+    }
+
     pub fn legal_moves(&self) -> Vec<Ply> {
         let candidates = self.pseudo_legal_moves();
-        let mut res = Vec::new();
+        let mut res = Vec::with_capacity(candidates.len());
         // res.iter()
         //     .filter(|x| self.is_legal(x))
         //     .filter(|x| !x.is_castling() || !self.is_in_check())
@@ -396,9 +401,10 @@ impl Game {
             cpy.apply_ply(ply);
 
             let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
-            let attacked = cpy.board.attacked_squares(&cpy.to_move);
+            let king_sq = king.iter_squares().next().unwrap();
+            let attackers = cpy.board.squares_attacking(&cpy.to_move, king_sq);
 
-            king.intersects(attacked)
+            !attackers.is_empty()
         };
 
         for ply in candidates.iter() {
@@ -520,6 +526,7 @@ impl Game {
     }
 
     pub fn is_in_check(&self) -> bool {
+        // TODO: split out to function "is_attacked" for board
         let king = self.board.get(&self.to_move, &Piece::King);
         let king_square = king.iter_squares().next().unwrap();
         let attacked = self
@@ -651,10 +658,9 @@ impl Game {
         let mut count = 0;
         for ply in self.legal_moves() {
             let mut game = self.clone();
-            let name = ply.long_name();
             game.apply_ply(&ply);
             if print {
-                print!("{}: ", name);
+                print!("{}: ", ply.long_name());
             }
             let subres = &game.perft(depth - 1, false);
             if print {
@@ -915,6 +921,13 @@ simple_move_test!(
     "2kr4/8/8/8/8/8/8/4K3 w - - 1 2"
 );
 
+simple_move_test!(
+    test_capture_third_rook_retain_castle_rights,
+    "r3k2r/8/8/8/8/6N1/8/4K2r w kq - 0 1",
+    "Nxh1",
+    "r3k2r/8/8/8/8/8/8/4K2N b kq - 0 1"
+);
+
 macro_rules! perft_test(
     ($name:ident, $fen:expr, $depth:expr, $expected_nodes:expr) => {
         #[test]
@@ -933,16 +946,31 @@ macro_rules! perft_test(
     }
 );
 
-pub const POS_KIWIPETE: &str =
-    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
-perft_test!(test_perft_1, STARTING_POSITION, 1, 20);
+// Most of these from https://www.chessprogramming.org/Perft_Results
+
+// perft_test!(test_perft_1, STARTING_POSITION, 1, 20);
 perft_test!(test_perft_3, STARTING_POSITION, 3, 8902);
 // perft_test!(test_perft_5, STARTING_POSITION, 5, 4865609);
-perft_test!(test_kiwipete_1, POS_KIWIPETE, 1, 48);
-perft_test!(test_kiwipete_2, POS_KIWIPETE, 2, 2039);
+// perft_test!(test_kiwipete_1, POS_KIWIPETE, 1, 48);
+// perft_test!(test_kiwipete_2, POS_KIWIPETE, 2, 2039);
+
 perft_test!(test_kiwipete_3, POS_KIWIPETE, 3, 97862);
-perft_test!(test_kiwipete_4, POS_KIWIPETE, 4, 4085603);
+pub const POS_KIWIPETE: &str =
+    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+// perft_test!(test_kiwipete_4, POS_KIWIPETE, 4, 4085603);
 // perft_test!(test_kiwipete_5, POS_KIWIPETE, 5, 193690690);
+
+pub const POS_3: &str = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
+perft_test!(test_pos3_5, POS_3, 5, 674624);
+
+pub const POS_4: &str = "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1";
+perft_test!(test_pos4_4, POS_4, 4, 422333);
+
+pub const POS_5: &str = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
+perft_test!(test_pos5_3, POS_5, 3, 62379);
+
+pub const POS_6: &str = "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10";
+perft_test!(test_pos6_3, POS_6, 3, 89890);
 
 illegal_move_test!(
     test_illegal_castle_through_check,

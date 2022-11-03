@@ -23,7 +23,7 @@ pub struct Ply(u16);
 
 #[derive(Copy, Clone, Debug)]
 pub enum SpecialFlag {
-    // TODO: store promotion piece here.
+    // TODO: store used castle direction here.
     Promotion(Piece),
     EnPassant,
     Castling,
@@ -99,7 +99,13 @@ impl Ply {
     }
 
     pub fn long_name(&self) -> String {
-        format!("{}{}", self.src().to_fen_part(), self.dst().to_fen_part())
+        let mut res = String::new();
+        res.push_str(&self.src().to_fen_part());
+        res.push_str(&self.dst().to_fen_part());
+        if let Some(p) = self.promotion_piece() {
+            res.push(p.to_char());
+        }
+        res
     }
 
     pub const fn promotion_piece(&self) -> Option<Piece> {
@@ -164,14 +170,17 @@ impl Ply {
         }
     }
 
+    pub const fn _captured_piece(&self, game: &Game) -> Option<Piece> {
+        // captured_piece, but doesn't track en passant.
+        game.board().occupant_piece(self.dst())
+    }
+
     pub const fn captured_piece(&self, game: &Game) -> Option<Piece> {
-        let dst = self.dst();
-        let occupant = game.board().occupant_piece(dst);
         if self.is_en_passant() {
-            debug_assert!(occupant.is_none());
+            debug_assert!(game.board().occupant_piece(self.dst()).is_none());
             Some(Piece::Pawn)
         } else {
-            occupant
+            self._captured_piece(game)
         }
     }
 
@@ -210,6 +219,7 @@ pub fn _combination_moves(
 
         for dst in (potential & *dsts).iter_squares() {
             if can_promote {
+                // TODO: this is dumb. This should just happen here tbh.
                 plyset.push_mk_promotion(src, dst);
             } else {
                 plyset.push(Ply::simple(src, dst));
@@ -241,26 +251,31 @@ pub trait ApplyPly {
         // ToDo: should probably return an error type
         use Piece::*;
 
+        // We can't check for full legality due to dependency loop.
+        debug_assert!(game.is_pseudo_legal(ply));
+
         let src = ply.src();
         let dst = ply.dst();
+
+        // TODO: is this faster?
+        let (is_en_passant, is_castling) = match ply.flag() {
+            Some(SpecialFlag::EnPassant) => (true, false),
+            Some(SpecialFlag::Castling) => (false, true),
+            _ => (false, false),
+        };
+
         let to_move = game.to_move();
         let board = game.board();
 
         let our_piece = ply.moved_piece(game);
-        let captured_piece = ply.captured_piece(game);
-        let is_en_passant = ply.is_en_passant();
+        let captured_piece = ply._captured_piece(game);
 
         // Remove opponent piece from the destination square.
-        if ply.is_capture(game) {
-            // Always a pawn in case of en passant
-            let captured_piece = captured_piece.unwrap_or(Pawn);
-            let capture_square = if is_en_passant {
-                Square::new(dst.file(), src.rank())
-            } else {
-                dst
-            };
-
-            self.toggle_piece(to_move.other(), captured_piece, capture_square);
+        if is_en_passant {
+            let capture_square = Square::new(dst.file(), src.rank());
+            self.toggle_piece(to_move.other(), Piece::Pawn, capture_square);
+        } else if let Some(victim) = captured_piece {
+            self.toggle_piece(to_move.other(), victim, dst);
         }
 
         // Remove our piece from the source square.
@@ -352,18 +367,18 @@ pub trait ApplyPly {
             // It is also possible to make your opponent lose castling rights
             // by capturing their rook.
 
-            {
+            if captured_piece == Some(Rook) && dst.rank() == to_move.other().home_rank() {
                 let oo = castle_rights.get(to_move.other(), CastleDirection::Kingside);
                 let ooo = castle_rights.get(to_move.other(), CastleDirection::Queenside);
 
-                if oo && captured_piece == Some(Rook) && dst.file() == files::H {
+                if oo && dst.file() == files::H {
                     self.toggle_castle_rights(CastleRights::single(
                         to_move.other(),
                         CastleDirection::Kingside,
                     ));
                 }
 
-                if ooo && captured_piece == Some(Rook) && dst.file() == files::A {
+                if ooo && dst.file() == files::A {
                     self.toggle_castle_rights(CastleRights::single(
                         to_move.other(),
                         CastleDirection::Queenside,

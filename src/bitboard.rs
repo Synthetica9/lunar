@@ -285,7 +285,10 @@ impl Bitboard {
             }
         };
 
-        let (magic, premask, postmask, attack) = magics[square.as_index()];
+        let sq_idx = square.as_index();
+        debug_assert!(sq_idx < 64);
+        // %64 to tell the compiler that it'll be okay.
+        let (magic, premask, postmask, attack) = magics[sq_idx % 64];
 
         let bits = attack.len().leading_zeros() + 1;
 
@@ -295,8 +298,10 @@ impl Bitboard {
 
         debug_assert!(index < attack.len());
 
-        // TODO: remove bounds check.
-        Bitboard(attack[index] & postmask)
+        // This elides the bounds check.
+        let attacked = attack.get(index).unwrap_or(&0);
+
+        Bitboard(attacked & postmask)
     }
 
     pub fn rook_attacks(square: Square, occupancy: Bitboard) -> Bitboard {
