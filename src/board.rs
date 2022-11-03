@@ -349,6 +349,23 @@ impl Board {
         result
     }
 
+    pub fn squares_attacking(&self, color: &Color, square: Square) -> Bitboard {
+        // Color is the color doing the attacking.
+        let mut res = Bitboard::new();
+
+        let occupied = self.get_occupied();
+        let queens = self.get(color, &Piece::Queen);
+
+        res |= Bitboard::pawn_attacks(square, color.other()) & self.get(color, &Piece::Pawn);
+        res |= Bitboard::knight_attacks(square) & self.get(color, &Piece::Knight);
+        res |=
+            Bitboard::bishop_attacks(square, occupied) & (self.get(color, &Piece::Bishop) | queens);
+        res |= Bitboard::rook_attacks(square, occupied) & (self.get(color, &Piece::Rook) | queens);
+        res |= Bitboard::king_attacks(square) & self.get(color, &Piece::King);
+
+        res
+    }
+
     pub fn simple_render(&self) -> String {
         let mut res = String::new();
         for rank in (0..8).rev() {

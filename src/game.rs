@@ -369,35 +369,8 @@ impl Game {
     }
 
     pub fn is_legal(&self, ply: &Ply) -> bool {
-        // TODO: this only applies to pseudo-legal moves.
-        // TODO: don't clone self.
-        todo!();
-        // if ply.is_castling() {
-        //     // Can't castle through check.
-        //     // Castling _into_ check is handled by the regular logic.
-        //     use crate::square::files::*;
-        //     let rank = ply.src().rank();
-        //     let king_intermediate_dst = match ply.dst().file() {
-        //         C => Square::new(D, rank),
-        //         G => Square::new(F, rank),
-        //         _ => panic!("Invalid castle"),
-        //     };
-        //     let king_dst = ply.dst();
-        //     if self.board.get_occupied().get(king_intermediate_dst)
-        //         || self.board.get_occupied().get(king_dst)
-        //         || !self.is_legal(&Ply::simple(ply.src(), king_intermediate_dst))
-        //     {
-        //         return false;
-        //     }
-        // }
-
-        // let mut cpy = self.clone();
-
-        // cpy.apply_ply(ply);
-        // let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
-        // let attacked = cpy.board.attacked_squares(&cpy.to_move);
-
-        // !king.intersects(attacked)
+        let legal_moves = self.legal_moves();
+        legal_moves.contains(ply)
     }
 
     pub fn legal_moves(&self) -> Vec<Ply> {
@@ -444,10 +417,10 @@ impl Game {
                         match ply.dst().file() {
                             files::D => {
                                 partial_ooo_legal = true;
-                            },
+                            }
                             files::F => {
                                 partial_oo_legal = true;
-                            },
+                            }
                             _ => (),
                         }
                     }
@@ -548,8 +521,12 @@ impl Game {
 
     pub fn is_in_check(&self) -> bool {
         let king = self.board.get(&self.to_move, &Piece::King);
-        let attacked = self.board.attacked_squares(&self.to_move.other());
-        king.intersects(attacked)
+        let king_square = king.iter_squares().next().unwrap();
+        let attacked = self
+            .board
+            .squares_attacking(&self.to_move.other(), king_square);
+
+        !attacked.is_empty()
     }
 
     pub fn is_check(&self, ply: &Ply) -> bool {
