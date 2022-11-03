@@ -226,6 +226,8 @@ impl Game {
     }
 
     pub fn _king_moves(&self, plyset: &mut PlySet) {
+        // Order matters here! Simple moves must be generated first to
+        // efficiently check castling rules.
         self._simple_king_moves(plyset);
         self._castle_moves(plyset);
     }
@@ -369,41 +371,138 @@ impl Game {
     pub fn is_legal(&self, ply: &Ply) -> bool {
         // TODO: this only applies to pseudo-legal moves.
         // TODO: don't clone self.
-        if ply.is_castling() {
-            // Can't castle through check.
-            // Castling _into_ check is handled by the regular logic.
-            use crate::square::files::*;
-            let rank = ply.src().rank();
-            let king_intermediate_dst = match ply.dst().file() {
-                C => Square::new(D, rank),
-                G => Square::new(F, rank),
-                _ => panic!("Invalid castle"),
-            };
-            let king_dst = ply.dst();
-            if self.board.get_occupied().get(king_intermediate_dst)
-                || self.board.get_occupied().get(king_dst)
-                || !self.is_legal(&Ply::simple(ply.src(), king_intermediate_dst))
-            {
-                return false;
-            }
-        }
+        todo!();
+        // if ply.is_castling() {
+        //     // Can't castle through check.
+        //     // Castling _into_ check is handled by the regular logic.
+        //     use crate::square::files::*;
+        //     let rank = ply.src().rank();
+        //     let king_intermediate_dst = match ply.dst().file() {
+        //         C => Square::new(D, rank),
+        //         G => Square::new(F, rank),
+        //         _ => panic!("Invalid castle"),
+        //     };
+        //     let king_dst = ply.dst();
+        //     if self.board.get_occupied().get(king_intermediate_dst)
+        //         || self.board.get_occupied().get(king_dst)
+        //         || !self.is_legal(&Ply::simple(ply.src(), king_intermediate_dst))
+        //     {
+        //         return false;
+        //     }
+        // }
 
-        let mut cpy = self.clone();
+        // let mut cpy = self.clone();
 
-        cpy.apply_ply(ply);
-        let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
-        let attacked = cpy.board.attacked_squares(&cpy.to_move);
+        // cpy.apply_ply(ply);
+        // let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
+        // let attacked = cpy.board.attacked_squares(&cpy.to_move);
 
-        !king.intersects(attacked)
+        // !king.intersects(attacked)
     }
 
     pub fn legal_moves(&self) -> Vec<Ply> {
-        let mut res = self.pseudo_legal_moves();
-        res.iter()
-            .filter(|x| self.is_legal(x))
-            .filter(|x| !x.is_castling() || !self.is_in_check())
-            .map(|x| *x)
-            .collect()
+        let candidates = self.pseudo_legal_moves();
+        let mut res = Vec::new();
+        // res.iter()
+        //     .filter(|x| self.is_legal(x))
+        //     .filter(|x| !x.is_castling() || !self.is_in_check())
+        //     .map(|x| *x)
+        //     .collect()
+
+        let in_check = self.is_in_check();
+        let absolute_pins = self.absolute_pins();
+        let occupied = self.board.get_occupied();
+
+        // Use some assumed knowledge: "normal" king moves come before castling moves.
+        // This means we know whether king moves are legal or not by the time we get to castling moves.
+        let mut partial_oo_legal = false;
+        let mut partial_ooo_legal = false;
+
+        let leaves_own_king_in_check = |ply| {
+            let mut cpy = self.clone();
+            cpy.apply_ply(ply);
+
+            let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
+            let attacked = cpy.board.attacked_squares(&cpy.to_move);
+
+            king.intersects(attacked)
+        };
+
+        for ply in candidates.iter() {
+            if ply.moved_piece(self) == Piece::King {
+                use crate::square::files;
+                // We can't just assume that king moves are legal, we need to
+                // do the full check.
+                if leaves_own_king_in_check(ply) {
+                    continue;
+                }
+
+                if !ply.is_castling() {
+                    // At this point, we know that the king move is legal.
+                    // We still do the bookkeeping for castling legality.
+                    if ply.dst().rank() == self.to_move.home_rank() {
+                        match ply.dst().file() {
+                            files::D => {
+                                partial_ooo_legal = true;
+                            },
+                            files::F => {
+                                partial_oo_legal = true;
+                            },
+                            _ => (),
+                        }
+                    }
+                }
+                // Castling
+                else {
+                    if in_check {
+                        // Can't castle out of check.
+                        continue;
+                    }
+
+                    // Can't castle through check.
+                    // Castling _into_ check is handled by the regular logic.
+                    match ply.dst().file() {
+                        files::C => {
+                            if !partial_ooo_legal {
+                                continue;
+                            }
+                        }
+                        files::G => {
+                            if !partial_oo_legal {
+                                continue;
+                            }
+                        }
+                        _ => panic!("Invalid castle"),
+                    }
+
+                    // TODO: is this needed? Pseudo-legal shouldn't generate these...
+                    if occupied.get(ply.dst()) {
+                        continue;
+                    }
+                }
+            } else if !in_check {
+                // If we're not in check, we only need to check absolutely
+                // pinned pieces for illegal moves.
+                if absolute_pins.get(ply.src()) && leaves_own_king_in_check(ply) {
+                    // TODO: this can be more efficient.
+                    continue;
+                }
+
+                // En passant can also be a bit tricky.
+                if ply.is_en_passant() && leaves_own_king_in_check(ply) {
+                    continue;
+                }
+            } else {
+                // I guess we just need to check.
+                if leaves_own_king_in_check(ply) {
+                    continue;
+                }
+            }
+
+            res.push(*ply);
+        }
+
+        res
     }
 
     pub fn absolute_pins(&self) -> Bitboard {
@@ -866,12 +965,12 @@ perft_test!(test_kiwipete_1, POS_KIWIPETE, 1, 48);
 perft_test!(test_kiwipete_2, POS_KIWIPETE, 2, 2039);
 perft_test!(test_kiwipete_3, POS_KIWIPETE, 3, 97862);
 perft_test!(test_kiwipete_4, POS_KIWIPETE, 4, 4085603);
-perft_test!(test_kiwipete_5, POS_KIWIPETE, 5, 193690690);
+// perft_test!(test_kiwipete_5, POS_KIWIPETE, 5, 193690690);
 
 illegal_move_test!(
     test_illegal_castle_through_check,
-    "r3k2r/p1ppqpb1/bnN1pnp1/3P4/1p2P3/2N2Q1p/PPPBBPPP/R3K2R b KQkq - 1 1",
-    "O-O-O"
+    "4kr2/8/8/8/8/8/8/4K2R w K - 0 1",
+    "O-O"
 );
 
 illegal_move_test!(
