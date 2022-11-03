@@ -3,7 +3,7 @@ use std::ops::Range;
 use std::string::String;
 
 pub mod files {
-    #[derive(PartialEq, PartialOrd, Copy, Clone)]
+    #[derive(PartialEq, Eq, PartialOrd, Copy, Clone)]
     pub struct File(u8);
 
     use crate::bitboard::Bitboard;

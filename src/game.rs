@@ -216,7 +216,7 @@ impl Game {
                         .collect::<Vec<_>>(),
                 );
 
-                if self.board.get_color(&color).intersects(empty_squares) {
+                if self.board.get_occupied().intersects(empty_squares) {
                     continue;
                 }
             }
@@ -232,22 +232,36 @@ impl Game {
 
     fn _pawn_pushes(&self, plyset: &mut PlySet) {
         let color = self.to_move;
-        let srcs = self.board.get(&color, &Piece::Pawn);
+        let pawns = self.board.get(&color, &Piece::Pawn);
         let direction = color.pawn_move_direction();
         let occupied = self.board.get_occupied();
-        let single_pushes = srcs.shift(direction).and(!occupied);
-        let double_pushes = single_pushes
-            .and(color.en_passant_rank().as_bitboard())
-            .shift(direction);
-        let dsts = single_pushes
-            .or(double_pushes)
-            .and(!self.board.get_occupied());
 
-        let tbl = match color {
-            Color::White => &bitboard_map::WHITE_PAWN_MOVES,
-            Color::Black => &bitboard_map::BLACK_PAWN_MOVES,
-        };
-        _combination_moves(plyset, &srcs, &dsts, tbl, true);
+        {
+            let tbl = match color {
+                Color::White => &bitboard_map::WHITE_PAWN_MOVES,
+                Color::Black => &bitboard_map::BLACK_PAWN_MOVES,
+            };
+
+            let single_pushes = pawns.shift(direction) & !occupied;
+
+            _combination_moves(plyset, &pawns, &single_pushes, tbl, true);
+        }
+        {
+            let pawns_on_start_rank = pawns & color.pawn_start_rank().as_bitboard();
+            let blocker_row = color.en_passant_rank().as_bitboard();
+            let double_push_blockers = blocker_row & occupied;
+            let double_pushes = pawns_on_start_rank
+                .and(!double_push_blockers.shift(-direction))
+                .shift(direction + direction)
+                .and(!occupied);
+
+            let tbl = match color {
+                Color::White => &bitboard_map::WHITE_PAWN_DOUBLE_MOVES,
+                Color::Black => &bitboard_map::BLACK_PAWN_DOUBLE_MOVES,
+            };
+
+            _combination_moves(plyset, &pawns_on_start_rank, &double_pushes, tbl, true);
+        }
     }
 
     fn _pawn_captures(&self, plyset: &mut PlySet) {
@@ -353,7 +367,27 @@ impl Game {
     }
 
     pub fn is_legal(&self, ply: &Ply) -> bool {
+        // TODO: this only applies to pseudo-legal moves.
         // TODO: don't clone self.
+        if ply.is_castling() {
+            // Can't castle through check.
+            // Castling _into_ check is handled by the regular logic.
+            use crate::square::files::*;
+            let rank = ply.src().rank();
+            let king_intermediate_dst = match ply.dst().file() {
+                C => Square::new(D, rank),
+                G => Square::new(F, rank),
+                _ => panic!("Invalid castle"),
+            };
+            let king_dst = ply.dst();
+            if self.board.get_occupied().get(king_intermediate_dst)
+                || self.board.get_occupied().get(king_dst)
+                || !self.is_legal(&Ply::simple(ply.src(), king_intermediate_dst))
+            {
+                return false;
+            }
+        }
+
         let mut cpy = self.clone();
 
         cpy.apply_ply(ply);
@@ -367,18 +401,63 @@ impl Game {
         let mut res = self.pseudo_legal_moves();
         res.iter()
             .filter(|x| self.is_legal(x))
+            .filter(|x| !x.is_castling() || !self.is_in_check())
             .map(|x| *x)
             .collect()
+    }
+
+    pub fn absolute_pins(&self) -> Bitboard {
+        // TODO: not king specific.
+        let king = self
+            .board
+            .get(&self.to_move, &Piece::King)
+            .iter_squares()
+            .next()
+            .unwrap();
+
+        let mut res = Bitboard::new();
+        let board = &self.board;
+        let occupied = board.get_occupied();
+        for other in [Piece::Rook, Piece::Bishop] {
+            // First, we do a reverse look from the king to see which pieces it
+            // sees first along every ray.
+            let candidates = Bitboard::magic_attacks(king, other, occupied);
+
+            // Only friendly pieces can be pinned.
+            let candidates = candidates & board.get_color(&self.to_move);
+
+            // remove them and check if a relevant piece is behind them.
+            let occupied = occupied & !candidates;
+            let pinners = Bitboard::magic_attacks(king, other, occupied)
+                & board.get_color(&self.to_move.other())
+                & (board.get_piece(&other) | board.get_piece(&Piece::Queen));
+            // TODO: up to here can be split out into a "pinners" function.
+
+            // Now we have a bitboard of pieces pinning something to the king.
+            // We need to find the piece that it is pinning.
+            for pinner in pinners.iter_squares() {
+                // look in reverse
+                let path = Bitboard::magic_attacks(pinner, other, occupied);
+                let path = path & candidates;
+                if !path.is_empty() {
+                    res |= path;
+                }
+            }
+        }
+        res
+    }
+
+    pub fn is_in_check(&self) -> bool {
+        let king = self.board.get(&self.to_move, &Piece::King);
+        let attacked = self.board.attacked_squares(&self.to_move.other());
+        king.intersects(attacked)
     }
 
     pub fn is_check(&self, ply: &Ply) -> bool {
         let mut cpy = self.clone();
 
         cpy.apply_ply(ply);
-        let king = cpy.board.get(&cpy.to_move, &Piece::King);
-        let attacked = cpy.board.attacked_squares(&cpy.to_move.other());
-
-        king.intersects(attacked)
+        cpy.is_in_check()
     }
 
     pub fn is_mate(&self, ply: &Ply) -> bool {
@@ -498,9 +577,12 @@ impl Game {
             let mut game = self.clone();
             let name = ply.long_name();
             game.apply_ply(&ply);
+            if print {
+                print!("{}: ", name);
+            }
             let subres = &game.perft(depth - 1, false);
             if print {
-                println!("{}: {}", name, subres);
+                println!("{}", subres);
             }
             count += subres;
         }
@@ -645,7 +727,7 @@ macro_rules! illegal_move_test(($name:ident, $fen:expr, $ply:expr) => {
         }
         print!("{}", game.simple_render());
 
-        if let(Some(ply)) = game.ply_from_name($ply) {
+        if let Some(ply) = game.ply_from_name($ply) {
             game.apply_ply(&ply);
             println!("Fen after applying (illegal) ply: {}", game.to_fen());
             print!("{}", game.simple_render());
@@ -775,10 +857,38 @@ macro_rules! perft_test(
     }
 );
 
-pub const POS_KIWIPETE: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+pub const POS_KIWIPETE: &str =
+    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
 perft_test!(test_perft_1, STARTING_POSITION, 1, 20);
 perft_test!(test_perft_3, STARTING_POSITION, 3, 8902);
-perft_test!(test_perft_5, STARTING_POSITION, 5, 4865609);
+// perft_test!(test_perft_5, STARTING_POSITION, 5, 4865609);
 perft_test!(test_kiwipete_1, POS_KIWIPETE, 1, 48);
 perft_test!(test_kiwipete_2, POS_KIWIPETE, 2, 2039);
 perft_test!(test_kiwipete_3, POS_KIWIPETE, 3, 97862);
+perft_test!(test_kiwipete_4, POS_KIWIPETE, 4, 4085603);
+perft_test!(test_kiwipete_5, POS_KIWIPETE, 5, 193690690);
+
+illegal_move_test!(
+    test_illegal_castle_through_check,
+    "r3k2r/p1ppqpb1/bnN1pnp1/3P4/1p2P3/2N2Q1p/PPPBBPPP/R3K2R b KQkq - 1 1",
+    "O-O-O"
+);
+
+illegal_move_test!(
+    test_illegal_castle_through_piece,
+    "r3k2r/p1ppqpb1/1n2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BKb1R w KQkq - 2 2",
+    "O-O"
+);
+
+simple_move_test!(
+    test_rook_capture_voids_castle_right,
+    "4k3/8/8/8/8/6n1/8/R3K2R b KQ - 0 1",
+    "Nxh1",
+    "4k3/8/8/8/8/8/8/R3K2n w Q - 0 2"
+);
+
+illegal_move_test!(
+    test_illegal_castle_out_of_check,
+    "4k3/4r3/8/8/8/8/8/4K2R w K - 0 1",
+    "O-O"
+);

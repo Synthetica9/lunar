@@ -57,24 +57,24 @@ impl BitboardMap {
         let direction = side.pawn_move_direction();
         let double_directions = direction.add_const(direction);
 
-        let moves = BitboardMap::step_moves(&[direction]);
-        let double_moves = BitboardMap::step_moves(&[direction, double_directions]);
+        BitboardMap::step_moves(&[direction])
+    }
 
+    const fn pawn_double_moves(side: Color) -> BitboardMap {
         let mut res = BitboardMap::new();
         let mut i = 64;
+        let direction = side.pawn_move_direction();
+        let double_directions = direction.add_const(direction);
         while i > 0 {
             i -= 1;
             let sq = Square::from_index(i);
-            let rank = sq.rank().as_index();
-            let is_start = side.pawn_start_rank().as_index() == rank;
-            let is_home = side.home_rank().as_index() == rank;
-
-            res = if is_start || is_home {
-                res.set_const(&sq, *double_moves.get_const(&sq))
-            } else {
-                res.set_const(&sq, *moves.get_const(&sq))
+            if sq.rank().as_index() != side.pawn_start_rank().as_index() {
+                continue;
             }
+
+            res = res.set_const(&sq, Bitboard::from_square(sq).shift(double_directions));
         }
+
         res
     }
 
@@ -205,6 +205,9 @@ pub const BLACK_PAWN_ATTACKS: BitboardMap = BitboardMap::step_moves(&BLACK_PAWN_
 
 pub const WHITE_PAWN_MOVES: BitboardMap = BitboardMap::pawn_moves(Color::White);
 pub const BLACK_PAWN_MOVES: BitboardMap = BitboardMap::pawn_moves(Color::Black);
+
+pub const WHITE_PAWN_DOUBLE_MOVES: BitboardMap = BitboardMap::pawn_double_moves(Color::White);
+pub const BLACK_PAWN_DOUBLE_MOVES: BitboardMap = BitboardMap::pawn_double_moves(Color::Black);
 
 #[test]
 fn test_step_moves() {

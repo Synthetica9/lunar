@@ -317,31 +317,58 @@ pub trait ApplyPly {
         // update castling rights
         {
             let castle_rights = game.castle_rights();
-            let oo = castle_rights.get(to_move, CastleDirection::Kingside);
-            let ooo = castle_rights.get(to_move, CastleDirection::Queenside);
+            {
+                let oo = castle_rights.get(to_move, CastleDirection::Kingside);
+                let ooo = castle_rights.get(to_move, CastleDirection::Queenside);
 
-            let (disable_oo, disable_ooo) = match our_piece {
-                King => {
-                    // Disable all castling rights for the moving side.
-                    (true, true)
-                }
-                Rook => {
-                    let home_rank = to_move.home_rank();
-                    let kingside = src.file() == files::H && src.rank() == home_rank;
-                    let queenside = src.file() == files::A && src.rank() == home_rank;
-                    (kingside, queenside)
-                }
-                _ => (false, false),
-            };
+                let (mut disable_oo, mut disable_ooo) = match our_piece {
+                    King => {
+                        // Disable all castling rights for the moving side.
+                        (true, true)
+                    }
+                    Rook => {
+                        let home_rank = to_move.home_rank();
+                        let kingside = src.file() == files::H && src.rank() == home_rank;
+                        let queenside = src.file() == files::A && src.rank() == home_rank;
+                        (kingside, queenside)
+                    }
+                    _ => (false, false),
+                };
 
-            if oo && disable_oo {
-                self.toggle_castle_rights(CastleRights::single(to_move, CastleDirection::Kingside));
+                if oo && disable_oo {
+                    self.toggle_castle_rights(CastleRights::single(
+                        to_move,
+                        CastleDirection::Kingside,
+                    ));
+                }
+                if ooo && disable_ooo {
+                    self.toggle_castle_rights(CastleRights::single(
+                        to_move,
+                        CastleDirection::Queenside,
+                    ));
+                }
             }
-            if ooo && disable_ooo {
-                self.toggle_castle_rights(CastleRights::single(
-                    to_move,
-                    CastleDirection::Queenside,
-                ));
+
+            // It is also possible to make your opponent lose castling rights
+            // by capturing their rook.
+
+            {
+                let oo = castle_rights.get(to_move.other(), CastleDirection::Kingside);
+                let ooo = castle_rights.get(to_move.other(), CastleDirection::Queenside);
+
+                if oo && captured_piece == Some(Rook) && dst.file() == files::H {
+                    self.toggle_castle_rights(CastleRights::single(
+                        to_move.other(),
+                        CastleDirection::Kingside,
+                    ));
+                }
+
+                if ooo && captured_piece == Some(Rook) && dst.file() == files::A {
+                    self.toggle_castle_rights(CastleRights::single(
+                        to_move.other(),
+                        CastleDirection::Queenside,
+                    ));
+                }
             }
         }
 
