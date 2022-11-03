@@ -16,7 +16,9 @@ pub struct ZobristHash {
 impl ApplyPly for ZobristHash {
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
         let idx = square.as_index() + piece.as_index() * 64 + color.as_index() * 64 * 6;
-        self.hash ^= hashes::COLOR_PIECE_SQUARE[idx];
+        debug_assert!(idx < hashes::COLOR_PIECE_SQUARE.len());
+        self.hash ^= hashes::COLOR_PIECE_SQUARE.get(idx).unwrap_or(&0);
+        // self.hash ^= hashes::COLOR_PIECE_SQUARE[idx];
     }
 
     fn toggle_castle_rights(&mut self, rights: CastleRights) {

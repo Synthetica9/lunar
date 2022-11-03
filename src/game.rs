@@ -145,7 +145,7 @@ impl Game {
         // self.hash.apply_ply(&cln, ply);
         self._apply_ply(&cln, ply);
 
-        debug_assert!(self.board.is_valid());
+        debug_assert!(self.board.is_valid(), "board got hecked. {ply:?}");
     }
 
     pub fn hash_after_ply(&self, ply: &Ply) -> ZobristHash {
@@ -267,9 +267,9 @@ impl Game {
     }
 
     fn _pawn_captures(&self, plyset: &mut PlySet) {
-        let move_table = &match self.to_move {
-            Color::White => bitboard_map::WHITE_PAWN_ATTACKS,
-            Color::Black => bitboard_map::BLACK_PAWN_ATTACKS,
+        let move_table = match self.to_move {
+            Color::White => &bitboard_map::WHITE_PAWN_ATTACKS,
+            Color::Black => &bitboard_map::BLACK_PAWN_ATTACKS,
         };
 
         self._step_moves_for(plyset, &Piece::Pawn, move_table, CapturePolicy::Must)
@@ -385,11 +385,54 @@ impl Game {
             cpy.apply_ply(ply);
 
             let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
-            let king_sq = king.iter_squares().next().unwrap();
+            let king_sq = king.first_occupied().unwrap();
             let attackers = cpy.board.squares_attacking(&cpy.to_move, king_sq);
 
             !attackers.is_empty()
         };
+
+        // Fen is used in multiple debug statements. We don't want to calculate
+        // it with every move even in debug mode, but don't want to calculate it
+        // at all in production.
+        let fen = {
+            #[cfg(debug_assertions)]
+            let res = self.to_fen();
+
+            #[cfg(not(debug_assertions))]
+            let res = 0;
+
+            res
+        };
+
+        let king = self.board.get(&self.to_move, &Piece::King);
+        let king_sq = king.first_occupied().unwrap();
+
+        let king_attackers = self.board.squares_attacking(&self.to_move.other(), king_sq);
+        let check_count = king_attackers.popcount();
+
+        let occupancy = self.board.get_occupied();
+
+        // If the king wasn't there, which squares would be attacked?
+        let attackers_without_king = self
+            .board
+            .attacked_squares_with_occupancy(&self.to_move.other(), occupancy & !king);
+
+        if check_count >= 2 {
+            let mut candidates = PlySet::new();
+            self._simple_king_moves(&mut candidates);
+            return candidates
+                .iter()
+                .filter(|x| {
+                    let is_safe = !attackers_without_king.get(x.dst());
+                    debug_assert!(
+                        is_safe == !leaves_own_king_in_check(x),
+                        "Inconsistency between is_safe and reference impl! {x:?}\n{fen}"
+                    );
+                    is_safe
+                })
+                .map(|x| *x)
+                .collect();
+        }
 
         let candidates = self.pseudo_legal_moves();
         let mut res = Vec::with_capacity(candidates.len());
@@ -399,8 +442,15 @@ impl Game {
         //     .map(|x| *x)
         //     .collect()
 
-        let in_check = self.is_in_check();
-        let absolute_pins = self.absolute_pins();
+        let in_check = check_count != 0;
+        let absolute_pin_pairs = self.absolute_pins();
+        let absolute_pins = {
+            let mut res = Bitboard::new();
+            for (pin, _pinner) in absolute_pin_pairs.iter() {
+                res |= Bitboard::from_square(*pin);
+            }
+            res
+        };
         let occupied = self.board.get_occupied();
 
         // Use some assumed knowledge: "normal" king moves come before castling moves.
@@ -408,15 +458,17 @@ impl Game {
         let mut partial_oo_legal = false;
         let mut partial_ooo_legal = false;
 
-        let king = self.board.get(&self.to_move, &Piece::King);
-        let king_sq = king.iter_squares().next().unwrap();
-
         for ply in candidates.iter() {
             if ply.src() == king_sq {
                 use crate::square::files;
-                // We can't just assume that king moves are legal, we need to
-                // do the full check.
-                if leaves_own_king_in_check(ply) {
+
+                let dst_attacked = attackers_without_king.get(ply.dst());
+                debug_assert!(
+                    ply.is_castling() || (dst_attacked == leaves_own_king_in_check(ply)),
+                    "Attacked destination not equivalent to leaving in check! {ply:?}\n{fen}"
+                );
+
+                if dst_attacked {
                     continue;
                 }
 
@@ -425,12 +477,8 @@ impl Game {
                     // We still do the bookkeeping for castling legality.
                     if ply.dst().rank() == self.to_move.home_rank() {
                         match ply.dst().file() {
-                            files::D => {
-                                partial_ooo_legal = true;
-                            }
-                            files::F => {
-                                partial_oo_legal = true;
-                            }
+                            files::D => partial_ooo_legal = true,
+                            files::F => partial_oo_legal = true,
                             _ => (),
                         }
                     }
@@ -457,28 +505,73 @@ impl Game {
                         }
                         _ => panic!("Invalid castle"),
                     }
-
-                    // TODO: is this needed? Pseudo-legal shouldn't generate these...
-                    if occupied.get(ply.dst()) {
-                        continue;
-                    }
                 }
-            } else if !in_check {
-                // If we're not in check, we only need to check absolutely
-                // pinned pieces for illegal moves.
-                if absolute_pins.get(ply.src()) && leaves_own_king_in_check(ply) {
-                    // TODO: this can be more efficient.
+            } else if ply.is_en_passant() {
+                // En passant can just be a bit tricky.
+                // See for example:
+                // 8/8/3p4/1Pp4r/1K3p2/6k1/4P1P1/1R6 w - c6 0 3
+                if leaves_own_king_in_check(ply) {
                     continue;
                 }
+            } else if in_check {
+                // We're not moving the king. Also, we're in (single) check.
+                debug_assert!(king_attackers.popcount() == 1);
+                debug_assert!(ply.moved_piece(self) != Piece::King);
 
-                // En passant can also be a bit tricky.
-                if ply.is_en_passant() && leaves_own_king_in_check(ply) {
+                let moves_absolute_pin = absolute_pins.get(ply.src());
+                if moves_absolute_pin {
+                    debug_assert!(
+                        leaves_own_king_in_check(ply),
+                        "moved out of absolute pin in check, but it was resolved? {ply:?}\n{fen}"
+                    );
+                    continue;
+                };
+
+                // 3 ways out of check:
+
+                // 1. "King moves to non attacked squares, sliding check x-rays the king"
+                // This is checked in king moves, since we know we're not moving
+                // the king here.
+
+                // 2. "Capture of checking piece. The capturing piece is not absolutely pinned"
+                let checking_piece = king_attackers.first_occupied().unwrap();
+                let is_capture_of_checking_piece = ply.dst() == checking_piece;
+
+                // 3. "Interposing moves in case of distant sliding check. The
+                // moving piece is not absolutely pinned.
+                let is_interposing = ply.dst().interposes(king_sq, checking_piece);
+
+                // For both ways we have already checked that we're not pinned.
+                let is_mitigation = is_capture_of_checking_piece || is_interposing;
+
+                debug_assert!(
+                    !is_mitigation == leaves_own_king_in_check(ply),
+                    "Mitigation check failed! {ply:?}\n{fen}"
+                );
+                if !is_mitigation {
                     continue;
                 }
             } else {
-                // I guess we just need to check.
-                if leaves_own_king_in_check(ply) {
-                    continue;
+                // We're not in check and not moving the king.
+                debug_assert!(king_attackers.popcount() == 0);
+                debug_assert!(ply.moved_piece(self) != Piece::King);
+
+                // If we're not in check, we only need to check absolutely
+                // pinned pieces for illegal moves.
+                if absolute_pins.get(ply.src()) {
+                    let pinner = absolute_pin_pairs
+                        .iter()
+                        .filter(|p| p.0 == ply.src())
+                        .next()
+                        .unwrap()
+                        .1;
+
+                    // Move on the pin or capture the pinning piece.
+                    let is_ok = ply.dst().interposes(king_sq, pinner) || ply.dst() == pinner;
+
+                    if !is_ok {
+                        continue;
+                    }
                 }
             }
 
@@ -488,31 +581,27 @@ impl Game {
         res
     }
 
-    pub fn absolute_pins(&self) -> Bitboard {
+    pub fn pins(&self, to: Square) -> Vec<(Square, Square)> {
         // TODO: not king specific.
-        let king = self
-            .board
-            .get(&self.to_move, &Piece::King)
-            .iter_squares()
-            .next()
-            .unwrap();
+        // TODO: move to Board
+        let mut res = Vec::new();
 
-        let mut res = Bitboard::new();
         let board = &self.board;
         let occupied = board.get_occupied();
+        let queen = board.get_piece(&Piece::Queen);
         for other in [Piece::Rook, Piece::Bishop] {
             // First, we do a reverse look from the king to see which pieces it
             // sees first along every ray.
-            let candidates = Bitboard::magic_attacks(king, other, occupied);
+            let candidates = Bitboard::magic_attacks(to, other, occupied);
 
             // Only friendly pieces can be pinned.
             let candidates = candidates & board.get_color(&self.to_move);
 
             // remove them and check if a relevant piece is behind them.
             let occupied = occupied & !candidates;
-            let pinners = Bitboard::magic_attacks(king, other, occupied)
+            let pinners = Bitboard::magic_attacks(to, other, occupied)
                 & board.get_color(&self.to_move.other())
-                & (board.get_piece(&other) | board.get_piece(&Piece::Queen));
+                & (board.get_piece(&other) | queen);
             // TODO: up to here can be split out into a "pinners" function.
 
             // Now we have a bitboard of pieces pinning something to the king.
@@ -521,23 +610,41 @@ impl Game {
                 // look in reverse
                 let path = Bitboard::magic_attacks(pinner, other, occupied);
                 let path = path & candidates;
-                if !path.is_empty() {
-                    res |= path;
+                debug_assert!(path.popcount() <= 1);
+                if let Some(pinned) = path.first_occupied() {
+                    res.push((pinned, pinner));
                 }
             }
         }
         res
     }
 
-    pub fn is_in_check(&self) -> bool {
+    pub fn absolute_pins(&self) -> Vec<(Square, Square)> {
+        let king = self
+            .board
+            .get(&self.to_move, &Piece::King)
+            .first_occupied()
+            .unwrap();
+        self.pins(king)
+    }
+
+    pub fn check_count(&self) -> u8 {
         // TODO: split out to function "is_attacked" for board
         let king = self.board.get(&self.to_move, &Piece::King);
-        let king_square = king.iter_squares().next().unwrap();
-        let attacked = self
+        let king_square = king.first_occupied().unwrap();
+        let attackers = self
             .board
             .squares_attacking(&self.to_move.other(), king_square);
 
-        !attacked.is_empty()
+        attackers.popcount()
+    }
+
+    pub fn is_in_check(&self) -> bool {
+        self.check_count() >= 1
+    }
+
+    pub fn is_in_double_check(&self) -> bool {
+        self.check_count() >= 2
     }
 
     pub fn is_check(&self, ply: &Ply) -> bool {
@@ -683,21 +790,13 @@ impl Game {
 impl ApplyPly for Game {
     #[inline]
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
-        match self.board.square(square) {
-            Some((c, p)) => {
-                // There currently is a piece there. It'd better match.
-                debug_assert!(c == color);
-                debug_assert!(p == piece);
-            }
-            None => {}
-        }
-
-        self.board.toggle_mut_invalid(square, color, piece);
+        self.board.toggle_piece(color, piece, square);
         self.hash.toggle_piece(color, piece, square);
     }
 
     fn toggle_castle_rights(&mut self, castle_rights: CastleRights) {
         self.castle_rights = self.castle_rights.xor(castle_rights);
+        self.board.toggle_castle_rights(castle_rights);
         self.hash.toggle_castle_rights(castle_rights);
     }
 
@@ -710,11 +809,13 @@ impl ApplyPly for Game {
             }
             None => Some(en_passant),
         };
+        self.board.toggle_en_passant(en_passant);
         self.hash.toggle_en_passant(en_passant);
     }
 
     fn flip_side(&mut self) {
         self.to_move = self.to_move.other();
+        self.board.flip_side();
         self.hash.flip_side();
     }
 }
@@ -984,6 +1085,13 @@ perft_test!(test_pos5_3, POS_5, 3, 62379);
 pub const POS_6: &str = "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10";
 perft_test!(test_pos6_3, POS_6, 3, 89890);
 
+perft_test!(
+    test_multi_check,
+    "8/8/1bnknb2/8/3K4/8/8/8 w - - 0 1",
+    5,
+    82709
+);
+
 illegal_move_test!(
     test_illegal_castle_through_check,
     "4kr2/8/8/8/8/8/8/4K2R w K - 0 1",
@@ -1007,4 +1115,24 @@ illegal_move_test!(
     test_illegal_castle_out_of_check,
     "4k3/4r3/8/8/8/8/8/4K2R w K - 0 1",
     "O-O"
+);
+
+simple_move_test!(
+    test_move_on_absolute_pin,
+    "7k/4r3/8/8/8/4R3/8/4K3 w - - 0 1",
+    "Re4",
+    "7k/4r3/8/8/4R3/8/8/4K3 b - - 1 1"
+);
+
+simple_move_test!(
+    test_capture_absolute_pinning_piece,
+    "7k/4r3/8/8/8/4R3/8/4K3 w - - 0 1",
+    "Rxe7",
+    "7k/4R3/8/8/8/8/8/4K3 b - - 0 1"
+);
+
+illegal_move_test!(
+    test_illegal_move_from_absolute_pin,
+    "7k/4r3/8/8/8/4R3/8/4K3 w - - 0 1",
+    "Rd3"
 );

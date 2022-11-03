@@ -176,7 +176,6 @@ const ROOK_BITS: [isize; 64] = [
     12, 11, 11, 11, 11, 11, 11, 12, //
 ];
 
-
 // Original:
 const ROOK_SHARING: [usize; 64] = [
     00, 01, 02, 03, 04, 05, 06, 07, //

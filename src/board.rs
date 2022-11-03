@@ -8,6 +8,8 @@ use crate::byteboard::Byteboard;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::square::{File, Rank, Square};
+use crate::ply::ApplyPly;
+use crate::castlerights::CastleRights;
 
 #[derive(Debug, Clone)]
 pub struct Board {
@@ -321,10 +323,14 @@ impl Board {
         (knights.and(CENTRAL_16)).popcount()
     }
 
-    pub fn attacked_squares_by_piece(&self, color: &Color, piece: &Piece) -> Bitboard {
+    fn attacked_squares_by_piece_with_occupancy(
+        &self,
+        color: &Color,
+        piece: &Piece,
+        occupancy: Bitboard,
+    ) -> Bitboard {
         use Piece::*;
 
-        let occupancy = self.get_occupied();
         let mut res = Bitboard::new();
         for sqr in self.get(color, piece).iter_squares() {
             res |= match piece {
@@ -339,14 +345,17 @@ impl Board {
         res
     }
 
-    pub fn attacked_squares(&self, color: &Color) -> Bitboard {
-        let mut result = Bitboard::new();
-
+    pub fn attacked_squares_with_occupancy(&self, color: &Color, occupancy: Bitboard) -> Bitboard {
+        let mut res = Bitboard::new();
         for piece in Piece::iter() {
-            result |= self.attacked_squares_by_piece(color, &piece);
+            res |= self.attacked_squares_by_piece_with_occupancy(color, &piece, occupancy);
         }
+        res
+    }
 
-        result
+    pub fn attacked_squares(&self, color: &Color) -> Bitboard {
+        let occupancy = self.get_occupied();
+        self.attacked_squares_with_occupancy(color, occupancy)
     }
 
     pub fn squares_attacking(&self, color: &Color, square: Square) -> Bitboard {
@@ -388,6 +397,24 @@ impl Board {
         }
         res
     }
+}
+
+impl ApplyPly for Board {
+    fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
+        // #[cfg(debug_assertions)]
+        match self.square(square) {
+            Some((c, p)) => {
+                // There currently is a piece there. It'd better match.
+                debug_assert!(c == color);
+                debug_assert!(p == piece);
+            }
+            None => {}
+        }
+        self.toggle_mut_invalid(square, color, piece);
+    }
+    fn toggle_castle_rights(&mut self, rights: CastleRights) { }
+    fn toggle_en_passant(&mut self, square: Square) { }
+    fn flip_side(&mut self) { }
 }
 
 #[test]

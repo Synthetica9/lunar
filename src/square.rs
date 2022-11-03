@@ -1,9 +1,10 @@
+use crate::bitboard::Bitboard;
 use std::fmt::{Debug, Error, Formatter};
 use std::ops::Range;
 use std::string::String;
 
 pub mod files {
-    #[derive(PartialEq, Eq, PartialOrd, Copy, Clone)]
+    #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
     pub struct File(u8);
 
     use crate::bitboard::Bitboard;
@@ -48,10 +49,10 @@ pub mod files {
 pub use files::File;
 
 pub mod ranks {
-    use crate::bitboard::Bitboard;
-
-    #[derive(PartialEq, PartialOrd, Copy, Clone)]
+    #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
     pub struct Rank(pub u8);
+
+    use crate::bitboard::Bitboard;
 
     impl Rank {
         pub const fn new(rank: u8) -> Rank {
@@ -120,6 +121,15 @@ impl Square {
         Rank::new(self.0 / 8)
     }
 
+    // https://www.chessprogramming.org/Efficient_Generation_of_Sliding_Piece_Attacks
+    pub const fn diagonal_index(self) -> u8 {
+        (self.rank().as_u8().wrapping_sub(self.file().as_u8())) & 15
+    }
+
+    pub const fn antidiagonal_index(self) -> u8 {
+        (self.rank().as_u8() + self.file().as_u8()) ^ 7
+    }
+
     pub const fn file_rank(self) -> (File, Rank) {
         (self.file(), self.rank())
     }
@@ -158,6 +168,44 @@ impl Square {
         }
 
         Ok(Square::new(file, rank))
+    }
+
+    pub fn interposes_diag(self, a: Square, b: Square) -> bool {
+        let on_same_diagonal =
+            a.diagonal_index() == b.diagonal_index() && self.diagonal_index() == a.diagonal_index();
+        let on_same_antidiagonal = a.antidiagonal_index() == b.antidiagonal_index()
+            && self.antidiagonal_index() == a.antidiagonal_index();
+
+        if !(on_same_diagonal || on_same_antidiagonal) {
+            return false;
+        }
+
+        use std::cmp::{max, min};
+        let l = min(a.file(), b.file());
+        let r = max(a.file(), b.file());
+        return l < self.file() && self.file() < r;
+    }
+
+    pub fn interposes_straight(&self, a: Square, b: Square) -> bool {
+        // TODO: which one of these is faster?
+        use std::cmp::{max, min};
+        if a.rank() == b.rank() {
+            // Horizontal interposition on same rank.
+            let l = min(a.file(), b.file());
+            let r = max(a.file(), b.file());
+            l < self.file() && self.file() < r && self.rank() == a.rank()
+        } else if a.file() == b.file() {
+            // vertical interposition on same file.
+            let d = min(a.rank(), b.rank());
+            let u = max(a.rank(), b.rank());
+            d < self.rank() && self.rank() < u && self.file() == b.file()
+        } else {
+            false
+        }
+    }
+
+    pub fn interposes(&self, a: Square, b: Square) -> bool {
+        self.interposes_diag(a, b) || self.interposes_straight(a, b)
     }
 }
 
