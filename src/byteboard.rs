@@ -4,7 +4,7 @@ use crate::bitboard::Bitboard;
 use crate::square::Square;
 
 #[derive(PartialEq, Copy, Clone)]
-pub struct Byteboard([i8; 64]);
+pub struct Byteboard(pub [i8; 64]);
 
 impl Byteboard {
     pub const fn new() -> Byteboard {
@@ -52,6 +52,17 @@ impl Byteboard {
         let mut other = other.to_byteboard_mask();
         other &= *self;
         other.sum()
+    }
+
+    pub const fn flip_vert(&self) -> Byteboard {
+        let mut res = Byteboard::new();
+        let mut i = 64;
+        while i > 0 {
+            i -= 1;
+            let sq = Square::from_index(i);
+            res.0[sq.as_index()] = self.0[sq.flip_vert().as_index()];
+        }
+        res
     }
 }
 

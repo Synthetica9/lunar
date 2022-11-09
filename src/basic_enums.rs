@@ -2,7 +2,6 @@ use strum_macros::EnumIter;
 
 use crate::direction::{directions, Direction};
 use crate::millipawns::Millipawns;
-use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
 use crate::square::{files, ranks, File, Rank, Square};
 
@@ -13,6 +12,8 @@ pub enum Color {
 }
 
 impl Color {
+    pub const COLORS: [Color; 2] = [Color::White, Color::Black];
+
     pub fn from_fen_part(fen_part: &str) -> Result<Color, String> {
         match fen_part {
             "w" => Ok(Color::White),
@@ -103,17 +104,22 @@ impl CastleDirection {
     }
 }
 
-#[test]
-fn test_piece_convert() {
+#[cfg(test)]
+mod tests {
+    // use super::*;
+    use crate::piece::Piece;
     use strum::IntoEnumIterator;
 
-    for piece in Piece::iter() {
-        let c = piece.to_char();
-        let piece2 = Piece::from_char(c).unwrap();
-        assert_eq!(piece, piece2);
+    #[test]
+    fn test_piece_convert() {
+        for piece in Piece::iter() {
+            let c = piece.to_char();
+            let piece2 = Piece::from_char(c).unwrap();
+            assert_eq!(piece, piece2);
 
-        let n = piece.to_u8();
-        let piece3 = Piece::from_u8(n).unwrap();
-        assert_eq!(piece, piece3);
+            let n = piece.to_u8();
+            let piece3 = Piece::from_u8(n).unwrap();
+            assert_eq!(piece, piece3);
+        }
     }
 }

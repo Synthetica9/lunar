@@ -1,29 +1,32 @@
 // Import board
 
-use lunar::bitboard::Bitboard;
-use lunar::build::magics;
-use lunar::game::*;
-use lunar::piece::Piece;
-use lunar::ply::{Ply, SpecialFlag};
-
 fn main() {
+    use lunar::game::Game;
+    use lunar::ply::Ply;
+    use lunar::search::*;
     use lunar::square::squares::*;
-    let mut game = Game::from_fen(POS_4).unwrap();
-    // game.apply_ply(&Ply::simple(E3, E5));
-    // position fen r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1 moves c4c5
-    game.apply_ply(&Ply::simple(C4, C5));
-    game.apply_ply(&Ply::new(B2, A1, Some(SpecialFlag::Promotion(Piece::Rook))));
-    let n = 4;
+    use lunar::transposition_table::TranspositionTable;
 
-    println!("position fen {}", game.to_fen());
-    println!("go perft {n}");
-    game.perft(n, true);
+    use std::sync::Arc;
+    use std::sync::RwLock;
 
-    // for ply in game.pseudo_legal_moves().iter() {
-    //     println!("{:?}", ply);
-    //     println!("{}", game.is_legal(&ply));
-    //     // let mut cpy = game.clone();
-    //     // cpy.apply_ply(&ply);
-    //     // cpy.perft(1, false);
-    // }
+    fn new_thread_pool() -> SearchThreadPool {
+        let mut tt = Arc::new(RwLock::new(TranspositionTable::new(1024 * 1024 * 128)));
+        SearchThreadPool::new(4, tt)
+    }
+
+    let tp = new_thread_pool();
+    // let mut game = Game::from_fen("8/8/3k4/7R/6R1/8/8/4K3 w - - 0 1").unwrap();
+    let mut game = Game::new();
+    while !game.is_in_mate() {
+        let (mp, ply) = tp.search(&game, 10);
+        // println!("{ply:?}");
+        println!("{mp:?}");
+        let ply = ply.unwrap();
+        println!("{}", game.ply_name(&ply));
+        game.apply_ply(&ply);
+        println!("{}", game.to_fen());
+        // println!("{}", game.simple_render());
+    }
+    // assert_eq!(ply, Some(Ply::simple(H5, H7)));
 }

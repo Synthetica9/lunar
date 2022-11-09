@@ -38,6 +38,11 @@ impl Piece {
         }
     }
 
+    pub const PIECES: [Piece; 6] = {
+        use Piece::*;
+        [Pawn, Knight, Bishop, Rook, Queen, King]
+    };
+
     pub const fn to_u8(self) -> u8 {
         // TODO: rename to as_u8
         self as u8

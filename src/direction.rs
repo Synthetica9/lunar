@@ -85,20 +85,25 @@ impl std::ops::Neg for Direction {
     }
 }
 
-#[test]
-fn test_components() {
-    use directions::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    assert_eq!(N.north_component(), N);
-    assert_eq!(S.north_component(), S);
-    assert_eq!(E.north_component(), NEUTRAL);
-    assert_eq!(W.north_component(), NEUTRAL);
+    #[test]
+    fn test_components() {
+        use directions::*;
 
-    assert_eq!(N.east_component(), NEUTRAL);
-    assert_eq!(S.east_component(), NEUTRAL);
-    assert_eq!(E.east_component(), E);
-    assert_eq!(W.east_component(), W);
+        assert_eq!(N.north_component(), N);
+        assert_eq!(S.north_component(), S);
+        assert_eq!(E.north_component(), NEUTRAL);
+        assert_eq!(W.north_component(), NEUTRAL);
 
-    assert_eq!(SE.north_component(), S);
-    assert_eq!(SE.east_component(), E);
+        assert_eq!(N.east_component(), NEUTRAL);
+        assert_eq!(S.east_component(), NEUTRAL);
+        assert_eq!(E.east_component(), E);
+        assert_eq!(W.east_component(), W);
+
+        assert_eq!(SE.north_component(), S);
+        assert_eq!(SE.east_component(), E);
+    }
 }

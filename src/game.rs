@@ -6,6 +6,7 @@ use crate::bitboard_map;
 use crate::bitboard_map::BitboardMap;
 use crate::board::Board;
 use crate::castlerights::CastleRights;
+use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{ApplyPly, Ply, SpecialFlag, _combination_moves};
 use crate::plyset::PlySet;
@@ -13,7 +14,7 @@ use crate::square::Square;
 use crate::zobrist_hash::ZobristHash;
 
 // TODO: merge with board?
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Game {
     board: Board,
     to_move: Color,
@@ -21,6 +22,9 @@ pub struct Game {
     // TODO: should be a file, probably
     en_passant: Option<Square>,
     half_move: i16,
+
+    // Full move clock isn't used anywhere? Move to higher level game state
+    // management? (Along with 3-fold draw bookkeeping.)
     full_move: i16,
     hash: ZobristHash,
 }
@@ -121,6 +125,10 @@ impl Game {
             self.board.to_fen_part(),
             self.to_move.to_fen_part(),
             self.castle_rights.to_fen_part(),
+            // TODO: apparently en passant capture actually has to be legal
+            // (not just pseudo-legal.) See:
+            // 4k3/4p3/8/r2P3K/8/8/8/8 b - - 0 1
+            // where after ... e5 the fen doesn't show the en passant
             self.en_passant.map_or("-".to_string(), |s| s.to_fen_part()),
             self.half_move,
             self.full_move
@@ -202,23 +210,22 @@ impl Game {
             if color != self.to_move {
                 continue;
             }
-            {
-                use crate::square::files::*;
-                let empty_files: &[File] = match direction {
-                    Kingside => &[F, G],
-                    Queenside => &[B, C, D],
-                };
 
-                let empty_squares = Bitboard::from_squares(
-                    &empty_files
-                        .iter()
-                        .map(|f| Square::new(*f, color.home_rank()))
-                        .collect::<Vec<_>>(),
-                );
+            use crate::square::files::*;
+            let empty_files: &[File] = match direction {
+                Kingside => &[F, G],
+                Queenside => &[B, C, D],
+            };
 
-                if self.board.get_occupied().intersects(empty_squares) {
-                    continue;
-                }
+            let empty_squares = Bitboard::from_squares(
+                &empty_files
+                    .iter()
+                    .map(|f| Square::new(*f, color.home_rank()))
+                    .collect::<Vec<_>>(),
+            );
+
+            if self.board.get_occupied().intersects(empty_squares) {
+                continue;
             }
 
             plyset.push(direction.to_ply(&color));
@@ -227,7 +234,7 @@ impl Game {
 
     pub fn _king_moves(&self, plyset: &mut PlySet) {
         // Order matters here! Simple moves must be generated first to
-        // efficiently check castling rules.
+        // efficiently check castling rules. (specifically castling through check)
         self._simple_king_moves(plyset);
         self._castle_moves(plyset);
     }
@@ -239,6 +246,7 @@ impl Game {
         let occupied = self.board.get_occupied();
 
         {
+            // Single pushes
             let tbl = match color {
                 Color::White => &bitboard_map::WHITE_PAWN_MOVES,
                 Color::Black => &bitboard_map::BLACK_PAWN_MOVES,
@@ -249,6 +257,7 @@ impl Game {
             _combination_moves(plyset, &pawns, &single_pushes, tbl, true);
         }
         {
+            // Double pushes
             let pawns_on_start_rank = pawns & color.pawn_start_rank().as_bitboard();
             let blocker_row = color.en_passant_rank().as_bitboard();
             let double_push_blockers = blocker_row & occupied;
@@ -287,9 +296,9 @@ impl Game {
         let color = self.to_move;
         // println!("Color: {:?}", color);
 
-        let rev_move_table = &match color {
-            Color::White => bitboard_map::BLACK_PAWN_ATTACKS,
-            Color::Black => bitboard_map::WHITE_PAWN_ATTACKS,
+        let rev_move_table = match color {
+            Color::White => &bitboard_map::BLACK_PAWN_ATTACKS,
+            Color::Black => &bitboard_map::WHITE_PAWN_ATTACKS,
         };
 
         let friendly_pawns = self.board.get(&color, &Piece::Pawn);
@@ -368,7 +377,13 @@ impl Game {
         plyset
     }
 
+    pub fn quiescence_pseudo_legal_moves(&self) -> PlySet {
+        todo!()
+    }
+
     pub fn is_legal(&self, ply: &Ply) -> bool {
+        // TODO: we know which piece is moving. Therefore, we can check
+        // only that piece.
         let legal_moves = self.legal_moves();
         legal_moves.contains(ply)
     }
@@ -379,13 +394,17 @@ impl Game {
     }
 
     pub fn legal_moves(&self) -> Vec<Ply> {
+        // TODO: low-level variant that passes in Plyset.
+        // (for more efficient is-legal)
         let leaves_own_king_in_check = |ply| {
             // At the top to not accidentally shadow any variables.
             let mut cpy = self.clone();
             cpy.apply_ply(ply);
 
+            // TODO: move to Board.get_king_square(color)
             let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
-            let king_sq = king.first_occupied().unwrap();
+            debug_assert!(!king.is_empty());
+            let king_sq = king.first_occupied_or_a1();
             let attackers = cpy.board.squares_attacking(&cpy.to_move, king_sq);
 
             !attackers.is_empty()
@@ -405,7 +424,7 @@ impl Game {
         };
 
         let king = self.board.get(&self.to_move, &Piece::King);
-        let king_sq = king.first_occupied().unwrap();
+        let king_sq = king.first_occupied_or_a1();
 
         let king_attackers = self.board.squares_attacking(&self.to_move.other(), king_sq);
         let check_count = king_attackers.popcount();
@@ -436,11 +455,6 @@ impl Game {
 
         let candidates = self.pseudo_legal_moves();
         let mut res = Vec::with_capacity(candidates.len());
-        // res.iter()
-        //     .filter(|x| self.is_legal(x))
-        //     .filter(|x| !x.is_castling() || !self.is_in_check())
-        //     .map(|x| *x)
-        //     .collect()
 
         let in_check = check_count != 0;
         let absolute_pin_pairs = self.absolute_pins();
@@ -510,6 +524,7 @@ impl Game {
                 // En passant can just be a bit tricky.
                 // See for example:
                 // 8/8/3p4/1Pp4r/1K3p2/6k1/4P1P1/1R6 w - c6 0 3
+                // TODO: use correct heuristics here.
                 if leaves_own_king_in_check(ply) {
                     continue;
                 }
@@ -534,7 +549,7 @@ impl Game {
                 // the king here.
 
                 // 2. "Capture of checking piece. The capturing piece is not absolutely pinned"
-                let checking_piece = king_attackers.first_occupied().unwrap();
+                let checking_piece = king_attackers.first_occupied_or_a1();
                 let is_capture_of_checking_piece = ply.dst() == checking_piece;
 
                 // 3. "Interposing moves in case of distant sliding check. The
@@ -559,6 +574,8 @@ impl Game {
                 // If we're not in check, we only need to check absolutely
                 // pinned pieces for illegal moves.
                 if absolute_pins.get(ply.src()) {
+                    // TODO: we know one exists, so we can load A1 or smth
+                    // instead of adding a mis-predictable panic jump.
                     let pinner = absolute_pin_pairs
                         .iter()
                         .filter(|p| p.0 == ply.src())
@@ -623,15 +640,14 @@ impl Game {
         let king = self
             .board
             .get(&self.to_move, &Piece::King)
-            .first_occupied()
-            .unwrap();
+            .first_occupied_or_a1();
         self.pins(king)
     }
 
     pub fn check_count(&self) -> u8 {
         // TODO: split out to function "is_attacked" for board
         let king = self.board.get(&self.to_move, &Piece::King);
-        let king_square = king.first_occupied().unwrap();
+        let king_square = king.first_occupied_or_a1();
         let attackers = self
             .board
             .squares_attacking(&self.to_move.other(), king_square);
@@ -654,10 +670,22 @@ impl Game {
         cpy.is_in_check()
     }
 
+    pub fn is_in_mate(&self) -> bool {
+        self.legal_moves().len() == 0
+    }
+
+    pub fn is_in_checkmate(&self) -> bool {
+        self.is_in_check() && self.is_in_mate()
+    }
+
+    pub fn is_in_stalemate(&self) -> bool {
+        !self.is_in_check() && self.is_in_mate()
+    }
+
     pub fn is_mate(&self, ply: &Ply) -> bool {
         let mut cpy = self.clone();
         cpy.apply_ply(ply);
-        cpy.legal_moves().len() == 0
+        cpy.is_in_mate()
     }
 
     pub fn is_checkmate(&self, ply: &Ply) -> bool {
@@ -721,11 +749,7 @@ impl Game {
             res.push(piece.to_char().to_ascii_uppercase());
         }
         if is_check {
-            if is_checkmate {
-                res.push('#');
-            } else {
-                res.push('+');
-            }
+            res.push(if is_checkmate { '#' } else { '+' });
         }
         if is_en_passant {
             res.push_str(" e.p.");
@@ -761,6 +785,15 @@ impl Game {
 
     pub fn simple_render(&self) -> String {
         self.board.simple_render()
+    }
+
+    pub fn evaluation(&self) -> Millipawns {
+        use crate::millipawns::*;
+        use crate::pesto;
+        let mut res = Millipawns(0);
+        // res -= Millipawns(100) * (self.is_in_check() as i32);
+        res += pesto::eval(self);
+        return res;
     }
 
     pub fn perft(&self, depth: u8, print: bool) -> u64 {
@@ -820,50 +853,91 @@ impl ApplyPly for Game {
     }
 }
 
-#[test]
-fn test_from_to_fen() {
-    use crate::piece::Piece;
-    use crate::square::squares::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_from_to_fen() {
+        use crate::piece::Piece;
+        use crate::square::squares::*;
 
-    let game = Game::new();
-    assert_eq!(game.to_fen(), STARTING_POSITION);
+        let game = Game::new();
+        assert_eq!(game.to_fen(), STARTING_POSITION);
 
-    let board = game.board;
-    assert_eq!(board.square(A1), Some((Color::White, Piece::Rook)));
+        let board = game.board;
+        assert_eq!(board.square(A1), Some((Color::White, Piece::Rook)));
 
-    assert_eq!(board.get_occupied().popcount(), 32);
+        assert_eq!(board.get_occupied().popcount(), 32);
 
-    // Tests three things:
-    // 1. Parsing with no available castling rights
-    // 2. Parsing with an en passant square
-    // 3. Parsing with black to move
-    let double_bongcloud = "rnbq1bnr/pp1pkppp/8/3Pp3/1Pp1P3/8/P1P1KPPP/RNBQ1BNR b - b3 0 5";
-    let game = Game::from_fen(double_bongcloud).unwrap();
-    assert_eq!(game.to_fen(), double_bongcloud);
-}
+        // Tests three things:
+        // 1. Parsing with no available castling rights
+        // 2. Parsing with an en passant square
+        // 3. Parsing with black to move
+        let double_bongcloud = "rnbq1bnr/pp1pkppp/8/3Pp3/1Pp1P3/8/P1P1KPPP/RNBQ1BNR b - b3 0 5";
+        let game = Game::from_fen(double_bongcloud).unwrap();
+        assert_eq!(game.to_fen(), double_bongcloud);
+    }
 
-// #[test]
-// fn test_move_generation_basic() {
-//     use crate::square::squares::*;
+    // #[test]
+    // fn test_move_generation_basic() {
+    //     use crate::square::squares::*;
 
-//     let mut game = Game::new();
+    //     let mut game = Game::new();
 
-//     let start_knight_moves = game.knight_moves();
-//     println!("{:?}", start_knight_moves);
-//     assert_eq!(start_knight_moves.len(), 4);
+    //     let start_knight_moves = game.knight_moves();
+    //     println!("{:?}", start_knight_moves);
+    //     assert_eq!(start_knight_moves.len(), 4);
 
-//     let start_pawn_moves = game.pawn_moves();
-//     println!("{:?}", start_pawn_moves);
-//     assert_eq!(start_pawn_moves.len(), 16);
+    //     let start_pawn_moves = game.pawn_moves();
+    //     println!("{:?}", start_pawn_moves);
+    //     assert_eq!(start_pawn_moves.len(), 16);
 
-//     game.apply_ply(&Ply::simple(E2, E4));
-//     game.apply_ply(&Ply::simple(E7, E5));
-//     // bongcloud available.
-//     assert_eq!(game.simple_king_moves().len(), 1);
-// }
+    //     game.apply_ply(&Ply::simple(E2, E4));
+    //     game.apply_ply(&Ply::simple(E7, E5));
+    //     // bongcloud available.
+    //     assert_eq!(game.simple_king_moves().len(), 1);
+    // }
 
-macro_rules! simple_move_test(
-    ($name:ident, $fen:expr, $ply:expr, $expected_fen:expr) => {
+    macro_rules! simple_move_test(
+        ($name:ident, $fen:expr, $ply:expr, $expected_fen:expr) => {
+            #[test]
+            fn $name() {
+                let mut game = match Game::from_fen($fen) {
+                    Ok(game) => game,
+                    Err(e) => panic!("Error parsing fen: {}", e),
+                };
+                println!("Starting fen: {}", $fen);
+
+                for ply in game.legal_moves() {
+                    println!("Legal move: {} ({:?})", game.ply_name(&ply), ply);
+                }
+                print!("{}", game.simple_render());
+
+                let ply = match game.ply_from_name($ply) {
+                    Some(ply) => ply,
+                    None => panic!("Invalid ply: {}", $ply),
+                };
+
+                game.apply_ply(&ply);
+
+                println!("Applied ply: {}", $ply);
+                println!("Ending fen: {}", game.to_fen());
+                print!("{}", game.simple_render());
+
+                println!("Expected fen: {}", $expected_fen);
+                let expected_game = match Game::from_fen($expected_fen) {
+                    Ok(game) => game,
+                    Err(e) => panic!("Error parsing (expected) fen: {}", e),
+                };
+                print!("{}", expected_game.simple_render());
+
+                assert_eq!(game.to_fen(), $expected_fen);
+
+            }
+        }
+    );
+
+    macro_rules! illegal_move_test(($name:ident, $fen:expr, $ply:expr) => {
         #[test]
         fn $name() {
             let mut game = match Game::from_fen($fen) {
@@ -877,262 +951,233 @@ macro_rules! simple_move_test(
             }
             print!("{}", game.simple_render());
 
-            let ply = match game.ply_from_name($ply) {
-                Some(ply) => ply,
-                None => panic!("Invalid ply: {}", $ply),
-            };
-
-            game.apply_ply(&ply);
-
-            println!("Applied ply: {}", $ply);
-            println!("Ending fen: {}", game.to_fen());
-            print!("{}", game.simple_render());
-
-            println!("Expected fen: {}", $expected_fen);
-            let expected_game = match Game::from_fen($expected_fen) {
-                Ok(game) => game,
-                Err(e) => panic!("Error parsing (expected) fen: {}", e),
-            };
-            print!("{}", expected_game.simple_render());
-
-            assert_eq!(game.to_fen(), $expected_fen);
+            if let Some(ply) = game.ply_from_name($ply) {
+                game.apply_ply(&ply);
+                println!("Fen after applying (illegal) ply: {}", game.to_fen());
+                print!("{}", game.simple_render());
+                panic!("Ply {} was legal!", $ply);
+            }
 
         }
-    }
-);
+    });
 
-macro_rules! illegal_move_test(($name:ident, $fen:expr, $ply:expr) => {
-    #[test]
-    fn $name() {
-        let mut game = match Game::from_fen($fen) {
-            Ok(game) => game,
-            Err(e) => panic!("Error parsing fen: {}", e),
-        };
-        println!("Starting fen: {}", $fen);
+    simple_move_test!(
+        test_simple_move,
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "e4",
+        "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+    );
 
-        for ply in game.legal_moves() {
-            println!("Legal move: {} ({:?})", game.ply_name(&ply), ply);
+    illegal_move_test!(test_illegal_move_misparse, STARTING_POSITION, "HADOUKEN!");
+
+    illegal_move_test!(test_illegal_move_pawn, STARTING_POSITION, "e5");
+    illegal_move_test!(
+        test_double_push_through_blocker,
+        "4k3/8/8/8/8/4K3/4P3/8 w - - 0 1",
+        "e4"
+    );
+
+    illegal_move_test!(test_illegal_move_bishop, STARTING_POSITION, "Bc4");
+
+    illegal_move_test!(test_illegal_move_knight, STARTING_POSITION, "Nd2");
+
+    illegal_move_test!(test_illegal_move_rook, STARTING_POSITION, "Ra3");
+    illegal_move_test!(
+        test_illegal_move_rook_sharing,
+        "rnbqkbnr/ppppppp1/7p/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2",
+        "Ra7"
+    );
+
+    illegal_move_test!(test_illegal_move_queen, STARTING_POSITION, "Qd4");
+
+    illegal_move_test!(test_illegal_move_king, STARTING_POSITION, "Ke2");
+    illegal_move_test!(test_illegal_move_long_castle, STARTING_POSITION, "O-O-O");
+
+    // Even though white can't capture the king, due to the pin, it's still an illegal move.
+    illegal_move_test!(
+        move_into_check_pin,
+        "8/k7/8/8/8/8/8/K4B1r b - - 25 13",
+        "Ka6"
+    );
+
+    simple_move_test!(
+        test_simple_pawn_capture,
+        "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+        "exd5",
+        "rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2"
+    );
+
+    simple_move_test!(
+        test_en_passant,
+        "5k2/8/8/3Pp3/8/8/8/4K3 w - e6 0 3",
+        "dxe6 e.p.",
+        "5k2/8/4P3/8/8/8/8/4K3 b - - 0 3"
+    );
+
+    simple_move_test!(
+        test_promotion,
+        "8/4P1k1/8/8/8/8/8/4K3 w - - 1 5",
+        "e8=Q",
+        "4Q3/6k1/8/8/8/8/8/4K3 b - - 0 5"
+    );
+
+    simple_move_test!(
+        test_make_check,
+        "rnbqkbnr/ppp1pppp/8/3p4/8/2P5/PP1PPPPP/RNBQKBNR w KQkq - 0 2",
+        "Qa4+",
+        "rnbqkbnr/ppp1pppp/8/3p4/Q7/2P5/PP1PPPPP/RNB1KBNR b KQkq - 1 2"
+    );
+
+    simple_move_test!(
+        test_underpromotion,
+        "8/4P1k1/8/8/8/8/8/4K3 w - - 1 5",
+        "e8=N+",
+        "4N3/6k1/8/8/8/8/8/4K3 b - - 0 5"
+    );
+
+    simple_move_test!(
+        test_castling,
+        "4k3/8/8/8/8/8/8/4K2R w K - 0 1",
+        "O-O",
+        "4k3/8/8/8/8/8/8/5RK1 b - - 1 1"
+    );
+
+    simple_move_test!(
+        test_castling_black,
+        "4k2r/8/8/8/8/8/8/4K3 b k - 0 1",
+        "O-O",
+        "5rk1/8/8/8/8/8/8/4K3 w - - 1 2"
+    );
+
+    simple_move_test!(
+        test_castling_queenside,
+        "4k3/8/8/8/8/8/8/R3K3 w Q - 0 1",
+        "O-O-O",
+        "4k3/8/8/8/8/8/8/2KR4 b - - 1 1"
+    );
+
+    simple_move_test!(
+        test_castling_queenside_black,
+        "r3k3/8/8/8/8/8/8/4K3 b q - 0 1",
+        "O-O-O",
+        "2kr4/8/8/8/8/8/8/4K3 w - - 1 2"
+    );
+
+    simple_move_test!(
+        test_capture_third_rook_retain_castle_rights,
+        "r3k2r/8/8/8/8/6N1/8/4K2r w kq - 0 1",
+        "Nxh1",
+        "r3k2r/8/8/8/8/8/8/4K2N b kq - 0 1"
+    );
+
+    simple_move_test!(
+        test_checkmate,
+        "4k3/R7/7R/8/8/8/8/4K3 w - - 0 1",
+        "Rh8#",
+        "4k2R/R7/8/8/8/8/8/4K3 b - - 1 1"
+    );
+
+    macro_rules! perft_test(
+        ($name:ident, $fen:expr, $depth:expr, $expected_nodes:expr) => {
+            #[test]
+            fn $name() {
+                let game = match Game::from_fen($fen) {
+                    Ok(game) => game,
+                    Err(e) => panic!("Error parsing fen: {}", e),
+                };
+                println!("Starting fen: {}", $fen);
+
+                let nodes = game.perft($depth, true);
+                println!("{} nodes at depth {}", nodes, $depth);
+
+                assert_eq!(nodes, $expected_nodes);
+            }
         }
-        print!("{}", game.simple_render());
+    );
 
-        if let Some(ply) = game.ply_from_name($ply) {
-            game.apply_ply(&ply);
-            println!("Fen after applying (illegal) ply: {}", game.to_fen());
-            print!("{}", game.simple_render());
-            panic!("Ply {} was legal!", $ply);
-        }
+    // Most of these from https://www.chessprogramming.org/Perft_Results
 
-    }
-});
+    // perft_test!(test_perft_1, STARTING_POSITION, 1, 20);
+    perft_test!(test_perft_3, STARTING_POSITION, 3, 8902);
+    // perft_test!(test_perft_5, STARTING_POSITION, 5, 4865609);
+    // perft_test!(test_kiwipete_1, POS_KIWIPETE, 1, 48);
+    // perft_test!(test_kiwipete_2, POS_KIWIPETE, 2, 2039);
 
-simple_move_test!(
-    test_simple_move,
-    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-    "e4",
-    "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
-);
+    perft_test!(test_kiwipete_3, POS_KIWIPETE, 3, 97862);
+    pub const POS_KIWIPETE: &str =
+        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+    // perft_test!(test_kiwipete_4, POS_KIWIPETE, 4, 4085603);
+    // perft_test!(test_kiwipete_5, POS_KIWIPETE, 5, 193690690);
 
-illegal_move_test!(test_illegal_move_misparse, STARTING_POSITION, "HADOUKEN!");
+    pub const POS_3: &str = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
+    perft_test!(test_pos3_5, POS_3, 5, 674624);
 
-illegal_move_test!(test_illegal_move_pawn, STARTING_POSITION, "e5");
-illegal_move_test!(
-    test_double_push_through_blocker,
-    "4k3/8/8/8/8/4K3/4P3/8 w - - 0 1",
-    "e4"
-);
+    pub const POS_4: &str = "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1";
+    perft_test!(test_pos4_4, POS_4, 4, 422333);
 
-illegal_move_test!(test_illegal_move_bishop, STARTING_POSITION, "Bc4");
+    pub const POS_5: &str = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
+    perft_test!(test_pos5_3, POS_5, 3, 62379);
 
-illegal_move_test!(test_illegal_move_knight, STARTING_POSITION, "Nd2");
+    pub const POS_6: &str =
+        "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10";
+    perft_test!(test_pos6_3, POS_6, 3, 89890);
 
-illegal_move_test!(test_illegal_move_rook, STARTING_POSITION, "Ra3");
-illegal_move_test!(
-    test_illegal_move_rook_sharing,
-    "rnbqkbnr/ppppppp1/7p/8/8/N7/PPPPPPPP/R1BQKBNR w KQkq - 0 2",
-    "Ra7"
-);
+    perft_test!(
+        test_multi_check,
+        "8/8/1bnknb2/8/3K4/8/8/8 w - - 0 1",
+        5,
+        82709
+    );
 
-illegal_move_test!(test_illegal_move_queen, STARTING_POSITION, "Qd4");
+    illegal_move_test!(
+        test_illegal_castle_through_check,
+        "4kr2/8/8/8/8/8/8/4K2R w K - 0 1",
+        "O-O"
+    );
 
-illegal_move_test!(test_illegal_move_king, STARTING_POSITION, "Ke2");
-illegal_move_test!(test_illegal_move_long_castle, STARTING_POSITION, "O-O-O");
+    illegal_move_test!(
+        test_illegal_castle_through_piece,
+        "r3k2r/p1ppqpb1/1n2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BKb1R w KQkq - 2 2",
+        "O-O"
+    );
 
-// Even though white can't capture the king, due to the pin, it's still an illegal move.
-illegal_move_test!(
-    move_into_check_pin,
-    "8/k7/8/8/8/8/8/K4B1r b - - 25 13",
-    "Ka6"
-);
+    simple_move_test!(
+        test_rook_capture_voids_castle_right,
+        "4k3/8/8/8/8/6n1/8/R3K2R b KQ - 0 1",
+        "Nxh1",
+        "4k3/8/8/8/8/8/8/R3K2n w Q - 0 2"
+    );
 
-simple_move_test!(
-    test_simple_pawn_capture,
-    "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
-    "exd5",
-    "rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2"
-);
+    illegal_move_test!(
+        test_illegal_castle_out_of_check,
+        "4k3/4r3/8/8/8/8/8/4K2R w K - 0 1",
+        "O-O"
+    );
 
-simple_move_test!(
-    test_en_passant,
-    "5k2/8/8/3Pp3/8/8/8/4K3 w - e6 0 3",
-    "dxe6 e.p.",
-    "5k2/8/4P3/8/8/8/8/4K3 b - - 0 3"
-);
+    simple_move_test!(
+        test_move_on_absolute_pin,
+        "7k/4r3/8/8/8/4R3/8/4K3 w - - 0 1",
+        "Re4",
+        "7k/4r3/8/8/4R3/8/8/4K3 b - - 1 1"
+    );
 
-simple_move_test!(
-    test_promotion,
-    "8/4P1k1/8/8/8/8/8/4K3 w - - 1 5",
-    "e8=Q",
-    "4Q3/6k1/8/8/8/8/8/4K3 b - - 0 5"
-);
+    simple_move_test!(
+        test_capture_absolute_pinning_piece,
+        "7k/4r3/8/8/8/4R3/8/4K3 w - - 0 1",
+        "Rxe7",
+        "7k/4R3/8/8/8/8/8/4K3 b - - 0 1"
+    );
 
-simple_move_test!(
-    test_make_check,
-    "rnbqkbnr/ppp1pppp/8/3p4/8/2P5/PP1PPPPP/RNBQKBNR w KQkq - 0 2",
-    "Qa4+",
-    "rnbqkbnr/ppp1pppp/8/3p4/Q7/2P5/PP1PPPPP/RNB1KBNR b KQkq - 1 2"
-);
+    illegal_move_test!(
+        test_illegal_move_from_absolute_pin,
+        "7k/4r3/8/8/8/4R3/8/4K3 w - - 0 1",
+        "Rd3"
+    );
 
-simple_move_test!(
-    test_underpromotion,
-    "8/4P1k1/8/8/8/8/8/4K3 w - - 1 5",
-    "e8=N+",
-    "4N3/6k1/8/8/8/8/8/4K3 b - - 0 5"
-);
-
-simple_move_test!(
-    test_castling,
-    "4k3/8/8/8/8/8/8/4K2R w K - 0 1",
-    "O-O",
-    "4k3/8/8/8/8/8/8/5RK1 b - - 1 1"
-);
-
-simple_move_test!(
-    test_castling_black,
-    "4k2r/8/8/8/8/8/8/4K3 b k - 0 1",
-    "O-O",
-    "5rk1/8/8/8/8/8/8/4K3 w - - 1 2"
-);
-
-simple_move_test!(
-    test_castling_queenside,
-    "4k3/8/8/8/8/8/8/R3K3 w Q - 0 1",
-    "O-O-O",
-    "4k3/8/8/8/8/8/8/2KR4 b - - 1 1"
-);
-
-simple_move_test!(
-    test_castling_queenside_black,
-    "r3k3/8/8/8/8/8/8/4K3 b q - 0 1",
-    "O-O-O",
-    "2kr4/8/8/8/8/8/8/4K3 w - - 1 2"
-);
-
-simple_move_test!(
-    test_capture_third_rook_retain_castle_rights,
-    "r3k2r/8/8/8/8/6N1/8/4K2r w kq - 0 1",
-    "Nxh1",
-    "r3k2r/8/8/8/8/8/8/4K2N b kq - 0 1"
-);
-
-simple_move_test!(
-    test_checkmate,
-    "4k3/R7/7R/8/8/8/8/4K3 w - - 0 1",
-    "Rh8#",
-    "4k2R/R7/8/8/8/8/8/4K3 b - - 1 1"
-);
-
-macro_rules! perft_test(
-    ($name:ident, $fen:expr, $depth:expr, $expected_nodes:expr) => {
-        #[test]
-        fn $name() {
-            let game = match Game::from_fen($fen) {
-                Ok(game) => game,
-                Err(e) => panic!("Error parsing fen: {}", e),
-            };
-            println!("Starting fen: {}", $fen);
-
-            let nodes = game.perft($depth, true);
-            println!("{} nodes at depth {}", nodes, $depth);
-
-            assert_eq!(nodes, $expected_nodes);
-        }
-    }
-);
-
-// Most of these from https://www.chessprogramming.org/Perft_Results
-
-// perft_test!(test_perft_1, STARTING_POSITION, 1, 20);
-perft_test!(test_perft_3, STARTING_POSITION, 3, 8902);
-// perft_test!(test_perft_5, STARTING_POSITION, 5, 4865609);
-// perft_test!(test_kiwipete_1, POS_KIWIPETE, 1, 48);
-// perft_test!(test_kiwipete_2, POS_KIWIPETE, 2, 2039);
-
-perft_test!(test_kiwipete_3, POS_KIWIPETE, 3, 97862);
-pub const POS_KIWIPETE: &str =
-    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
-// perft_test!(test_kiwipete_4, POS_KIWIPETE, 4, 4085603);
-// perft_test!(test_kiwipete_5, POS_KIWIPETE, 5, 193690690);
-
-pub const POS_3: &str = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
-perft_test!(test_pos3_5, POS_3, 5, 674624);
-
-pub const POS_4: &str = "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1";
-perft_test!(test_pos4_4, POS_4, 4, 422333);
-
-pub const POS_5: &str = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
-perft_test!(test_pos5_3, POS_5, 3, 62379);
-
-pub const POS_6: &str = "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10";
-perft_test!(test_pos6_3, POS_6, 3, 89890);
-
-perft_test!(
-    test_multi_check,
-    "8/8/1bnknb2/8/3K4/8/8/8 w - - 0 1",
-    5,
-    82709
-);
-
-illegal_move_test!(
-    test_illegal_castle_through_check,
-    "4kr2/8/8/8/8/8/8/4K2R w K - 0 1",
-    "O-O"
-);
-
-illegal_move_test!(
-    test_illegal_castle_through_piece,
-    "r3k2r/p1ppqpb1/1n2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R2BKb1R w KQkq - 2 2",
-    "O-O"
-);
-
-simple_move_test!(
-    test_rook_capture_voids_castle_right,
-    "4k3/8/8/8/8/6n1/8/R3K2R b KQ - 0 1",
-    "Nxh1",
-    "4k3/8/8/8/8/8/8/R3K2n w Q - 0 2"
-);
-
-illegal_move_test!(
-    test_illegal_castle_out_of_check,
-    "4k3/4r3/8/8/8/8/8/4K2R w K - 0 1",
-    "O-O"
-);
-
-simple_move_test!(
-    test_move_on_absolute_pin,
-    "7k/4r3/8/8/8/4R3/8/4K3 w - - 0 1",
-    "Re4",
-    "7k/4r3/8/8/4R3/8/8/4K3 b - - 1 1"
-);
-
-simple_move_test!(
-    test_capture_absolute_pinning_piece,
-    "7k/4r3/8/8/8/4R3/8/4K3 w - - 0 1",
-    "Rxe7",
-    "7k/4R3/8/8/8/8/8/4K3 b - - 0 1"
-);
-
-illegal_move_test!(
-    test_illegal_move_from_absolute_pin,
-    "7k/4r3/8/8/8/4R3/8/4K3 w - - 0 1",
-    "Rd3"
-);
+    simple_move_test!(
+        test_en_passant_resolves_check_by_capture,
+        "4k3/8/8/3Pp3/5K2/8/8/8 w - e6 0 2",
+        "dxe6 e.p.",
+        "4k3/8/4P3/8/5K2/8/8/8 b - - 0 2"
+    );
+}

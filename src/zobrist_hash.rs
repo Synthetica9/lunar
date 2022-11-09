@@ -66,6 +66,10 @@ impl ZobristHash {
 
         hash
     }
+
+    pub fn as_u64(&self) -> u64 {
+        self.hash
+    }
 }
 
 #[test]

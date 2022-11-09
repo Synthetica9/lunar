@@ -243,6 +243,12 @@ pub trait ApplyPly {
     fn toggle_en_passant(&mut self, en_passant: Square);
     fn flip_side(&mut self);
 
+    fn toggle_piece_bitboard(&mut self, color: Color, piece: Piece, bitboard: Bitboard) {
+        for sq in bitboard.iter_squares() {
+            self.toggle_piece(color, piece, sq);
+        }
+    }
+
     // Always inline because
     // a. this is a hot path
     // b. the calling function will be very small
@@ -336,31 +342,33 @@ pub trait ApplyPly {
                 let oo = castle_rights.get(to_move, CastleDirection::Kingside);
                 let ooo = castle_rights.get(to_move, CastleDirection::Queenside);
 
-                let (mut disable_oo, mut disable_ooo) = match our_piece {
-                    King => {
-                        // Disable all castling rights for the moving side.
-                        (true, true)
-                    }
-                    Rook => {
-                        let home_rank = to_move.home_rank();
-                        let kingside = src.file() == files::H && src.rank() == home_rank;
-                        let queenside = src.file() == files::A && src.rank() == home_rank;
-                        (kingside, queenside)
-                    }
-                    _ => (false, false),
-                };
+                if oo || ooo {
+                    let (disable_oo, disable_ooo) = match our_piece {
+                        King => {
+                            // Disable all castling rights for the moving side.
+                            (true, true)
+                        }
+                        Rook => {
+                            let home_rank = to_move.home_rank();
+                            let kingside = src.file() == files::H && src.rank() == home_rank;
+                            let queenside = src.file() == files::A && src.rank() == home_rank;
+                            (kingside, queenside)
+                        }
+                        _ => (false, false),
+                    };
 
-                if oo && disable_oo {
-                    self.toggle_castle_rights(CastleRights::single(
-                        to_move,
-                        CastleDirection::Kingside,
-                    ));
-                }
-                if ooo && disable_ooo {
-                    self.toggle_castle_rights(CastleRights::single(
-                        to_move,
-                        CastleDirection::Queenside,
-                    ));
+                    if oo && disable_oo {
+                        self.toggle_castle_rights(CastleRights::single(
+                            to_move,
+                            CastleDirection::Kingside,
+                        ));
+                    }
+                    if ooo && disable_ooo {
+                        self.toggle_castle_rights(CastleRights::single(
+                            to_move,
+                            CastleDirection::Queenside,
+                        ));
+                    }
                 }
             }
 
@@ -409,71 +417,76 @@ impl std::fmt::Debug for Ply {
     }
 }
 
-const ALL_SPECIAL_FLAGS: [SpecialFlag; 6] = [
-    SpecialFlag::Promotion(Piece::Queen),
-    SpecialFlag::Promotion(Piece::Rook),
-    SpecialFlag::Promotion(Piece::Bishop),
-    SpecialFlag::Promotion(Piece::Knight),
-    SpecialFlag::EnPassant,
-    SpecialFlag::Castling,
-];
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_flag_pack_unpack() {
-    for flag in ALL_SPECIAL_FLAGS {
-        println!("Testing {:?}", flag);
-        let packed = flag.as_u8();
-        let unpacked = SpecialFlag::from_u8(packed).expect("unpacked flag");
-        println!("unpacked: {:?}", unpacked);
-        assert_eq!(flag.as_u8(), unpacked.as_u8());
+    const ALL_SPECIAL_FLAGS: [SpecialFlag; 6] = [
+        SpecialFlag::Promotion(Piece::Queen),
+        SpecialFlag::Promotion(Piece::Rook),
+        SpecialFlag::Promotion(Piece::Bishop),
+        SpecialFlag::Promotion(Piece::Knight),
+        SpecialFlag::EnPassant,
+        SpecialFlag::Castling,
+    ];
+
+    #[test]
+    fn test_flag_pack_unpack() {
+        for flag in ALL_SPECIAL_FLAGS {
+            println!("Testing {:?}", flag);
+            let packed = flag.as_u8();
+            let unpacked = SpecialFlag::from_u8(packed).expect("unpacked flag");
+            println!("unpacked: {:?}", unpacked);
+            assert_eq!(flag.as_u8(), unpacked.as_u8());
+        }
     }
-}
 
-#[test]
-fn test_make_unmake() {
-    use crate::square::squares::*;
-    let castle = Ply::new(E1, G1, Some(SpecialFlag::Castling));
-    assert!(castle.is_castling());
+    #[test]
+    fn test_make_unmake() {
+        use crate::square::squares::*;
+        let castle = Ply::new(E1, G1, Some(SpecialFlag::Castling));
+        assert!(castle.is_castling());
 
-    let promote = Ply::new(A7, A8, Some(SpecialFlag::Promotion(Piece::Queen)));
-    assert!(promote.is_promotion());
+        let promote = Ply::new(A7, A8, Some(SpecialFlag::Promotion(Piece::Queen)));
+        assert!(promote.is_promotion());
 
-    let en_passant = Ply::new(A5, B6, Some(SpecialFlag::EnPassant));
-    assert!(en_passant.is_en_passant());
+        let en_passant = Ply::new(A5, B6, Some(SpecialFlag::EnPassant));
+        assert!(en_passant.is_en_passant());
 
-    for i in 0..u16::MAX {
-        let ply = Ply(i);
+        for i in 0..u16::MAX {
+            let ply = Ply(i);
 
-        let src = ply.src();
-        let dst = ply.dst();
-        let flag = ply.flag();
+            let src = ply.src();
+            let dst = ply.dst();
+            let flag = ply.flag();
 
-        let recreated = Ply::new(src, dst, flag);
-        assert_eq!(ply, recreated);
+            let recreated = Ply::new(src, dst, flag);
+            assert_eq!(ply, recreated);
+        }
     }
-}
 
-#[test]
-fn test_transposition() {
-    use crate::square::squares::*;
+    #[test]
+    fn test_transposition() {
+        use crate::square::squares::*;
 
-    let mut game = Game::new();
+        let mut game = Game::new();
 
-    let d4 = Ply::simple(D2, D4);
-    let d5 = Ply::simple(D7, D5);
-    let e4 = Ply::simple(E2, E4);
-    let e5 = Ply::simple(E7, E5);
-    let bongcloud = Ply::simple(E1, E2);
-    let h6 = Ply::simple(H7, H6);
+        let d4 = Ply::simple(D2, D4);
+        let d5 = Ply::simple(D7, D5);
+        let e4 = Ply::simple(E2, E4);
+        let e5 = Ply::simple(E7, E5);
+        let bongcloud = Ply::simple(E1, E2);
+        let h6 = Ply::simple(H7, H6);
 
-    for ply in &[&d4, &d5, &e4, &e5, &bongcloud, &h6] {
-        println!("ply: {:?} {:?}", ply.src(), ply.dst());
-        let pre = game.hash_after_ply(ply);
-        game.apply_ply(ply);
-        println!("fen: {}", game.to_fen());
-        let old_hash = game.hash();
-        game.recalc_hash();
-        assert_eq!(old_hash, game.hash());
-        assert_eq!(pre, game.hash());
+        for ply in &[&d4, &d5, &e4, &e5, &bongcloud, &h6] {
+            println!("ply: {:?} {:?}", ply.src(), ply.dst());
+            let pre = game.hash_after_ply(ply);
+            game.apply_ply(ply);
+            println!("fen: {}", game.to_fen());
+            let old_hash = game.hash();
+            game.recalc_hash();
+            assert_eq!(old_hash, game.hash());
+            assert_eq!(pre, game.hash());
+        }
     }
 }

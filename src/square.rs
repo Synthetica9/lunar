@@ -1,4 +1,3 @@
-use crate::bitboard::Bitboard;
 use std::fmt::{Debug, Error, Formatter};
 use std::ops::Range;
 use std::string::String;
@@ -206,6 +205,10 @@ impl Square {
 
     pub fn interposes(&self, a: Square, b: Square) -> bool {
         self.interposes_diag(a, b) || self.interposes_straight(a, b)
+    }
+
+    pub const fn flip_vert(&self) -> Square {
+        Square(self.0 ^ 56)
     }
 }
 

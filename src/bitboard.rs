@@ -39,11 +39,15 @@ impl Bitboard {
         bitboard
     }
 
+    pub const fn first_occupied_or_a1(self) -> Square {
+        Square::from_index(self.0.trailing_zeros() as u8 % 64)
+    }
+
     pub const fn first_occupied(self) -> Option<Square> {
         if self.is_empty() {
             None
         } else {
-            Some(Square::from_index(self.0.trailing_zeros() as u8))
+            Some(self.first_occupied_or_a1())
         }
     }
 
@@ -244,8 +248,8 @@ impl Bitboard {
         use crate::bitboard_map::{KING_MOVES, KNIGHT_MOVES};
 
         let table = match piece {
-            Piece::Knight => KNIGHT_MOVES,
-            Piece::King => KING_MOVES,
+            Piece::Knight => &KNIGHT_MOVES,
+            Piece::King => &KING_MOVES,
             _ => panic!("simple_attacks: piece must be knight or king"),
         };
 
@@ -458,115 +462,127 @@ impl std::ops::Not for Bitboard {
     }
 }
 
-#[test]
-fn test_constants() {
-    use crate::square::squares::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    assert!(ROW_1.get(D1));
-    assert!(ROW_2.get(E2));
-    assert!(ROW_8.get(A8));
-    assert!(COL_A.get(A7));
-    assert!(COL_B.get(B3));
-    assert!(COL_H.get(H1));
+    #[test]
+    fn test_constants() {
+        use crate::square::squares::*;
 
-    assert!(CENTRAL_16.get(D4));
+        assert!(ROW_1.get(D1));
+        assert!(ROW_2.get(E2));
+        assert!(ROW_8.get(A8));
+        assert!(COL_A.get(A7));
+        assert!(COL_B.get(B3));
+        assert!(COL_H.get(H1));
 
-    assert!(BLACK_SQUARES.get(A1));
-}
+        assert!(CENTRAL_16.get(D4));
 
-#[test]
-fn test_shift_single() {
-    use crate::direction::directions::*;
-    use crate::square::squares::*;
+        assert!(BLACK_SQUARES.get(A1));
+    }
 
-    let sq = Bitboard::from_square(D4);
-    assert_eq!(sq.shift(N), Bitboard::from_square(D5));
-    assert_eq!(sq.shift(S), Bitboard::from_square(D3));
-    assert_eq!(sq.shift(E), Bitboard::from_square(E4));
-    assert_eq!(sq.shift(W), Bitboard::from_square(C4));
+    #[test]
+    fn test_shift_single() {
+        use crate::direction::directions::*;
+        use crate::square::squares::*;
 
-    let sq = Bitboard::from_square(A1);
-    assert_eq!(sq.shift(S), EMPTY);
-    assert_eq!(sq.shift(W), EMPTY);
+        let sq = Bitboard::from_square(D4);
+        assert_eq!(sq.shift(N), Bitboard::from_square(D5));
+        assert_eq!(sq.shift(S), Bitboard::from_square(D3));
+        assert_eq!(sq.shift(E), Bitboard::from_square(E4));
+        assert_eq!(sq.shift(W), Bitboard::from_square(C4));
 
-    let sq = Bitboard::from_square(H8);
-    assert_eq!(sq.shift(N), EMPTY);
-    assert_eq!(sq.shift(E), EMPTY);
+        let sq = Bitboard::from_square(A1);
+        assert_eq!(sq.shift(S), EMPTY);
+        assert_eq!(sq.shift(W), EMPTY);
 
-    assert_eq!(
-        Bitboard::from_square(D2).shift(SE),
-        Bitboard::from_square(E1)
-    );
-}
+        let sq = Bitboard::from_square(H8);
+        assert_eq!(sq.shift(N), EMPTY);
+        assert_eq!(sq.shift(E), EMPTY);
 
-#[test]
-fn test_shift_multi() {
-    use crate::direction::directions::*;
+        assert_eq!(
+            Bitboard::from_square(D2).shift(SE),
+            Bitboard::from_square(E1)
+        );
+    }
 
-    assert_eq!(ROW_1.shift(S), EMPTY);
-    assert_eq!(ROW_1.shift(N), ROW_2);
+    #[test]
+    fn test_shift_multi() {
+        use crate::direction::directions::*;
 
-    assert_eq!(ROW_8.shift(N), EMPTY);
-    assert_eq!(ROW_8.shift(S), ROW_7);
+        assert_eq!(ROW_1.shift(S), EMPTY);
+        assert_eq!(ROW_1.shift(N), ROW_2);
 
-    assert_eq!(COL_A.shift(E), COL_B);
-    assert_eq!(COL_A.shift(W), EMPTY);
+        assert_eq!(ROW_8.shift(N), EMPTY);
+        assert_eq!(ROW_8.shift(S), ROW_7);
 
-    assert_eq!(COL_H.shift(E), EMPTY);
-    assert_eq!(COL_H.shift(W), COL_G);
-}
+        assert_eq!(COL_A.shift(E), COL_B);
+        assert_eq!(COL_A.shift(W), EMPTY);
 
-#[test]
-fn test_n_cols() {
-    assert_eq!(Bitboard::n_cols(0), EMPTY);
-    assert_eq!(Bitboard::n_cols(1), COL_A);
-    assert_eq!(Bitboard::n_cols(2), COL_A | COL_B);
-    assert_eq!(Bitboard::n_cols(-2), COL_G | COL_H);
-}
+        assert_eq!(COL_H.shift(E), EMPTY);
+        assert_eq!(COL_H.shift(W), COL_G);
+    }
 
-#[test]
-fn test_n_rows() {
-    assert_eq!(Bitboard::n_rows(0), EMPTY);
-    assert_eq!(Bitboard::n_rows(1), ROW_1);
-    assert_eq!(Bitboard::n_rows(2), ROW_1 | ROW_2);
-    assert_eq!(Bitboard::n_rows(-2), ROW_7 | ROW_8);
-}
+    #[test]
+    fn test_n_cols() {
+        assert_eq!(Bitboard::n_cols(0), EMPTY);
+        assert_eq!(Bitboard::n_cols(1), COL_A);
+        assert_eq!(Bitboard::n_cols(2), COL_A | COL_B);
+        assert_eq!(Bitboard::n_cols(-2), COL_G | COL_H);
+    }
 
-#[test]
-fn test_popcount() {
-    use crate::square::squares::*;
+    #[test]
+    fn test_n_rows() {
+        assert_eq!(Bitboard::n_rows(0), EMPTY);
+        assert_eq!(Bitboard::n_rows(1), ROW_1);
+        assert_eq!(Bitboard::n_rows(2), ROW_1 | ROW_2);
+        assert_eq!(Bitboard::n_rows(-2), ROW_7 | ROW_8);
+    }
 
-    let bb = EMPTY;
-    assert_eq!(bb.popcount(), 0);
-    let bb = bb.set(A1);
-    assert_eq!(bb.popcount(), 1);
-    let bb = bb.set(H8);
-    assert_eq!(bb.popcount(), 2);
+    #[test]
+    fn test_popcount() {
+        use crate::square::squares::*;
 
-    let bb = bb | ROW_7;
-    assert_eq!(bb.popcount(), 10);
+        let bb = EMPTY;
+        assert_eq!(bb.popcount(), 0);
+        let bb = bb.set(A1);
+        assert_eq!(bb.popcount(), 1);
+        let bb = bb.set(H8);
+        assert_eq!(bb.popcount(), 2);
 
-    assert_eq!(CENTRAL_16.popcount(), 16);
-}
+        let bb = bb | ROW_7;
+        assert_eq!(bb.popcount(), 10);
 
-#[test]
-fn test_bitboard_square_iter() {
-    use crate::square::squares::*;
+        assert_eq!(CENTRAL_16.popcount(), 16);
+    }
 
-    let bb = Bitboard::from_squares(&[A1, H8]);
-    let mut iter = bb.iter_squares();
-    assert_eq!(iter.next(), Some(A1));
-    assert_eq!(iter.next(), Some(H8));
-    assert_eq!(iter.next(), None);
-}
+    #[test]
+    fn test_bitboard_square_iter() {
+        use crate::square::squares::*;
 
-#[test]
-fn test_first_last_occupied() {
-    use crate::square::squares::*;
+        let bb = Bitboard::from_squares(&[A1, H8]);
+        let mut iter = bb.iter_squares();
+        assert_eq!(iter.next(), Some(A1));
+        assert_eq!(iter.next(), Some(H8));
+        assert_eq!(iter.next(), None);
+    }
 
-    let bb = Bitboard::from_squares(&[A1, A8, H1, H8]);
-    assert_eq!(bb.first_occupied(), Some(A1));
-    assert_eq!(bb.last_occupied(), Some(H8));
-    assert_eq!(EMPTY.first_occupied(), None);
-    assert_eq!(EMPTY.last_occupied(), None);
+    #[test]
+    fn test_first_last_occupied() {
+        use crate::square::squares::*;
+
+        let bb = Bitboard::from_squares(&[A1, A8, H1, H8]);
+        assert_eq!(bb.first_occupied(), Some(A1));
+        assert_eq!(bb.last_occupied(), Some(H8));
+        assert_eq!(EMPTY.first_occupied(), None);
+        assert_eq!(EMPTY.last_occupied(), None);
+    }
+
+    #[test]
+    fn test_first_occupied_or_a1() {
+        use crate::square::squares::*;
+        assert_eq!(EMPTY.first_occupied_or_a1(), A1);
+        assert_eq!(Bitboard::from_square(B2).first_occupied_or_a1(), B2);
+    }
 }

@@ -1,6 +1,11 @@
 use crate::basic_enums::Color;
 
+#[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug)]
 pub struct Millipawns(pub i32);
+
+pub const WIN: Millipawns = Millipawns(100_000_256);
+pub const DRAW: Millipawns = Millipawns(0);
+pub const LOSS: Millipawns = Millipawns(-WIN.0);
 
 impl Millipawns {
     fn new(millipawns: i32) -> Millipawns {
@@ -12,6 +17,15 @@ impl Millipawns {
             -self
         } else {
             self
+        }
+    }
+
+    pub fn is_mate_in_n(self) -> Option<i32> {
+        let diff = (self.0 - WIN.0).abs();
+        if diff <= 256 {
+            Some(diff * (self.0).signum())
+        } else {
+            None
         }
     }
 }
@@ -57,5 +71,13 @@ impl std::ops::Mul<i32> for Millipawns {
 
     fn mul(self, rhs: i32) -> Millipawns {
         Millipawns(self.0 * rhs)
+    }
+}
+
+impl std::ops::Div<i32> for Millipawns {
+    type Output = Millipawns;
+
+    fn div(self, rhs: i32) -> Millipawns {
+        Millipawns(self.0 / rhs)
     }
 }

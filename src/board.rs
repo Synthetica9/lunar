@@ -5,13 +5,13 @@ use strum::IntoEnumIterator;
 use crate::basic_enums::Color;
 use crate::bitboard::Bitboard;
 use crate::byteboard::Byteboard;
+use crate::castlerights::CastleRights;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
-use crate::square::{File, Rank, Square};
 use crate::ply::ApplyPly;
-use crate::castlerights::CastleRights;
+use crate::square::{File, Rank, Square};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Board {
     colors: [Bitboard; 2],
     pieces: [Bitboard; 6],
@@ -49,7 +49,7 @@ impl Board {
 
         // Binary search. (with bit fiddling)
         // Zero implies pawn. This means it will be in none of the results.
-        let pawn = self.get_piece(&Pawn);
+        // let pawn = self.get_piece(&Pawn);
         let knight = self.get_piece(&Knight);
         let bishop = self.get_piece(&Bishop);
         let rook = self.get_piece(&Rook);
@@ -58,9 +58,10 @@ impl Board {
         let king = self.get_piece(&King);
         let empty = self.get_occupied().not_const();
 
-        let bit_0 = knight.or(rook).or(king).get(square);
-        let bit_1 = bishop.or(rook).or(empty).get(square);
-        let bit_3 = queen.or(king).or(empty).get(square);
+        let sq_bb = Bitboard::from_square(square);
+        let bit_0 = knight.or(rook).or(king).intersects(sq_bb);
+        let bit_1 = bishop.or(rook).or(empty).intersects(sq_bb);
+        let bit_3 = queen.or(king).or(empty).intersects(sq_bb);
 
         let idx = (bit_0 as u8) << 0 | (bit_1 as u8) << 1 | (bit_3 as u8) << 2;
 
@@ -296,6 +297,7 @@ impl Board {
 
     // Heuristic evaluation
     pub fn strict_piece_value(&self, color: Color) -> Millipawns {
+        // TODO: per-square.
         let mut result = Millipawns(0);
 
         for piece in Piece::iter() {
@@ -400,6 +402,7 @@ impl Board {
 }
 
 impl ApplyPly for Board {
+    #[inline]
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
         // #[cfg(debug_assertions)]
         match self.square(square) {
@@ -412,48 +415,53 @@ impl ApplyPly for Board {
         }
         self.toggle_mut_invalid(square, color, piece);
     }
-    fn toggle_castle_rights(&mut self, rights: CastleRights) { }
-    fn toggle_en_passant(&mut self, square: Square) { }
-    fn flip_side(&mut self) { }
+    fn toggle_castle_rights(&mut self, rights: CastleRights) {}
+    fn toggle_en_passant(&mut self, square: Square) {}
+    fn flip_side(&mut self) {}
 }
 
-#[test]
-fn test_from_fen_part() {
-    let board = Board::from_fen_part("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR").unwrap();
-    assert!(board.is_valid());
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let res = Board::from_fen_part("8/8/8/8/8/8/8/8");
-    assert!(!res.is_ok());
-    assert!(res.unwrap_err().contains("has no king"));
+    #[test]
+    fn test_from_fen_part() {
+        let board = Board::from_fen_part("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR").unwrap();
+        assert!(board.is_valid());
 
-    let res = Board::from_fen_part("7/8/8/8/8/8/8/8");
-    assert!(!res.is_ok());
-    // assert!(res.unwrap_err().contains("Too few characters"));
+        let res = Board::from_fen_part("8/8/8/8/8/8/8/8");
+        assert!(!res.is_ok());
+        assert!(res.unwrap_err().contains("has no king"));
 
-    let res = Board::from_fen_part("9/8/8/8/8/8/8/8");
-    assert!(!res.is_ok());
-    // assert!(res.unwrap_err().contains("Too many characters"));
+        let res = Board::from_fen_part("7/8/8/8/8/8/8/8");
+        assert!(!res.is_ok());
+        // assert!(res.unwrap_err().contains("Too few characters"));
 
-    let res = Board::from_fen_part("8/8/8/8/8/8/8");
-    assert!(!res.is_ok());
-    assert!(res.unwrap_err().contains("Too few rows"));
+        let res = Board::from_fen_part("9/8/8/8/8/8/8/8");
+        assert!(!res.is_ok());
+        // assert!(res.unwrap_err().contains("Too many characters"));
 
-    let res = Board::from_fen_part("8/8/8/8/8/8/8/8/8");
-    assert!(!res.is_ok());
-    assert!(res.unwrap_err().contains("Too many rows"));
-}
+        let res = Board::from_fen_part("8/8/8/8/8/8/8");
+        assert!(!res.is_ok());
+        assert!(res.unwrap_err().contains("Too few rows"));
 
-#[test]
-fn test_occupant_piece() {
-    use crate::game::Game;
-    use crate::square::squares::*;
+        let res = Board::from_fen_part("8/8/8/8/8/8/8/8/8");
+        assert!(!res.is_ok());
+        assert!(res.unwrap_err().contains("Too many rows"));
+    }
 
-    let game = Game::new();
-    let board = game.board();
+    #[test]
+    fn test_occupant_piece() {
+        use crate::game::Game;
+        use crate::square::squares::*;
 
-    for (color, piece, square) in board.to_piece_list() {
-        assert_eq!(Some(piece), board.occupant_piece(square));
-        assert_eq!(Some(color), board.occupant_color(square));
-        assert_eq!(Some((color, piece)), board.square(square));
+        let game = Game::new();
+        let board = game.board();
+
+        for (color, piece, square) in board.to_piece_list() {
+            assert_eq!(Some(piece), board.occupant_piece(square));
+            assert_eq!(Some(color), board.occupant_color(square));
+            assert_eq!(Some((color, piece)), board.square(square));
+        }
     }
 }

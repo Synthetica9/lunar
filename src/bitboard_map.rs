@@ -159,20 +159,6 @@ const fn make_sliding(directions: [Direction; 4]) -> [Direction; 28] {
     res
 }
 
-const ROOK_DIRECTIONS: [Direction; 28] =
-    make_sliding([directions::N, directions::E, directions::S, directions::W]);
-pub const ROOK_MOVES: BitboardMap = BitboardMap::step_moves(&ROOK_DIRECTIONS);
-pub const ROOK_BLOCKERS: BitboardMap = ROOK_MOVES.trim_edges();
-
-const BISHOP_DIRECTIONS: [Direction; 28] = make_sliding([
-    directions::NE,
-    directions::SE,
-    directions::SW,
-    directions::NW,
-]);
-pub const BISHOP_MOVES: BitboardMap = BitboardMap::step_moves(&BISHOP_DIRECTIONS);
-pub const BISHOP_BLOCKERS: BitboardMap = BISHOP_MOVES.trim_edges();
-
 const KNIGHT_DIRECTIONS: [Direction; 8] = [
     Direction::new(-1, -2),
     Direction::new(-1, 2),
@@ -209,56 +195,26 @@ pub const BLACK_PAWN_MOVES: BitboardMap = BitboardMap::pawn_moves(Color::Black);
 pub const WHITE_PAWN_DOUBLE_MOVES: BitboardMap = BitboardMap::pawn_double_moves(Color::White);
 pub const BLACK_PAWN_DOUBLE_MOVES: BitboardMap = BitboardMap::pawn_double_moves(Color::Black);
 
-#[test]
-fn test_step_moves() {
-    use crate::square::squares::*;
-    assert_eq!(step_moves(A1, &[]), EMPTY);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let from_d2 = KNIGHT_MOVES[D2];
-    println!("from_d2");
-    println!("{}", from_d2.simple_render());
-    assert_eq!(from_d2, Bitboard::from_squares(&[B1, F1, B3, F3, C4, E4]));
+    #[test]
+    fn test_step_moves() {
+        use crate::square::squares::*;
+        assert_eq!(step_moves(A1, &[]), EMPTY);
 
-    let from_e5 = KNIGHT_MOVES[E5];
-    println!("from_e5");
-    println!("{}", from_e5.simple_render());
-    assert_eq!(
-        from_e5,
-        Bitboard::from_squares(&[D3, F3, C4, G4, C6, G6, D7, F7])
-    );
-}
+        let from_d2 = KNIGHT_MOVES[D2];
+        println!("from_d2");
+        println!("{}", from_d2.simple_render());
+        assert_eq!(from_d2, Bitboard::from_squares(&[B1, F1, B3, F3, C4, E4]));
 
-#[test]
-fn test_sliding_moves() {
-    use crate::square::squares::*;
-    assert!(ROOK_MOVES[A1].get(A2));
-    assert!(ROOK_MOVES[E4].get(E8));
-    assert!(ROOK_MOVES[E4].get(E1));
-    assert!(!ROOK_MOVES[A1].get(B2));
-
-    print!(
-        "Rook blockers from A1:\n{}",
-        ROOK_BLOCKERS[A1].simple_render()
-    );
-    assert!(ROOK_BLOCKERS[A1].get(B1));
-    assert!(ROOK_BLOCKERS[A1].get(A2));
-    assert!(!ROOK_BLOCKERS[A1].get(A8));
-    assert!(!ROOK_BLOCKERS[A1].get(H1));
-
-    print!(
-        "Bishop moves from E4:\n{}",
-        BISHOP_MOVES[E4].simple_render()
-    );
-    assert!(BISHOP_MOVES[A1].get(B2));
-    assert!(BISHOP_MOVES[E4].get(F5));
-    assert!(BISHOP_MOVES[E4].get(D3));
-    assert!(!BISHOP_MOVES[A1].get(B1));
-
-    print!(
-        "Bishop blockers from A1:\n{}",
-        BISHOP_BLOCKERS[E4].simple_render()
-    );
-    assert!(BISHOP_BLOCKERS[A1].get(B2));
-    assert!(!BISHOP_BLOCKERS[A1].get(B1));
-    assert!(!BISHOP_BLOCKERS[A1].get(H8));
+        let from_e5 = KNIGHT_MOVES[E5];
+        println!("from_e5");
+        println!("{}", from_e5.simple_render());
+        assert_eq!(
+            from_e5,
+            Bitboard::from_squares(&[D3, F3, C4, G4, C6, G6, D7, F7])
+        );
+    }
 }

@@ -286,7 +286,7 @@ pub fn gen_magics_file(file: &mut std::fs::File) -> std::io::Result<()> {
         // write sharing db
         for (i, db) in sharing_db.iter().enumerate() {
             writeln!(file, "const SHARED_{}_MAGIC_{}: &[u64] = &[", name, i)?;
-            for (j, &entry) in db.iter().enumerate() {
+            for &entry in db.iter() {
                 writeln!(file, "    0x{:016x},", entry)?;
             }
             writeln!(file, "];")?;
