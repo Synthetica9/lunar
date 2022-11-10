@@ -5,6 +5,7 @@ use crate::zobrist_hash::ZobristHash;
 
 pub const CS_SIZE: usize = 1 << 15;
 pub const CS_BUCKET_SIZE: usize = 4;
+// TODO: we probably need to lower defer depth with q-search.
 pub const DEFER_DEPTH: usize = 3;
 
 // TODO: move Arc out of here?

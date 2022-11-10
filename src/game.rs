@@ -138,10 +138,10 @@ impl Game {
     pub fn apply_ply(&mut self, ply: &Ply) {
         debug_assert!(self.board.is_valid());
 
-        self.half_move = if ply.resets_halfmove_clock(self) {
-            0
+        if ply.resets_halfmove_clock(self) {
+            self.half_move = 0;
         } else {
-            self.half_move + 1
+            self.half_move + 1;
         };
 
         if self.to_move == Color::Black {
@@ -166,7 +166,7 @@ impl Game {
     #[inline(always)]
     fn _step_moves_for(
         &self,
-        plyset: &mut PlySet<n>,
+        plyset: &mut PlySet,
         piece_type: &Piece,
         move_table: &BitboardMap,
         capture_policy: CapturePolicy,
@@ -184,22 +184,22 @@ impl Game {
         _combination_moves(plyset, &srcs, &dsts, move_table, can_promote)
     }
 
-    pub fn _knight_moves(&self, plyset: &mut PlySet) {
+    fn _knight_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
         self._step_moves_for(
             plyset,
             &Piece::Knight,
             &bitboard_map::KNIGHT_MOVES,
-            CapturePolicy::Can,
+            capture_policy,
         )
     }
 
     // Disregards castling
-    pub fn _simple_king_moves(&self, plyset: &mut PlySet) {
+    fn _simple_king_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
         self._step_moves_for(
             plyset,
             &Piece::King,
             &bitboard_map::KING_MOVES,
-            CapturePolicy::Can,
+            capture_policy,
         )
     }
 
@@ -235,7 +235,7 @@ impl Game {
     pub fn _king_moves(&self, plyset: &mut PlySet) {
         // Order matters here! Simple moves must be generated first to
         // efficiently check castling rules. (specifically castling through check)
-        self._simple_king_moves(plyset);
+        self._simple_king_moves(plyset, CapturePolicy::Can);
         self._castle_moves(plyset);
     }
 
@@ -323,67 +323,70 @@ impl Game {
     }
 
     #[inline(always)]
-    fn _magic_moves(&self, plyset: &mut PlySet, piece: Piece) {
+    fn _magic_moves(&self, plyset: &mut PlySet, piece: Piece, capture_policy: CapturePolicy) {
         let friends = self.board.get_color(&self.to_move);
         let enemies = self.board.get_color(&self.to_move.other());
         let occupied = friends | enemies;
 
+        use CapturePolicy::*;
+        let postmask = match capture_policy {
+            Can => !friends,
+            Must => enemies,
+            Cannot => !occupied,
+        };
+
         for src in self.board.get(&self.to_move, &piece).iter_squares() {
-            let dsts = Bitboard::magic_attacks(src, piece, occupied) & !friends;
+            let dsts = Bitboard::magic_attacks(src, piece, occupied) & postmask;
             for dst in dsts.iter_squares() {
                 plyset.push(Ply::simple(src, dst));
             }
         }
     }
 
-    fn magic_moves(&self, piece: Piece) -> Vec<Ply> {
-        let mut plyset = PlySet::new();
-        self._magic_moves(&mut plyset, piece);
-        plyset.iter().map(|x| *x).collect()
+    fn _bishop_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
+        self._magic_moves(plyset, Piece::Bishop, capture_policy);
     }
 
-    fn _bishop_moves(&self, plyset: &mut PlySet) {
-        self._magic_moves(plyset, Piece::Bishop);
+    fn _rook_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
+        self._magic_moves(plyset, Piece::Rook, capture_policy);
     }
 
-    pub fn bishop_moves(&self) -> Vec<Ply> {
-        self.magic_moves(Piece::Bishop)
-    }
-
-    pub fn _rook_moves(&self, plyset: &mut PlySet) {
-        self._magic_moves(plyset, Piece::Rook);
-    }
-
-    pub fn rook_moves(&self) -> Vec<Ply> {
-        self.magic_moves(Piece::Rook)
-    }
-
-    pub fn _queen_moves(&self, plyset: &mut PlySet) {
-        self._magic_moves(plyset, Piece::Queen);
-    }
-
-    pub fn queen_moves(&self) -> Vec<Ply> {
-        self.magic_moves(Piece::Queen)
+    fn _queen_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
+        self._magic_moves(plyset, Piece::Queen, capture_policy);
     }
 
     pub fn pseudo_legal_moves(&self) -> PlySet {
+        use CapturePolicy::Can;
         let mut plyset = PlySet::new();
-        self._king_moves(&mut plyset);
+
         self._pawn_moves(&mut plyset);
-        self._knight_moves(&mut plyset);
-        self._bishop_moves(&mut plyset);
-        self._rook_moves(&mut plyset);
-        self._queen_moves(&mut plyset);
+        self._knight_moves(&mut plyset, Can);
+        self._bishop_moves(&mut plyset, Can);
+        self._rook_moves(&mut plyset, Can);
+        self._queen_moves(&mut plyset, Can);
+        self._king_moves(&mut plyset);
         plyset
     }
 
     pub fn quiescence_pseudo_legal_moves(&self) -> PlySet {
-        todo!()
+        use CapturePolicy::Must;
+
+        let mut plyset = PlySet::new();
+        // TODO: en passant?
+        self._pawn_captures(&mut plyset);
+        self._knight_moves(&mut plyset, Must);
+        self._bishop_moves(&mut plyset, Must);
+        self._rook_moves(&mut plyset, Must);
+        self._queen_moves(&mut plyset, Must);
+        self._simple_king_moves(&mut plyset, Must);
+
+        plyset
     }
 
     pub fn is_legal(&self, ply: &Ply) -> bool {
         // TODO: we know which piece is moving. Therefore, we can check
         // only that piece.
+        // therefore, use filter-legal
         let legal_moves = self.legal_moves();
         legal_moves.contains(ply)
     }
@@ -393,9 +396,7 @@ impl Game {
         pseudo_legal_moves.iter().collect::<Vec<_>>().contains(&ply)
     }
 
-    pub fn legal_moves(&self) -> Vec<Ply> {
-        // TODO: low-level variant that passes in Plyset.
-        // (for more efficient is-legal)
+    fn filter_legal(&self, candidates: &PlySet) -> Vec<Ply> {
         let leaves_own_king_in_check = |ply| {
             // At the top to not accidentally shadow any variables.
             let mut cpy = self.clone();
@@ -438,7 +439,7 @@ impl Game {
 
         if check_count >= 2 {
             let mut candidates = PlySet::new();
-            self._simple_king_moves(&mut candidates);
+            self._simple_king_moves(&mut candidates, CapturePolicy::Can);
             return candidates
                 .iter()
                 .filter(|x| {
@@ -453,7 +454,6 @@ impl Game {
                 .collect();
         }
 
-        let candidates = self.pseudo_legal_moves();
         let mut res = Vec::with_capacity(candidates.len());
 
         let in_check = check_count != 0;
@@ -596,6 +596,14 @@ impl Game {
         }
 
         res
+    }
+
+    pub fn legal_moves(&self) -> Vec<Ply> {
+        self.filter_legal(&self.pseudo_legal_moves())
+    }
+
+    pub fn quiescence_moves(&self) -> Vec<Ply> {
+        self.filter_legal(&self.quiescence_pseudo_legal_moves())
     }
 
     pub fn pins(&self, to: Square) -> Vec<(Square, Square)> {

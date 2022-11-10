@@ -106,8 +106,6 @@ impl Square {
         Square(index)
     }
 
-    // TODO: with macro?
-
     pub const fn as_index(self) -> usize {
         self.0 as usize
     }
@@ -186,7 +184,6 @@ impl Square {
     }
 
     pub fn interposes_straight(&self, a: Square, b: Square) -> bool {
-        // TODO: which one of these is faster?
         use std::cmp::{max, min};
         if a.rank() == b.rank() {
             // Horizontal interposition on same rank.

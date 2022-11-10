@@ -2,7 +2,6 @@
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
 use std::sync::Arc;
-use std::sync::RwLock;
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -48,7 +47,7 @@ pub struct SearchThreadPool {
         channel::Receiver<ThreadStatus>,
     )>,
     currently_searching: CurrentlySearching,
-    transposition_table: Arc<RwLock<TranspositionTable>>,
+    transposition_table: Arc<TranspositionTable>,
 }
 
 struct ThreadData {
@@ -58,10 +57,10 @@ struct ThreadData {
     command_channel: channel::Receiver<ThreadCommand>,
     status_channel: channel::Sender<ThreadStatus>,
     nodes_searched: usize,
+    quiescence_nodes_searched: usize,
 
     game: Option<Game>,
-    transposition_table: Arc<RwLock<TranspositionTable>>,
-    transposition_table_queue: Vec<TranspositionEntry>,
+    transposition_table: Arc<TranspositionTable>,
     currently_searching: CurrentlySearching,
     // TODO: implement
     // repetition_table: RwLock<TranspositionTable>,
@@ -100,8 +99,7 @@ impl ThreadData {
                 // TODO: how to adjust
                 let mut game = self.game.unwrap();
                 use crate::millipawns::*;
-                let search_res = self.search(&game, 6);
-                self.dump_tt_queue();
+                let search_res = self.search(&game, 5);
                 match search_res {
                     Ok((mp, ply)) => {
                         self.status_channel
@@ -113,21 +111,6 @@ impl ThreadData {
                 }
             }
         }
-    }
-
-    fn dump_tt_queue(&mut self) -> Result<(), AbortReason> {
-        let mut tt = self
-            .transposition_table
-            .write()
-            .map_err(|_| AbortReason::InternalError)?;
-
-        // Todo: measure that this actually makes things faster.
-        for item in self.transposition_table_queue.iter().rev() {
-            tt.put(*item);
-        }
-
-        self.transposition_table_queue = Vec::new();
-        Ok(())
     }
 
     fn send_status_update(&mut self) {
@@ -167,7 +150,6 @@ impl ThreadData {
     }
 
     fn communicate(&mut self) -> Result<(), AbortReason> {
-        self.dump_tt_queue()?;
         self.send_status_update();
         self.recv_command(false)?;
         Ok(())
@@ -208,14 +190,25 @@ impl ThreadData {
         //     self.communicate()?;
         // }
 
-        if let Some(tte) = self.transposition_table.read().unwrap().get(game.hash()) {
+        if let Some(tte) = self.transposition_table.get(game.hash()) {
             if depth <= tte.depth as usize && tte.alpha > alpha && tte.beta < beta {
                 return Ok((tte.alpha, tte.best_move));
             }
         }
 
         if depth == 0 {
-            return Ok((game.evaluation(), None));
+            use std::cmp::{max, min};
+            let score = self.quiescence_search(game, alpha, beta);
+            let alpha = max(alpha, score);
+            let beta = min(beta, score);
+            let tte = TranspositionEntry {
+                depth: 0,
+                alpha,
+                beta,
+                best_move: None,
+            };
+            self.transposition_table.put(game.hash(), tte);
+            return Ok((score, None));
         }
 
         let mut deferred: Vec<(Ply, Game)> = Vec::new();
@@ -227,7 +220,7 @@ impl ThreadData {
         let moves: Vec<_> = {
             use crate::ply::ApplyPly;
             let mut moves: Vec<_> = {
-                let tt = self.transposition_table.read().unwrap();
+                let tt = &self.transposition_table;
                 let mut moves = Vec::new();
                 let legal = game.legal_moves();
                 moves.reserve(legal.len());
@@ -336,24 +329,59 @@ impl ThreadData {
         };
 
         let tte = TranspositionEntry {
-            hash: game.hash(),
             depth: depth as u8,
             alpha,
             beta,
             best_move,
         };
-        // self.transposition_table_queue.push(tte);
-        self.transposition_table.write().unwrap().put(tte);
+        self.transposition_table.put(game.hash(), tte);
 
         // TODO: Account for distance effects, including mate in N
         Ok((alpha, best_move))
+    }
+
+    fn quiescence_search(
+        &mut self,
+        game: &Game,
+        alpha: Millipawns,
+        beta: Millipawns,
+    ) -> Millipawns {
+        self.quiescence_nodes_searched += 1;
+
+        let stand_pat = game.evaluation();
+
+        if stand_pat >= beta {
+            return beta;
+        }
+
+        let mut alpha = alpha;
+        if alpha <= stand_pat {
+            alpha = stand_pat;
+        }
+
+        for ply in game.quiescence_moves() {
+            let mut cpy = *game;
+            cpy.apply_ply(&ply);
+
+            let score = -self.quiescence_search(&cpy, -beta, -alpha);
+
+            if score >= beta {
+                return beta;
+            }
+
+            if score > alpha {
+                alpha = score;
+            }
+        }
+
+        return alpha;
     }
 }
 
 impl SearchThreadPool {
     pub fn new(
         num_threads: usize,
-        transposition_table: Arc<RwLock<TranspositionTable>>,
+        transposition_table: Arc<TranspositionTable>,
     ) -> SearchThreadPool {
         let mut threads = Vec::new();
 
@@ -373,11 +401,11 @@ impl SearchThreadPool {
                     command_channel: command_r,
                     status_channel: status_s,
                     nodes_searched: 0,
+                    quiescence_nodes_searched: 0,
 
                     currently_searching,
                     game: None,
                     transposition_table,
-                    transposition_table_queue: Vec::new(),
                 };
                 runner.run();
             });
@@ -402,7 +430,7 @@ impl SearchThreadPool {
 
     pub fn search(&self, game: &Game, depth: usize) -> (Millipawns, Option<Ply>) {
         self.broadcast(ThreadCommand::SearchThis(*game));
-        let mut res = (Millipawns(i32::MIN), None);
+        let mut res = (game.evaluation(), None);
 
         let mut n_finished = 0;
         let mut curr_pv = String::new();
@@ -456,7 +484,7 @@ mod tests {
 
     fn new_thread_pool() -> SearchThreadPool {
         // 64kB transposition table
-        let mut tt = Arc::new(RwLock::new(TranspositionTable::new(1024 * 1024)));
+        let mut tt = Arc::new(TranspositionTable::new(1024 * 1024));
         SearchThreadPool::new(4, tt)
     }
 

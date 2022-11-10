@@ -73,6 +73,10 @@ impl Ply {
         Ply(val)
     }
 
+    pub const fn as_u16(&self) -> u16 {
+        self.0
+    }
+
     pub const fn simple(src: Square, dst: Square) -> Ply {
         Ply::new(src, dst, None)
     }
@@ -257,9 +261,6 @@ pub trait ApplyPly {
         let dst = ply.dst();
 
         let flag = ply.flag();
-
-        // TODO: is this faster?
-        // TODO: just extract the special flag once.
 
         let to_move = game.to_move();
         let board = game.board();
