@@ -252,7 +252,6 @@ impl ThreadData {
         if moves.len() == 0 {
             use crate::millipawns::*;
             return Ok((if game.is_in_check() { LOSS } else { DRAW }, None));
-
         }
 
         for (ply, evaluation, next_game) in moves {

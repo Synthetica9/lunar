@@ -4,6 +4,7 @@ use crate::square::Square;
 
 const MAX_SIZE: usize = 256;
 
+// Todo: parametrize
 pub struct PlySet {
     moves: Box<[Ply; MAX_SIZE]>,
     size: usize,

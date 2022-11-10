@@ -26,15 +26,11 @@ impl Piece {
         }
     }
 
-    pub const fn from_u8(n: u8) -> Option<Piece> {
-        match n {
-            0 => Some(Piece::Pawn),
-            1 => Some(Piece::Knight),
-            2 => Some(Piece::Bishop),
-            3 => Some(Piece::Rook),
-            4 => Some(Piece::Queen),
-            5 => Some(Piece::King),
-            _ => None,
+    pub const fn from_u8(n: u8) -> Option<&'static Piece> {
+        if n < 6 {
+            Some(&Piece::PIECES[n as usize])
+        } else {
+            None
         }
     }
 

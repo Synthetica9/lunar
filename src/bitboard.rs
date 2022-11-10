@@ -399,11 +399,8 @@ impl Iterator for BitboardSquareIter {
     type Item = Square;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let sq = self.0.first_occupied();
-        sq.map(|sq| {
-            self.0.unset_mut(sq);
-            sq
-        })
+        let sq = self.0.pop_square();
+        sq
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

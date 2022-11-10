@@ -30,8 +30,16 @@ impl Board {
         self.colors[*color as usize]
     }
 
+    pub fn get_color_mut<'a>(&'a mut self, color: &Color) -> &'a mut Bitboard {
+        &mut self.colors[*color as usize]
+    }
+
     pub const fn get_piece(&self, piece: &Piece) -> Bitboard {
         self.pieces[*piece as usize]
+    }
+
+    pub fn get_piece_mut<'a>(&'a mut self, piece: &Piece) -> &'a mut Bitboard {
+        &mut self.pieces[*piece as usize]
     }
 
     pub const fn get_occupied(&self) -> Bitboard {
@@ -44,28 +52,41 @@ impl Board {
         self.get_color(color).and(self.get_piece(piece))
     }
 
+    const PIECE_OPTION_ARRAY: [Option<Piece>; 8] = {
+        use crate::piece::Piece::*;
+
+        [
+            None,
+            Some(Pawn),
+            Some(Knight),
+            Some(Bishop),
+            Some(Rook),
+            Some(Queen),
+            Some(King),
+            None,
+        ]
+    };
     pub const fn occupant_piece(&self, square: Square) -> Option<Piece> {
         use crate::piece::Piece::*;
 
         // Binary search. (with bit fiddling)
-        // Zero implies pawn. This means it will be in none of the results.
-        // let pawn = self.get_piece(&Pawn);
+        // let empty = self.get_occupied().not_const();
+        let pawn = self.get_piece(&Pawn);
         let knight = self.get_piece(&Knight);
         let bishop = self.get_piece(&Bishop);
-        let rook = self.get_piece(&Rook);
 
+        let rook = self.get_piece(&Rook);
         let queen = self.get_piece(&Queen);
         let king = self.get_piece(&King);
-        let empty = self.get_occupied().not_const();
 
         let sq_bb = Bitboard::from_square(square);
-        let bit_0 = knight.or(rook).or(king).intersects(sq_bb);
-        let bit_1 = bishop.or(rook).or(empty).intersects(sq_bb);
-        let bit_3 = queen.or(king).or(empty).intersects(sq_bb);
+        let bit_0 = pawn.or(bishop).or(queen).intersects(sq_bb);
+        let bit_1 = knight.or(bishop).or(king).intersects(sq_bb);
+        let bit_3 = rook.or(queen).or(king).intersects(sq_bb);
 
-        let idx = (bit_0 as u8) << 0 | (bit_1 as u8) << 1 | (bit_3 as u8) << 2;
+        let idx = (bit_0 as usize) << 0 | (bit_1 as usize) << 1 | (bit_3 as usize) << 2;
 
-        Piece::from_u8(idx)
+        Board::PIECE_OPTION_ARRAY[idx]
     }
 
     pub const fn occupant_color(&self, square: Square) -> Option<Color> {
@@ -404,7 +425,6 @@ impl Board {
 impl ApplyPly for Board {
     #[inline]
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
-        // #[cfg(debug_assertions)]
         match self.square(square) {
             Some((c, p)) => {
                 // There currently is a piece there. It'd better match.
@@ -415,6 +435,13 @@ impl ApplyPly for Board {
         }
         self.toggle_mut_invalid(square, color, piece);
     }
+
+    fn toggle_piece_multi(&mut self, color: Color, piece: Piece, squares: &[Square]) {
+        let bb = Bitboard::from_squares(squares);
+        *self.get_color_mut(&color) ^= bb;
+        *self.get_piece_mut(&piece) ^= bb;
+    }
+
     fn toggle_castle_rights(&mut self, rights: CastleRights) {}
     fn toggle_en_passant(&mut self, square: Square) {}
     fn flip_side(&mut self) {}

@@ -30,21 +30,18 @@ pub enum SpecialFlag {
 }
 
 impl SpecialFlag {
+    const PROMOTION_INDEXES: [Piece; 4] = {
+        use crate::piece::Piece::*;
+        [Knight, Bishop, Rook, Queen]
+    };
+
     pub const fn from_u8(n: u8) -> Option<SpecialFlag> {
         // TODO: error handling
 
         Some(match n % 4 {
             1 => {
-                let piece = Piece::from_u8((n >> 2) + 1);
-                debug_assert!(match piece {
-                    Some(p) => p.is_promotable(),
-                    None => false,
-                });
-
-                SpecialFlag::Promotion(match piece {
-                    Some(p) => p,
-                    None => Piece::Queen,
-                })
+                let piece = SpecialFlag::PROMOTION_INDEXES[((n >> 2) % 4) as usize];
+                SpecialFlag::Promotion(piece)
             }
             2 => SpecialFlag::EnPassant,
             3 => SpecialFlag::Castling,
@@ -189,12 +186,9 @@ impl Ply {
         self.captured_piece(game).is_some()
     }
 
-    pub const fn resets_halfmove_clock(&self, game: &Game) -> bool {
+    pub fn resets_halfmove_clock(&self, game: &Game) -> bool {
         // TODO: move to Game object
-        match self.moved_piece(game) {
-            Piece::Pawn => true,
-            _ => self.is_capture(game),
-        }
+        self.is_capture(game) || self.moved_piece(game) == Piece::Pawn
     }
 }
 
@@ -237,15 +231,14 @@ impl PartialEq for Ply {
 // Basically implement move application. A trait because we need this both for
 // the game state and directly on hashes.
 pub trait ApplyPly {
-    // TODO: should probably be called "toggle"
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square);
     fn toggle_castle_rights(&mut self, castle_rights: CastleRights);
     fn toggle_en_passant(&mut self, en_passant: Square);
     fn flip_side(&mut self);
 
-    fn toggle_piece_bitboard(&mut self, color: Color, piece: Piece, bitboard: Bitboard) {
-        for sq in bitboard.iter_squares() {
-            self.toggle_piece(color, piece, sq);
+    fn toggle_piece_multi(&mut self, color: Color, piece: Piece, squares: &[Square]) {
+        for sq in squares {
+            self.toggle_piece(color, piece, *sq);
         }
     }
 
@@ -263,12 +256,10 @@ pub trait ApplyPly {
         let src = ply.src();
         let dst = ply.dst();
 
+        let flag = ply.flag();
+
         // TODO: is this faster?
-        let (is_en_passant, is_castling) = match ply.flag() {
-            Some(SpecialFlag::EnPassant) => (true, false),
-            Some(SpecialFlag::Castling) => (false, true),
-            _ => (false, false),
-        };
+        // TODO: just extract the special flag once.
 
         let to_move = game.to_move();
         let board = game.board();
@@ -277,30 +268,23 @@ pub trait ApplyPly {
         let captured_piece = ply._captured_piece(game);
 
         // Remove opponent piece from the destination square.
-        if is_en_passant {
+        if let Some(SpecialFlag::EnPassant) = flag {
             let capture_square = Square::new(dst.file(), src.rank());
             self.toggle_piece(to_move.other(), Piece::Pawn, capture_square);
         } else if let Some(victim) = captured_piece {
             self.toggle_piece(to_move.other(), victim, dst);
         }
 
-        // Remove our piece from the source square.
-        self.toggle_piece(to_move, our_piece, ply.src());
+        if let Some(SpecialFlag::Promotion(promoted_to)) = flag {
+            self.toggle_piece(to_move, Piece::Pawn, src);
+            self.toggle_piece(to_move, promoted_to, dst);
+        } else {
+            self.toggle_piece(to_move, our_piece, src);
+            self.toggle_piece(to_move, our_piece, dst);
+            // self.toggle_piece_multi(to_move, our_piece, &[src, dst]);
+        }
 
-        // Add our piece to the destination square.
-        let dst_piece = ply.promotion_piece().unwrap_or(our_piece);
-        self.toggle_piece(to_move, dst_piece, ply.dst());
-
-        if ply.is_castling() {
-            debug_assert!(our_piece == King);
-            debug_assert!(VALID_CASTLE_DSTS.get(dst));
-            debug_assert!(dst.rank() == src.rank());
-            debug_assert!(src == to_move.king_home_square());
-            debug_assert!(dst.rank() == to_move.home_rank());
-
-            // TODO: check empty squares between king and rook
-            // TODO: castling through check
-
+        if let Some(SpecialFlag::Castling) = flag {
             let rank = src.rank();
 
             let is_queenside = dst.file() < src.file();
@@ -311,9 +295,9 @@ pub trait ApplyPly {
             };
 
             let rook_src = Square::new(rook_src_file, rank);
-            debug_assert!(board.square(rook_src) == Some((to_move, Piece::Rook)));
             let rook_dst = Square::new(rook_dst_file, rank);
 
+            // self.toggle_piece_multi(to_move, Rook, &[rook_src, rook_dst]);
             self.toggle_piece(to_move, Rook, rook_src);
             self.toggle_piece(to_move, Rook, rook_dst);
         }
@@ -339,19 +323,19 @@ pub trait ApplyPly {
         {
             let castle_rights = game.castle_rights();
             {
+                let home_rank = to_move.home_rank();
                 let oo = castle_rights.get(to_move, CastleDirection::Kingside);
                 let ooo = castle_rights.get(to_move, CastleDirection::Queenside);
 
-                if oo || ooo {
+                if (oo || ooo) && src.rank() == home_rank {
                     let (disable_oo, disable_ooo) = match our_piece {
                         King => {
                             // Disable all castling rights for the moving side.
                             (true, true)
                         }
                         Rook => {
-                            let home_rank = to_move.home_rank();
-                            let kingside = src.file() == files::H && src.rank() == home_rank;
-                            let queenside = src.file() == files::A && src.rank() == home_rank;
+                            let kingside = src.file() == files::H;
+                            let queenside = src.file() == files::A;
                             (kingside, queenside)
                         }
                         _ => (false, false),

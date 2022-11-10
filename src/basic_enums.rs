@@ -119,7 +119,7 @@ mod tests {
 
             let n = piece.to_u8();
             let piece3 = Piece::from_u8(n).unwrap();
-            assert_eq!(piece, piece3);
+            assert_eq!(&piece, piece3);
         }
     }
 }

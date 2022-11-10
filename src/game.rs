@@ -166,7 +166,7 @@ impl Game {
     #[inline(always)]
     fn _step_moves_for(
         &self,
-        plyset: &mut PlySet,
+        plyset: &mut PlySet<n>,
         piece_type: &Piece,
         move_table: &BitboardMap,
         capture_policy: CapturePolicy,
@@ -206,8 +206,8 @@ impl Game {
     pub fn _castle_moves(&self, plyset: &mut PlySet) {
         use CastleDirection::*;
         let color = self.to_move;
-        for (color, direction) in self.castle_rights().iter() {
-            if color != self.to_move {
+        for direction in [Kingside, Queenside] {
+            if !self.castle_rights.get(color, direction) {
                 continue;
             }
 
@@ -246,17 +246,6 @@ impl Game {
         let occupied = self.board.get_occupied();
 
         {
-            // Single pushes
-            let tbl = match color {
-                Color::White => &bitboard_map::WHITE_PAWN_MOVES,
-                Color::Black => &bitboard_map::BLACK_PAWN_MOVES,
-            };
-
-            let single_pushes = pawns.shift(direction) & !occupied;
-
-            _combination_moves(plyset, &pawns, &single_pushes, tbl, true);
-        }
-        {
             // Double pushes
             let pawns_on_start_rank = pawns & color.pawn_start_rank().as_bitboard();
             let blocker_row = color.en_passant_rank().as_bitboard();
@@ -271,7 +260,18 @@ impl Game {
                 Color::Black => &bitboard_map::BLACK_PAWN_DOUBLE_MOVES,
             };
 
-            _combination_moves(plyset, &pawns_on_start_rank, &double_pushes, tbl, true);
+            _combination_moves(plyset, &pawns_on_start_rank, &double_pushes, tbl, false);
+        }
+        {
+            // Single pushes
+            let tbl = match color {
+                Color::White => &bitboard_map::WHITE_PAWN_MOVES,
+                Color::Black => &bitboard_map::BLACK_PAWN_MOVES,
+            };
+
+            let single_pushes = pawns.shift(direction) & !occupied;
+
+            _combination_moves(plyset, &pawns, &single_pushes, tbl, true);
         }
     }
 
@@ -825,6 +825,11 @@ impl ApplyPly for Game {
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
         self.board.toggle_piece(color, piece, square);
         self.hash.toggle_piece(color, piece, square);
+    }
+
+    fn toggle_piece_multi(&mut self, color: Color, piece: Piece, squares: &[Square]) {
+        self.board.toggle_piece_multi(color, piece, squares);
+        self.hash.toggle_piece_multi(color, piece, squares);
     }
 
     fn toggle_castle_rights(&mut self, castle_rights: CastleRights) {
