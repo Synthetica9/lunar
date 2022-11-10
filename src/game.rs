@@ -718,14 +718,14 @@ impl Game {
             .filter(|x| x.src().rank() != src.rank())
             .filter(|x| x.dst() == dst)
             .count()
-            > 1;
+            >= 1;
         let other_on_file = legal_moves
             .iter()
             .filter(|x| x.moved_piece(self) == piece)
             .filter(|x| x.src().file() != src.file())
             .filter(|x| x.dst() == dst)
             .count()
-            > 1;
+            >= 1;
         let is_en_passant = ply.is_en_passant();
         let empty_string = String::new();
 
@@ -1184,5 +1184,19 @@ mod tests {
         "4k3/8/8/3Pp3/5K2/8/8/8 w - e6 0 2",
         "dxe6 e.p.",
         "4k3/8/4P3/8/5K2/8/8/8 b - - 0 2"
+    );
+
+    simple_move_test!(
+        test_double_piece_on_rank_name,
+        "4k3/8/8/8/8/R6R/8/4K3 w - - 0 1",
+        "Rhe3+",
+        "4k3/8/8/8/8/R3R3/8/4K3 b - - 1 1"
+    );
+
+    simple_move_test!(
+        test_double_piece_on_file_name,
+        "4R3/8/6k1/8/8/8/2K5/4R3 w - - 0 1",
+        "R8e4",
+        "8/8/6k1/8/4R3/8/2K5/4R3 b - - 1 1"
     );
 }
