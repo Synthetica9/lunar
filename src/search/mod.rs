@@ -176,22 +176,25 @@ impl ThreadData {
         beta: Millipawns,
         depth: usize,
     ) -> Result<(Millipawns, Option<Ply>), AbortReason> {
+        use crate::millipawns::*;
+
         self.nodes_searched += 1;
 
         // println!("Searching at depth {} {}", depth, game.to_fen());
 
         // TODO: right depth here
-        if depth >= 3 {
+
+        // This causes a lot of branch mispredictions...
+        if self.nodes_searched % COMMS_INTERVAL == 0 {
             self.communicate()?;
         }
 
-        // This causes a lot of branch mispredictions...
-        // if self.nodes_searched % COMMS_INTERVAL == 0 {
-        //     self.communicate()?;
-        // }
-
         if let Some(tte) = self.transposition_table.get(game.hash()) {
-            if depth <= tte.depth as usize && tte.alpha > alpha && tte.beta < beta {
+            if depth <= tte.depth as usize
+                && tte.alpha > alpha
+                && tte.beta < beta
+                && tte.best_move.is_some()
+            {
                 return Ok((tte.alpha, tte.best_move));
             }
         }
@@ -243,7 +246,6 @@ impl ThreadData {
         };
 
         if moves.len() == 0 {
-            use crate::millipawns::*;
             return Ok((if game.is_in_check() { LOSS } else { DRAW }, None));
         }
 
@@ -258,6 +260,7 @@ impl ThreadData {
             };
 
             let res = if is_first_move {
+                best_move = Some(ply);
                 self.alpha_beta_search(&next_game, -beta, -alpha, depth - 1)?
             } else {
                 if self.currently_searching.defer_move(next_game.hash(), depth) {
@@ -322,7 +325,10 @@ impl ThreadData {
             }
         }
 
-        let alpha = if alpha.is_mate_in_n().is_some() {
+        let alpha = if game.half_move() >= 100 {
+            // TODO: start tapering off eval after ~50 halfmoves or so?
+            DRAW
+        } else if alpha.is_mate_in_n().is_some() {
             alpha - ONE_MP
         } else {
             alpha
@@ -430,7 +436,7 @@ impl SearchThreadPool {
 
     pub fn search(&self, game: &Game, depth: usize) -> (Millipawns, Option<Ply>) {
         self.broadcast(ThreadCommand::SearchThis(*game));
-        let mut res = (game.evaluation(), None);
+        let mut res = (Millipawns(i32::MIN), None);
 
         let mut n_finished = 0;
         let mut curr_pv = String::new();
@@ -440,9 +446,10 @@ impl SearchThreadPool {
                     Err(_) => continue,
                     Ok(status) => match status {
                         ThreadStatus::SearchFinished(mp, ply) => {
-                            if mp > res.0 {
+                            if mp > res.0 && ply.is_some() {
                                 res = (mp, ply)
                             }
+
                             n_finished += 1;
                         }
                         ThreadStatus::StatusUpdate(s) => {
