@@ -21,7 +21,7 @@ use crate::square::{files, Square};
 #[derive(Copy, Clone, Eq)]
 pub struct Ply(u16);
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SpecialFlag {
     // TODO: store used castle direction here.
     Promotion(Piece),

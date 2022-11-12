@@ -781,6 +781,40 @@ impl Game {
         }
     }
 
+    pub fn parse_uci_long_name(&self, name: &str) -> Result<Ply, String> {
+        let src = Square::from_fen_part(&name[0..2])?;
+        let dst = Square::from_fen_part(&name[2..4])?;
+
+        let promotion_piece = match name.len() {
+            6 => Some(Piece::from_char(name.chars().nth(5).unwrap())?),
+            _ => None,
+        };
+
+        let legal_moves = self.legal_moves();
+        let res = legal_moves
+            .iter()
+            .filter(|x| x.src() == src)
+            .filter(|x| x.dst() == dst)
+            .filter(|x| match promotion_piece {
+                Some(piece) => x.promotion_piece() == Some(piece),
+                None => x.promotion_piece().is_none(),
+            })
+            .collect::<Vec<&Ply>>();
+
+        assert!(res.len() <= 1);
+        if res.len() == 1 {
+            Ok(*res[0])
+        } else {
+            Err("Couldn't parse uci long name".to_string())
+        }
+    }
+
+    pub fn make_move_uci(&mut self, uci: &str) -> Result<(), String> {
+        let ply = self.parse_uci_long_name(uci)?;
+        self.apply_ply(&ply);
+        Ok(())
+    }
+
     pub fn make_move(&mut self, name: &str) -> Result<(), String> {
         // Convenience function to make a move and mutate the board.
         let ply = self

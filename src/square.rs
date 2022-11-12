@@ -153,18 +153,18 @@ impl Square {
             return Err("Too many characters".to_string());
         }
 
-        let file = File::new(file as u8 - b'a');
-        let rank = Rank::new(rank as u8 - b'1');
+        let f = File::new(file.to_ascii_lowercase() as u8 - b'a');
+        let r = Rank::new(rank.to_ascii_lowercase() as u8 - b'1');
 
-        if file > files::H {
-            return Err("Invalid file".to_string());
+        if f > files::H {
+            return Err(format!("Invalid file: {}", file));
         }
 
-        if rank > ranks::EIGHT {
+        if r > ranks::EIGHT {
             return Err("Invalid rank".to_string());
         }
 
-        Ok(Square::new(file, rank))
+        Ok(Square::new(f, r))
     }
 
     pub fn interposes_diag(self, a: Square, b: Square) -> bool {

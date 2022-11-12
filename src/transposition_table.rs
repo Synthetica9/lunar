@@ -167,6 +167,21 @@ impl TranspositionTable {
         res
     }
 
+    pub fn pv_uci(&self, game: &Game) -> String {
+        let pv = self.principle_variation(game);
+        let mut res = String::new();
+        let mut is_first = true;
+        for ply in pv {
+            if !is_first {
+                res.push(' ');
+            }
+            res.push_str(&ply.long_name());
+            is_first = false;
+        }
+
+        res
+    }
+
     fn should_replace(&self, cand: &TranspositionEntry, old: &TranspositionEntry) -> bool {
         // if old.hash != self.hash {
         //     return true;

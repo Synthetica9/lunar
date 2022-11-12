@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 build = "build/main.rs"
 default-run = "lunar"
+authors = [
+  "Patrick Hilhorst"
+]
 
 [profile.release]
 lto = true

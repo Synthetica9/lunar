@@ -4,6 +4,8 @@
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
+use std::time::Duration;
+use std::time::Instant;
 
 // TODO: use stock rust channels?
 use crossbeam_channel as channel;
@@ -13,20 +15,14 @@ use crate::millipawns::Millipawns;
 use crate::ply::Ply;
 use crate::transposition_table::{TranspositionEntry, TranspositionTable};
 use crate::zobrist_hash::ZobristHash;
+use crate::uci::TimePolicy;
 
 mod currently_searching;
 
 use currently_searching::CurrentlySearching;
 
-pub const COMMS_INTERVAL: usize = 1 << 8;
+pub const COMMS_INTERVAL: usize = 1 << 16;
 pub const ONE_MP: Millipawns = Millipawns(1);
-
-#[derive(Debug)]
-struct StatusUpdate {
-    thread_id: usize,
-    nodes_searched: usize,
-    // currently_searching: Game,
-}
 
 #[derive(Copy, Clone)]
 enum ThreadCommand {
@@ -36,8 +32,16 @@ enum ThreadCommand {
 }
 
 enum ThreadStatus {
-    StatusUpdate(StatusUpdate),
-    SearchFinished(Millipawns, Option<Ply>),
+    StatusUpdate {
+        thread_id: usize,
+        nodes_searched: usize,
+        quiescence_nodes_searched: usize,
+    },
+    SearchFinished {
+        score: Millipawns,
+        best_move: Option<Ply>,
+        depth: usize,
+    },
 }
 
 pub struct SearchThreadPool {
@@ -48,8 +52,17 @@ pub struct SearchThreadPool {
     )>,
     currently_searching: CurrentlySearching,
     transposition_table: Arc<TranspositionTable>,
+    ponder: bool,
+
+    best_move: Option<Ply>,
+    score: Millipawns,
+    best_depth: usize,
+    start_time: std::time::Instant,
+    time_policy: TimePolicy,
+    is_searching: bool,
 }
 
+// TODO: does this struct need to exist?
 struct ThreadData {
     thread_id: usize,
     num_threads: usize,
@@ -59,114 +72,74 @@ struct ThreadData {
     nodes_searched: usize,
     quiescence_nodes_searched: usize,
 
-    game: Option<Game>,
     transposition_table: Arc<TranspositionTable>,
     currently_searching: CurrentlySearching,
     // TODO: implement
     // repetition_table: RwLock<TranspositionTable>,
 }
 
-enum AbortReason {
-    StopSearch,
-    QuitThread,
-    InternalError,
-}
-
 impl ThreadData {
     fn run(&mut self) {
-        let mut next_command = None;
+        let mut game = None;
         loop {
-            // Idle...
-            next_command = match self.recv_command(true) {
-                Ok(()) => continue,
-                Err(command) => Some(command),
+            let command = match game {
+                Some(game) => self.search(&game),
+                None => self.command_channel.recv().unwrap(),
             };
 
-            if let Some(command) = next_command {
-                use AbortReason::*;
-
+            use ThreadCommand::*;
                 match command {
-                    QuitThread => return,
-                    StopSearch => (),
-                    InternalError => return, // TODO: is this ok?
+                    Quit => return,
+                    StopSearch => {
+                        game = None;
+                    },
+                    SearchThis(new_game) => {
+                        game = Some(new_game);
+                    },
                 };
 
-                next_command = None;
-            }
-
-            if let Some(game) = &self.game {
-                // Start search.
-                // TODO: how to adjust
-                let mut game = self.game.unwrap();
-                use crate::millipawns::*;
-                let search_res = self.search(&game, 5);
-                match search_res {
-                    Ok((mp, ply)) => {
-                        self.status_channel
-                            .send(ThreadStatus::SearchFinished(mp, ply));
-                    }
-                    Err(cmd) => {
-                        next_command = Some(cmd);
-                    }
-                }
-            }
         }
     }
 
     fn send_status_update(&mut self) {
-        self.status_channel
-            .send(ThreadStatus::StatusUpdate(StatusUpdate {
-                thread_id: self.thread_id,
-                nodes_searched: self.nodes_searched,
-            }));
+        self.status_channel.send(ThreadStatus::StatusUpdate {
+            thread_id: self.thread_id,
+            nodes_searched: self.nodes_searched,
+            quiescence_nodes_searched: self.quiescence_nodes_searched,
+        });
 
-        // self.nodes_searched = 0;
+        self.nodes_searched = 0;
+        self.quiescence_nodes_searched = 0;
     }
 
-    fn recv_command(&mut self, blocking: bool) -> Result<(), AbortReason> {
-        let command = if blocking {
-            self.command_channel
-                .recv()
-                .map_err(|_| AbortReason::InternalError)?
-        } else {
-            match self.command_channel.try_recv() {
-                Ok(x) => x,
-                // If we can't receive a command we're just fine.
-                Err(_) => return Ok(()),
-            }
-        };
-
-        Err(match command {
-            ThreadCommand::Quit => AbortReason::QuitThread,
-            ThreadCommand::StopSearch => {
-                self.game = None;
-                AbortReason::StopSearch
-            }
-            ThreadCommand::SearchThis(game) => {
-                self.game = Some(game);
-                AbortReason::StopSearch
-            }
-        })
-    }
-
-    fn communicate(&mut self) -> Result<(), AbortReason> {
+    fn communicate(&mut self) -> Result<(), ThreadCommand> {
         self.send_status_update();
-        self.recv_command(false)?;
-        Ok(())
+
+        match self.command_channel.try_recv() {
+            Ok(command) => Err(command),
+            Err(channel::TryRecvError::Empty) => Ok(()),
+            Err(channel::TryRecvError::Disconnected) => panic!("Thread channel disconnected"),
+        }
     }
 
-    pub fn search(
-        &mut self,
-        game: &Game,
-        depth: usize,
-    ) -> Result<(Millipawns, Option<Ply>), AbortReason> {
+    pub fn search(&mut self, game: &Game) -> ThreadCommand {
         use crate::millipawns::*;
-        let mut res = (LOSS, None);
-        for i in 1..=depth {
-            res = self.alpha_beta_search(game, LOSS, WIN, i)?;
-            // println!("{i} {res:?}")
+        for depth in 1..255 {
+            // TODO: narrow alpha and beta?
+            match self.alpha_beta_search(game, LOSS, WIN, depth) {
+                Ok((score, best_move)) => {
+                    self.status_channel
+                        .send(ThreadStatus::SearchFinished {
+                            score,
+                            best_move,
+                            depth,
+                        })
+                        .unwrap();
+                }
+                Err(command) => return command,
+            }
         }
-        Ok(res)
+        ThreadCommand::StopSearch
     }
 
     fn alpha_beta_search(
@@ -175,14 +148,10 @@ impl ThreadData {
         alpha: Millipawns,
         beta: Millipawns,
         depth: usize,
-    ) -> Result<(Millipawns, Option<Ply>), AbortReason> {
+    ) -> Result<(Millipawns, Option<Ply>), ThreadCommand> {
         use crate::millipawns::*;
 
         self.nodes_searched += 1;
-
-        // println!("Searching at depth {} {}", depth, game.to_fen());
-
-        // TODO: right depth here
 
         // This causes a lot of branch mispredictions...
         if self.nodes_searched % COMMS_INTERVAL == 0 {
@@ -410,8 +379,9 @@ impl SearchThreadPool {
                     quiescence_nodes_searched: 0,
 
                     currently_searching,
-                    game: None,
                     transposition_table,
+
+
                 };
                 runner.run();
             });
@@ -422,6 +392,15 @@ impl SearchThreadPool {
             threads,
             currently_searching,
             transposition_table,
+
+            // TODO: these fields are weird
+            ponder: false,
+            best_move: None,
+            best_depth: 0,
+            score: crate::millipawns::LOSS,
+            start_time: Instant::now(),
+            time_policy: TimePolicy::Depth(1),
+            is_searching: false,
         }
     }
 
@@ -434,40 +413,47 @@ impl SearchThreadPool {
         }
     }
 
-    pub fn search(&self, game: &Game, depth: usize) -> (Millipawns, Option<Ply>) {
+    pub fn start_search(&mut self, game: &Game) {
         self.broadcast(ThreadCommand::SearchThis(*game));
-        let mut res = (Millipawns(i32::MIN), None);
 
-        let mut n_finished = 0;
-        let mut curr_pv = String::new();
-        while n_finished != self.threads.len() {
-            for (_, _, r) in self.threads.iter() {
-                match r.try_recv() {
-                    Err(_) => continue,
-                    Ok(status) => match status {
-                        ThreadStatus::SearchFinished(mp, ply) => {
-                            if mp > res.0 && ply.is_some() {
-                                res = (mp, ply)
-                            }
+        self.best_move = None;
+        self.score = game.evaluation();
+        self.best_depth = 0;
+        self.start_time = Instant::now();
+        self.is_searching = true;
+    }
 
-                            n_finished += 1;
+    pub fn stop(&mut self) {
+        self.broadcast(ThreadCommand::StopSearch);
+        self.is_searching = false;
+    }
+
+    pub fn communicate(&mut self) {
+        for (_, _, status_r) in &self.threads {
+            while let Ok(status) = status_r.try_recv() {
+                match status {
+                    ThreadStatus::SearchFinished {
+                        depth,
+                        score,
+                        best_move,
+                    } => {
+                        if depth > self.best_depth || score > self.score {
+                            self.score = score;
+                            self.best_move = best_move;
+                            self.best_depth = depth;
                         }
-                        ThreadStatus::StatusUpdate(s) => {
-                            // let tt = self.transposition_table.read().unwrap();
-                            // let pv = tt.pv_string(game);
-                            // if pv != curr_pv {
-                            //     println!("PV: {}", pv);
-                            //     curr_pv = pv;
-                            // }
-                            // println!("{s:?}");
-                            // println!("Hash table occupancy: {}", tt.occupancy_fraction());
-                        }
-                    },
+                    }
+
+                    ThreadStatus::StatusUpdate {
+                        thread_id,
+                        nodes_searched,
+                        quiescence_nodes_searched,
+                    } => {
+                        // TODO: handle this.
+                    }
                 }
             }
         }
-
-        res
     }
 
     fn broadcast(&self, command: ThreadCommand) -> Result<(), channel::SendError<ThreadCommand>> {
@@ -475,6 +461,66 @@ impl SearchThreadPool {
             s.send(command)?;
         }
         Ok(())
+    }
+
+    pub fn num_threads(&self) -> usize {
+        self.threads.len()
+    }
+
+    pub fn set_ponder(&mut self, ponder: bool) {
+        self.ponder = ponder;
+    }
+
+    pub fn set_time_policy(&mut self, policy: TimePolicy) {
+        self.time_policy = policy;
+    }
+
+    pub fn time_policy_finished(&self) -> bool {
+        match self.time_policy {
+            TimePolicy::Depth(depth) => self.best_depth >= depth,
+            TimePolicy::MoveTime(time) => {
+                let elapsed = self.start_time.elapsed();
+                elapsed >= time
+            }
+            TimePolicy::Infinite => false,
+            _ => todo!(),
+        }
+    }
+
+    pub fn is_searching(&self) -> bool {
+        self.is_searching
+    }
+
+    pub fn info_string(&self) -> String {
+        let elapsed = self.start_time.elapsed();
+        // let elapsed = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9;
+
+        // let nodes_per_second = self.nodes_searched() as f64 / elapsed;
+        // let quiescence_nodes_per_second = self.quiescence_nodes_searched() as f64 / elapsed;
+
+        let mut info = String::new();
+        info.push_str(&format!("info depth {} ", self.best_depth));
+        info.push_str(&format!("score cp {} ", self.score.0 / 10));
+        // info.push_str(&format!("nodes {} ", self.nodes_searched()));
+        // info.push_str(&format!("nps {} ", nodes_per_second as usize));
+        // info.push_str(&format!("qnodes {} ", self.quiescence_nodes_searched()));
+        // info.push_str(&format!("qnps {} ", quiescence_nodes_per_second as usize));
+        // info.push_str(&format!("time {} ", (elapsed * 1000.0) as usize));
+        // info.push_str(&format!("pv {} ", self);
+        info
+    }
+
+    pub fn maybe_end_search(&mut self) -> Option<String> {
+        if !self.time_policy_finished() {
+            return None;
+        }
+        if !self.ponder {
+            self.stop();
+        }
+        Some(format!(
+            "bestmove {}",
+            self.best_move.map(|m| m.long_name()).unwrap()
+        ))
     }
 }
 

@@ -1,0 +1,18 @@
+use lunar::uci::UCIState;
+
+pub fn main() {
+    let mut state = UCIState::new();
+
+    let uci_session = &[
+        "uci",
+        "isready",
+        "ucinewgame",
+        "position startpos",
+        "go depth 4",
+        "d",
+    ];
+
+    for command in uci_session {
+        state.interpret(command);
+    }
+}
