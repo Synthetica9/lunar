@@ -58,12 +58,9 @@ impl UCIState {
             match reader_chan.try_recv() {
                 Ok(line) => {
                     let line = line.trim().to_string();
-                    self.log(&format!("> {line}"));
-                    match
-                        self.interpret(&line) {
-                            Ok(()) => {}
-                            Err(msg) => self.log(&msg),
-
+                    match self.interpret(&line) {
+                        Ok(()) => {}
+                        Err(msg) => self.log(&msg),
                     };
                 }
                 // No data available, this is fine.
@@ -77,13 +74,11 @@ impl UCIState {
             self.search_thread_pool.communicate();
             if self.search_thread_pool.is_searching() {
                 self.send(&self.search_thread_pool.info_string());
-                // self.log(&self.pv_string());
-                self.send(&format!("info pv {}", self.transposition_table.pv_uci(&self.game)));
+                self.log(&self.pv_string());
                 if let Some(result) = self.search_thread_pool.maybe_end_search() {
                     self.send(&result);
                 }
             }
-
         }
     }
 
@@ -130,7 +125,7 @@ impl UCIState {
 
                 let value = value.trim();
 
-                self.log(&format!("Setting option {} to {}",  name, value));
+                self.log(&format!("Setting option {} to {}", name, value));
                 self.set_option(&name, &value)?;
             }
             "position" => {
@@ -192,10 +187,9 @@ impl UCIState {
                             return Err(format!("Unknown go command: {}", part));
                         }
                     };
-                    self.search_thread_pool.set_time_policy(time_policy);
                 }
-                self.search_thread_pool.start_search(&self.game);
-
+                self.search_thread_pool
+                    .start_search(&self.game, time_policy);
             }
             "d" => {
                 let game = self.game;
@@ -208,6 +202,10 @@ impl UCIState {
             }
             "stop" => {
                 self.search_thread_pool.stop();
+            }
+            "quit" => {
+                self.log("kthxbye");
+                std::process::exit(0);
             }
             _ => {
                 self.log(&format!("Unknown command: {}", command));
@@ -323,6 +321,7 @@ const AVAILABLE_OPTIONS: &AvailableOptions = &AvailableOptions({
     ]
 });
 
+#[derive(Copy, Clone)]
 pub enum TimePolicy {
     MoveTime(std::time::Duration),
     Depth(usize),

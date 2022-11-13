@@ -14,8 +14,8 @@ use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
 use crate::transposition_table::{TranspositionEntry, TranspositionTable};
-use crate::zobrist_hash::ZobristHash;
 use crate::uci::TimePolicy;
+use crate::zobrist_hash::ZobristHash;
 
 mod currently_searching;
 
@@ -44,6 +44,23 @@ enum ThreadStatus {
     },
 }
 
+enum PoolState {
+    Idle,
+    Searching {
+        game: Game,
+        time_policy: TimePolicy,
+        start_time: Instant,
+        is_pondering: bool,
+
+        score: Millipawns,
+        best_move: Option<Ply>,
+        best_depth: usize,
+
+        nodes_searched: usize,
+        quiescence_nodes_searched: usize,
+    },
+}
+
 pub struct SearchThreadPool {
     threads: Vec<(
         JoinHandle<()>,
@@ -54,12 +71,7 @@ pub struct SearchThreadPool {
     transposition_table: Arc<TranspositionTable>,
     ponder: bool,
 
-    best_move: Option<Ply>,
-    score: Millipawns,
-    best_depth: usize,
-    start_time: std::time::Instant,
-    time_policy: TimePolicy,
-    is_searching: bool,
+    state: PoolState,
 }
 
 // TODO: does this struct need to exist?
@@ -88,16 +100,15 @@ impl ThreadData {
             };
 
             use ThreadCommand::*;
-                match command {
-                    Quit => return,
-                    StopSearch => {
-                        game = None;
-                    },
-                    SearchThis(new_game) => {
-                        game = Some(new_game);
-                    },
-                };
-
+            match command {
+                Quit => return,
+                StopSearch => {
+                    game = None;
+                }
+                SearchThis(new_game) => {
+                    game = Some(new_game);
+                }
+            };
         }
     }
 
@@ -269,6 +280,14 @@ impl ThreadData {
                         Ok((alpha, best_move))
                     };
                 }
+
+                let tte = TranspositionEntry {
+                    depth: depth as u8,
+                    alpha,
+                    beta,
+                    best_move,
+                };
+                self.transposition_table.put(game.hash(), tte);
             };
 
             is_first_move = false;
@@ -291,6 +310,14 @@ impl ThreadData {
                 if alpha >= beta {
                     return Ok((alpha, best_move));
                 }
+
+                let tte = TranspositionEntry {
+                    depth: depth as u8,
+                    alpha,
+                    beta,
+                    best_move,
+                };
+                self.transposition_table.put(game.hash(), tte);
             }
         }
 
@@ -380,8 +407,6 @@ impl SearchThreadPool {
 
                     currently_searching,
                     transposition_table,
-
-
                 };
                 runner.run();
             });
@@ -395,12 +420,7 @@ impl SearchThreadPool {
 
             // TODO: these fields are weird
             ponder: false,
-            best_move: None,
-            best_depth: 0,
-            score: crate::millipawns::LOSS,
-            start_time: Instant::now(),
-            time_policy: TimePolicy::Depth(1),
-            is_searching: false,
+            state: PoolState::Idle,
         }
     }
 
@@ -413,43 +433,69 @@ impl SearchThreadPool {
         }
     }
 
-    pub fn start_search(&mut self, game: &Game) {
+    pub fn start_search(&mut self, game: &Game, time_policy: TimePolicy) {
         self.broadcast(ThreadCommand::SearchThis(*game));
 
-        self.best_move = None;
-        self.score = game.evaluation();
-        self.best_depth = 0;
-        self.start_time = Instant::now();
-        self.is_searching = true;
+        self.state = PoolState::Searching {
+            game: game.clone(),
+            start_time: Instant::now(),
+            is_pondering: false,
+            time_policy,
+
+            best_move: None,
+            score: game.evaluation(),
+            best_depth: 0,
+
+            nodes_searched: 0,
+            quiescence_nodes_searched: 0,
+        };
     }
 
     pub fn stop(&mut self) {
         self.broadcast(ThreadCommand::StopSearch);
-        self.is_searching = false;
+        self.state = PoolState::Idle;
     }
 
     pub fn communicate(&mut self) {
         for (_, _, status_r) in &self.threads {
             while let Ok(status) = status_r.try_recv() {
-                match status {
-                    ThreadStatus::SearchFinished {
-                        depth,
-                        score,
-                        best_move,
-                    } => {
-                        if depth > self.best_depth || score > self.score {
-                            self.score = score;
-                            self.best_move = best_move;
-                            self.best_depth = depth;
-                        }
-                    }
+                if let PoolState::Searching {
+                    ref mut best_depth,
+                    ref mut score,
+                    ref mut best_move,
+                    ref mut nodes_searched,
+                    ref mut quiescence_nodes_searched,
+                    ..
+                } = &mut self.state
+                {
+                    // TODO: very very inelegant, but seems to be the only way to do this.
+                    let old_score = score;
+                    let old_best_move = best_move;
+                    let old_best_depth = best_depth;
+                    let old_nodes_searched = nodes_searched;
+                    let old_quiescence_nodes_searched =  quiescence_nodes_searched;
 
-                    ThreadStatus::StatusUpdate {
-                        thread_id,
-                        nodes_searched,
-                        quiescence_nodes_searched,
-                    } => {
-                        // TODO: handle this.
+                    match status {
+                        ThreadStatus::SearchFinished {
+                            score,
+                            best_move,
+                            depth,
+                        } => {
+                            if *old_best_depth < depth || *old_best_depth == depth && score > *old_score {
+                                *old_score = score;
+                                *old_best_move = best_move;
+                                *old_best_depth = depth;
+                            }
+                        }
+
+                        ThreadStatus::StatusUpdate {
+                            thread_id,
+                            nodes_searched,
+                            quiescence_nodes_searched,
+                        } => {
+                            *old_nodes_searched += nodes_searched;
+                            *old_quiescence_nodes_searched += quiescence_nodes_searched;
+                        }
                     }
                 }
             }
@@ -471,56 +517,89 @@ impl SearchThreadPool {
         self.ponder = ponder;
     }
 
-    pub fn set_time_policy(&mut self, policy: TimePolicy) {
-        self.time_policy = policy;
-    }
-
     pub fn time_policy_finished(&self) -> bool {
-        match self.time_policy {
-            TimePolicy::Depth(depth) => self.best_depth >= depth,
-            TimePolicy::MoveTime(time) => {
-                let elapsed = self.start_time.elapsed();
-                elapsed >= time
+        if let PoolState::Searching {
+            start_time,
+            time_policy,
+            best_depth,
+            ..
+        } = &self.state
+        {
+            match time_policy {
+                TimePolicy::Depth(depth) => best_depth >= depth,
+                TimePolicy::MoveTime(time) => {
+                    let elapsed = start_time.elapsed();
+                    elapsed >= *time
+                }
+                TimePolicy::Infinite => false,
+                _ => todo!(),
             }
-            TimePolicy::Infinite => false,
-            _ => todo!(),
+        } else {
+            false
         }
     }
 
     pub fn is_searching(&self) -> bool {
-        self.is_searching
+        matches!(self.state, PoolState::Searching { .. })
     }
 
     pub fn info_string(&self) -> String {
-        let elapsed = self.start_time.elapsed();
-        // let elapsed = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9;
+        if let PoolState::Searching {
+            start_time,
+            best_depth,
+            score,
+            best_move,
+            nodes_searched,
+            quiescence_nodes_searched,
+            game,
+            ..
+        } = &self.state
+        {
+            let elapsed = start_time.elapsed();
+            let elapsed = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9;
 
-        // let nodes_per_second = self.nodes_searched() as f64 / elapsed;
-        // let quiescence_nodes_per_second = self.quiescence_nodes_searched() as f64 / elapsed;
+            let nodes_per_second = *nodes_searched as f64 / elapsed;
+            let quiescence_nodes_per_second = *quiescence_nodes_searched as f64 / elapsed;
 
-        let mut info = String::new();
-        info.push_str(&format!("info depth {} ", self.best_depth));
-        info.push_str(&format!("score cp {} ", self.score.0 / 10));
-        // info.push_str(&format!("nodes {} ", self.nodes_searched()));
-        // info.push_str(&format!("nps {} ", nodes_per_second as usize));
-        // info.push_str(&format!("qnodes {} ", self.quiescence_nodes_searched()));
-        // info.push_str(&format!("qnps {} ", quiescence_nodes_per_second as usize));
-        // info.push_str(&format!("time {} ", (elapsed * 1000.0) as usize));
-        // info.push_str(&format!("pv {} ", self);
-        info
+            let mut info = String::new();
+            info.push_str(&format!("info depth {} ", best_depth));
+            info.push_str(&format!("score cp {} ", score.0 / 10));
+            info.push_str(&format!("nodes {} ", nodes_searched));
+            info.push_str(&format!("nps {} ", nodes_per_second as usize));
+            info.push_str(&format!("qnodes {} ", quiescence_nodes_searched));
+            info.push_str(&format!("qnps {} ", quiescence_nodes_per_second as usize));
+            info.push_str(&format!("time {} ", (elapsed * 1000.0) as usize));
+            info.push_str(&format!("pv {} ", self.transposition_table.pv_uci(game)));
+            info
+        } else {
+            "info string idle".to_string()
+        }
     }
 
     pub fn maybe_end_search(&mut self) -> Option<String> {
-        if !self.time_policy_finished() {
-            return None;
+        // For borrow checker reasons
+        let policy_finished = self.time_policy_finished();
+
+        match self.state {
+            PoolState::Idle => None,
+            PoolState::Searching {
+                ref mut is_pondering,
+                best_move,
+                ..
+            } => {
+                if !*is_pondering && policy_finished {
+                    if self.ponder {
+                        *is_pondering = true;
+                    } else {
+                        self.stop();
+                        self.state = PoolState::Idle;
+                    }
+                    Some(format!("bestmove {}", best_move.unwrap().long_name()))
+                } else {
+                    None
+                }
+            }
         }
-        if !self.ponder {
-            self.stop();
-        }
-        Some(format!(
-            "bestmove {}",
-            self.best_move.map(|m| m.long_name()).unwrap()
-        ))
     }
 }
 

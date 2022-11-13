@@ -187,7 +187,7 @@ impl TranspositionTable {
         //     return true;
         // }
 
-        if old.depth < cand.depth {
+        if old.depth <= cand.depth {
             return true;
         }
 
@@ -198,11 +198,6 @@ impl TranspositionTable {
         {
             return true;
         }
-
-        // Prefer things higher on the tree
-        // if cand.generation < old.generation {
-        //     return true;
-        // }
 
         return false;
     }
