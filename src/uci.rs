@@ -71,13 +71,17 @@ impl UCIState {
             }
 
             // output information about currently running search
-            self.search_thread_pool.communicate();
-            if self.search_thread_pool.is_searching() {
-                self.send(&self.search_thread_pool.info_string());
-                self.log(&self.pv_string());
-                if let Some(result) = self.search_thread_pool.maybe_end_search() {
-                    self.send(&result);
-                }
+            self.manage_thread_pool();
+        }
+    }
+
+    fn manage_thread_pool(&mut self) {
+        self.search_thread_pool.communicate();
+        if self.search_thread_pool.is_searching() {
+            self.send(&self.search_thread_pool.info_string());
+            self.log(&self.pv_string());
+            if let Some(result) = self.search_thread_pool.maybe_end_search() {
+                self.send(&result);
             }
         }
     }
@@ -206,6 +210,14 @@ impl UCIState {
             "quit" => {
                 self.log("kthxbye");
                 std::process::exit(0);
+            }
+            "wait" => {
+                // Non-standard. Stop accepting commands until the current search is done.
+                while self.search_thread_pool.is_searching() {
+                    self.manage_thread_pool();
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                self.log("Done waiting");
             }
             _ => {
                 self.log(&format!("Unknown command: {}", command));

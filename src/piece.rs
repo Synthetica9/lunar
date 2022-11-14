@@ -87,4 +87,15 @@ impl Piece {
             Pawn | King => false,
         }
     }
+
+    pub const fn base_value(self) -> Millipawns {
+        use Piece::*;
+        Millipawns(match self {
+            Pawn => 1000,
+            Knight | Bishop => 3000,
+            Rook => 5000,
+            Queen => 9000,
+            King => 100000,
+        })
+    }
 }

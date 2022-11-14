@@ -93,6 +93,110 @@ struct ThreadData {
     // repetition_table: RwLock<TranspositionTable>,
 }
 
+fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns {
+    // @first specifies whether to immediately quit after finding a plausible advantage.
+    let sq = ply.dst();
+    let board = game.board();
+    let attackers_defenders = board.squares_attacking_defending(sq);
+
+    let mut get_attackers = |side, include_current| {
+        let attackers = attackers_defenders & board.get_color(side);
+        let mut res = Vec::with_capacity(attackers.popcount() as usize + include_current as usize);
+        for attacker in attackers.iter_squares() {
+            let piece = board.occupant_piece(attacker);
+            debug_assert!(piece.is_some());
+            if let Some(piece) = piece {
+                // println!("{:?} is attacking {:?} with {:?}", side, sq, piece);
+                res.push(piece.base_value());
+            }
+        }
+
+        // TODO: use PESTO midgame/endgame tables?
+        // Reversed sort.
+        res.sort();
+        res.reverse();
+
+        // For defending, current occupant piece is also the first defender.
+        if include_current {
+            let piece = board.occupant_piece(sq);
+            debug_assert!(piece.is_some());
+            if let Some(piece) = piece {
+                res.push(piece.base_value());
+            }
+        }
+
+        res
+    };
+
+    // These therefore have the most valuable pieces first. This means pop will
+    // return the least valuable one.
+
+    let to_move = game.to_move();
+    let to_move_other = to_move.other();
+    let mut attackers = get_attackers(&to_move, false);
+    let mut defenders = get_attackers(&to_move_other, true);
+
+    debug_assert!(!attackers.is_empty());
+    debug_assert!(!defenders.is_empty());
+
+    // println!("attackers: {:?}", attackers);
+    // println!("defenders: {:?}", defenders);
+
+    let mut best = None;
+
+    let mut balance = Millipawns(0);
+    loop {
+        // One loop iteration is two chops.
+        let attacker = attackers.pop();
+        let defender = defenders.pop();
+
+        if attacker.is_none() || defender.is_none() {
+            break;
+        }
+
+        let attacker = attacker.unwrap();
+        let defender = defender.unwrap();
+        // println!("{:?} {:?}", attacker, defender);
+
+        balance += defender;
+        if !defenders.is_empty() {
+            // If there is a defender, the chop back is made.
+            // If there is none, it is never made. In that case we simply win
+            // the defender.
+            balance -= attacker;
+        }
+
+        if balance > best.unwrap_or(crate::millipawns::LOSS) {
+            best = Some(balance);
+
+            if first && balance >= Millipawns(0) {
+                break;
+            }
+        }
+    }
+
+    best.unwrap_or(crate::millipawns::LOSS)
+}
+
+pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
+    _static_exchange_evaluation(game, ply, false)
+}
+
+pub fn static_exchange_evaluation_winning(game: &Game, ply: Ply) -> bool {
+    _static_exchange_evaluation(game, ply, true) >= Millipawns(0)
+}
+
+#[test]
+fn test_see() {
+    use crate::square::squares::*;
+    let game = Game::from_fen("8/K1k5/4p1b1/5q2/4PR2/8/8/8 w - - 0 1").unwrap();
+    let ply = Ply::simple(E4, F5);
+    assert_eq!(
+        _static_exchange_evaluation(&game, ply, false),
+        Millipawns(8000)
+    );
+}
+
 impl ThreadData {
     fn run(&mut self) {
         let mut game = None;
@@ -156,14 +260,8 @@ impl ThreadData {
         ThreadCommand::StopSearch
     }
 
-    fn order_number(&self, ply: Ply, game: &Game, after: &Game) -> (usize, Millipawns) {
-        // LVA-MVT
-        let capturing = ply.moved_piece(game);
-        let captured = ply.captured_piece(game);
-        // let is_winning = capturing < captured;
-
-        let lva_mvt = captured.map_or(1, |x| x.as_index() + 2) * 10 - capturing.as_index();
-        // let lva_mvt = 0;
+    fn order_number(&self, ply: Ply, game: &Game, after: &Game) -> (i32, Millipawns) {
+        let see = static_exchange_evaluation(game, ply).0;
 
         let is_killer = self
             .killer_moves
@@ -177,13 +275,13 @@ impl ThreadData {
 
         let after_hash_value = match self.transposition_table.get(after.hash()) {
             Some(tte) => tte.alpha,
-            None => after.evaluation(),
+            None => crate::millipawns::LOSS,
         };
 
         // TODO: Is this sound?
         // let evaluation = ...;
         (
-            10000 * (is_hash as usize) + 500 * (is_killer as usize) + 10 * lva_mvt,
+            100000 * (is_hash as i32) + 100 * (is_killer as i32) + see,
             after_hash_value,
         )
     }
@@ -411,6 +509,10 @@ impl ThreadData {
         }
 
         for ply in game.quiescence_moves() {
+            if !static_exchange_evaluation_winning(&game, ply) {
+                continue;
+            }
+
             let mut cpy = *game;
             cpy.apply_ply(&ply);
 

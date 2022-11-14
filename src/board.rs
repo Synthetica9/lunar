@@ -383,17 +383,41 @@ impl Board {
 
     pub fn squares_attacking(&self, color: &Color, square: Square) -> Bitboard {
         // Color is the color doing the attacking.
+        self._squares_attacking_defending(Some(color), square)
+    }
+
+    pub fn squares_attacking_defending(&self, square: Square) -> Bitboard {
+        // None means both colors.
+        self._squares_attacking_defending(None, square)
+    }
+
+    #[inline(always)]
+    fn _squares_attacking_defending(&self, color: Option<&Color>, square: Square) -> Bitboard {
+        // Color is the color doing the attacking.
+        let occupied = self.get_occupied();
+        let queens = self.get_piece(&Piece::Queen);
+
         let mut res = Bitboard::new();
 
-        let occupied = self.get_occupied();
-        let queens = self.get(color, &Piece::Queen);
+        res |= self.get_piece(&Piece::Pawn)
+            & if let Some(color) = color {
+                // Single direction, seen from opponent due to reverse view.
+                Bitboard::pawn_attacks(square, color.other())
+            } else {
+                // Both pawn directions
+                Bitboard::pawn_attacks(square, Color::White)
+                    | Bitboard::pawn_attacks(square, Color::Black)
+            };
 
-        res |= Bitboard::pawn_attacks(square, color.other()) & self.get(color, &Piece::Pawn);
-        res |= Bitboard::knight_attacks(square) & self.get(color, &Piece::Knight);
+        res |= self.get_piece(&Piece::Knight) & Bitboard::knight_attacks(square);
         res |=
-            Bitboard::bishop_attacks(square, occupied) & (self.get(color, &Piece::Bishop) | queens);
-        res |= Bitboard::rook_attacks(square, occupied) & (self.get(color, &Piece::Rook) | queens);
-        res |= Bitboard::king_attacks(square) & self.get(color, &Piece::King);
+            (self.get_piece(&Piece::Bishop) | queens) & Bitboard::bishop_attacks(square, occupied);
+        res |= (self.get_piece(&Piece::Rook) | queens) & Bitboard::rook_attacks(square, occupied);
+        res |= self.get_piece(&Piece::King) & Bitboard::king_attacks(square);
+
+        if let Some(color) = color {
+            res &= self.get_color(&color)
+        };
 
         res
     }

@@ -8,8 +8,10 @@ pub fn main() {
         "isready",
         "ucinewgame",
         "position startpos",
-        "go depth 4",
         "d",
+        "go depth 6",
+        "wait",
+        "quit",
     ];
 
     for command in uci_session {
