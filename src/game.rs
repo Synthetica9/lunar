@@ -25,7 +25,7 @@ pub struct Game {
 
     // Full move clock isn't used anywhere? Move to higher level game state
     // management? (Along with 3-fold draw bookkeeping.)
-    full_move: i16,
+    half_move_total: i16,
     hash: ZobristHash,
 }
 
@@ -64,7 +64,11 @@ impl Game {
     }
 
     pub const fn full_move(&self) -> i16 {
-        self.full_move
+        self.half_move_total / 2 + 1
+    }
+
+    pub const fn half_move_total(&self) -> i16 {
+        self.half_move_total
     }
 
     pub const fn hash(&self) -> ZobristHash {
@@ -111,7 +115,7 @@ impl Game {
             castle_rights,
             en_passant,
             half_move,
-            full_move,
+            half_move_total: (full_move - 1) * 2 + (to_move as i16),
             hash,
         };
 
@@ -131,7 +135,7 @@ impl Game {
             // where after ... e5 the fen doesn't show the en passant
             self.en_passant.map_or("-".to_string(), |s| s.to_fen_part()),
             self.half_move,
-            self.full_move
+            self.full_move()
         )
     }
 
@@ -141,12 +145,10 @@ impl Game {
         if ply.resets_halfmove_clock(self) {
             self.half_move = 0;
         } else {
-            self.half_move + 1;
+            self.half_move = self.half_move + 1;
         };
 
-        if self.to_move == Color::Black {
-            self.full_move += 1;
-        }
+        self.half_move_total += 1;
 
         let cln = self.clone();
 
@@ -1240,5 +1242,12 @@ mod tests {
         "4R3/8/6k1/8/8/8/2K5/4R3 w - - 0 1",
         "R8e4",
         "8/8/6k1/8/4R3/8/2K5/4R3 b - - 1 1"
+    );
+
+    simple_move_test!(
+        black_to_move,
+        "4k3/8/8/8/8/8/8/R3K3 b Q - 0 1",
+        "Kf8",
+        "5k2/8/8/8/8/8/8/R3K3 w Q - 1 2"
     );
 }

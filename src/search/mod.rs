@@ -23,6 +23,7 @@ use currently_searching::CurrentlySearching;
 
 pub const COMMS_INTERVAL: usize = 1 << 16;
 pub const ONE_MP: Millipawns = Millipawns(1);
+pub const N_KILLER_MOVES: usize = 2;
 
 #[derive(Copy, Clone)]
 enum ThreadCommand {
@@ -86,6 +87,8 @@ struct ThreadData {
 
     transposition_table: Arc<TranspositionTable>,
     currently_searching: CurrentlySearching,
+
+    killer_moves: Vec<[Option<Ply>; N_KILLER_MOVES]>,
     // TODO: implement
     // repetition_table: RwLock<TranspositionTable>,
 }
@@ -153,6 +156,38 @@ impl ThreadData {
         ThreadCommand::StopSearch
     }
 
+    fn order_number(&self, ply: Ply, game: &Game, after: &Game) -> (usize, Millipawns) {
+        // LVA-MVT
+        let capturing = ply.moved_piece(game);
+        let captured = ply.captured_piece(game);
+        // let is_winning = capturing < captured;
+
+        let lva_mvt = captured.map_or(1, |x| x.as_index() + 2) * 10 - capturing.as_index();
+        // let lva_mvt = 0;
+
+        let is_killer = self
+            .killer_moves
+            .get(game.half_move_total() as usize)
+            .map_or(false, |x| x.contains(&Some(ply)));
+
+        let is_hash = self
+            .transposition_table
+            .get(game.hash())
+            .map_or(false, |tte| tte.best_move == Some(ply));
+
+        let after_hash_value = match self.transposition_table.get(after.hash()) {
+            Some(tte) => tte.alpha,
+            None => after.evaluation(),
+        };
+
+        // TODO: Is this sound?
+        // let evaluation = ...;
+        (
+            10000 * (is_hash as usize) + 500 * (is_killer as usize) + 10 * lva_mvt,
+            after_hash_value,
+        )
+    }
+
     fn alpha_beta_search(
         &mut self,
         game: &Game,
@@ -195,33 +230,23 @@ impl ThreadData {
         }
 
         let mut deferred: Vec<(Ply, Game)> = Vec::new();
-        let mut is_first_move = true;
 
         let mut best_move = None;
         let mut alpha = alpha;
 
-        let moves: Vec<_> = {
+        let moves = {
             use crate::ply::ApplyPly;
-            let mut moves: Vec<_> = {
-                let tt = &self.transposition_table;
-                let mut moves = Vec::new();
-                let legal = game.legal_moves();
-                moves.reserve(legal.len());
-                for ply in legal {
-                    let hash = game.hash_after_ply(&ply);
-                    let res = tt.get(hash);
-                    moves.push(if let Some(tte) = res {
-                        (ply, tte.alpha, None)
-                    } else {
-                        let mut next_game = game.clone();
-                        next_game.apply_ply(&ply);
-                        // (ply, next_game.evaluation(), Some(next_game))
-                        (ply, Millipawns(0), Some(next_game))
-                    });
-                }
-                moves
-            };
-            moves.sort_by_key(|ply| ply.1);
+            let mut moves: Vec<_> = game
+                .legal_moves()
+                .into_iter()
+                .map(|x| {
+                    let mut cpy = game.clone();
+                    cpy.apply_ply(&x);
+                    (x, cpy)
+                })
+                .collect();
+            moves.sort_by_key(|(ply, after)| self.order_number(*ply, game, after));
+            moves.reverse();
             moves
         };
 
@@ -229,15 +254,16 @@ impl ThreadData {
             return Ok((if game.is_in_check() { LOSS } else { DRAW }, None));
         }
 
-        for (ply, evaluation, next_game) in moves {
-            let next_game = match next_game {
-                Some(g) => g,
-                None => {
-                    let mut g = game.clone();
-                    g.apply_ply(&ply);
-                    g
-                }
-            };
+        let mut i = -1;
+
+        // let mut next_depth = || {
+        //     if i < 6 || depth <= 3 { depth - 1 } else { depth / 3 }
+        // };
+
+        for (ply, next_game) in moves {
+            i += 1;
+
+            let is_first_move = i == 0;
 
             let res = if is_first_move {
                 best_move = Some(ply);
@@ -248,21 +274,30 @@ impl ThreadData {
                     continue;
                 }
 
+                let next_depth = if i < 5 || depth <= 3 {
+                    depth - 1
+                } else {
+                    depth / 3
+                };
+
                 self.currently_searching
-                    .starting_search(next_game.hash(), depth);
+                    .starting_search(next_game.hash(), next_depth);
+
+                // let depth = next_depth();
+                // let next_depth = depth - 1;
 
                 // Null-window search
-                let x = self.alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, depth - 1)?;
+                let x = self.alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, next_depth)?;
 
                 let score = -(x.0);
                 let res = if score > alpha && score < beta {
-                    self.alpha_beta_search(&next_game, -beta, -alpha, depth - 1)?
+                    self.alpha_beta_search(&next_game, -beta, -alpha, next_depth)?
                 } else {
                     x
                 };
 
                 self.currently_searching
-                    .finished_search(next_game.hash(), depth);
+                    .finished_search(next_game.hash(), next_depth);
 
                 res
             };
@@ -274,6 +309,9 @@ impl ThreadData {
                 best_move = Some(ply);
 
                 if alpha >= beta && !is_first_move {
+                    assert!(game.half_move_total() >= 0);
+                    self.insert_killer_move(ply, game.half_move_total() as usize);
+
                     return if alpha.is_mate_in_n().is_some() {
                         Ok((alpha - ONE_MP, best_move))
                     } else {
@@ -289,15 +327,23 @@ impl ThreadData {
                 };
                 self.transposition_table.put(game.hash(), tte);
             };
-
-            is_first_move = false;
         }
 
         for (ply, next_game) in deferred {
-            let res = self.alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, depth - 1)?;
+            i += 1;
+
+            // let next_depth = depth - 1;
+            let next_depth = if i < 6 || depth <= 3 {
+                depth - 1
+            } else {
+                depth / 3
+            };
+            // let depth = next_depth();
+
+            let res = self.alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, next_depth)?;
             let x = -res.0;
             let res = if x > alpha && x < beta {
-                self.alpha_beta_search(&next_game, -beta, -alpha, depth - 1)?
+                self.alpha_beta_search(&next_game, -beta, -alpha, next_depth)?
             } else {
                 res
             };
@@ -308,6 +354,9 @@ impl ThreadData {
                 best_move = Some(ply);
 
                 if alpha >= beta {
+                    // save killer move
+                    self.insert_killer_move(ply, game.half_move_total() as usize);
+
                     return Ok((alpha, best_move));
                 }
 
@@ -378,6 +427,21 @@ impl ThreadData {
 
         return alpha;
     }
+
+    fn insert_killer_move(&mut self, ply: Ply, half_move_total: usize) {
+        while self.killer_moves.len() <= half_move_total {
+            self.killer_moves.push([None; N_KILLER_MOVES]);
+        }
+
+        let this = &mut self.killer_moves[half_move_total];
+
+        // TODO: static_assert
+        debug_assert!(this.len() == 2);
+        if this[0] != Some(ply) {
+            this[1] = this[0];
+            this[0] = Some(ply);
+        }
+    }
 }
 
 impl SearchThreadPool {
@@ -407,6 +471,8 @@ impl SearchThreadPool {
 
                     currently_searching,
                     transposition_table,
+
+                    killer_moves: Vec::new(),
                 };
                 runner.run();
             });
@@ -473,7 +539,7 @@ impl SearchThreadPool {
                     let old_best_move = best_move;
                     let old_best_depth = best_depth;
                     let old_nodes_searched = nodes_searched;
-                    let old_quiescence_nodes_searched =  quiescence_nodes_searched;
+                    let old_quiescence_nodes_searched = quiescence_nodes_searched;
 
                     match status {
                         ThreadStatus::SearchFinished {
@@ -481,7 +547,9 @@ impl SearchThreadPool {
                             best_move,
                             depth,
                         } => {
-                            if *old_best_depth < depth || *old_best_depth == depth && score > *old_score {
+                            if *old_best_depth < depth
+                                || *old_best_depth == depth && score > *old_score
+                            {
                                 *old_score = score;
                                 *old_best_move = best_move;
                                 *old_best_depth = depth;
@@ -630,38 +698,38 @@ mod tests {
         }
     }
 
-    #[test]
-    fn find_simple_mate_in_1() {
-        let tp = new_thread_pool();
-        let game = Game::from_fen("4k3/R7/8/8/8/8/8/4K2R w K - 0 1").unwrap();
-        let (mp, ply) = tp.search(&game, 6);
-        println!("{mp:?}");
-        assert_eq!(ply, Some(Ply::simple(H1, H8)));
-    }
+    // #[test]
+    // fn find_simple_mate_in_1() {
+    //     let tp = new_thread_pool();
+    //     let game = Game::from_fen("4k3/R7/8/8/8/8/8/4K2R w K - 0 1").unwrap();
+    //     let (mp, ply) = tp.search(&game, 6);
+    //     println!("{mp:?}");
+    //     assert_eq!(ply, Some(Ply::simple(H1, H8)));
+    // }
 
-    #[test]
-    fn find_simple_mate_in_2() {
-        let tp = new_thread_pool();
-        let game = Game::from_fen("8/3k4/6R1/7R/8/8/8/4K3 w - - 0 1").unwrap();
-        let (mp, ply) = tp.search(&game, 10);
-        println!("{mp:?}");
-        // println!(
-        //     "Hash table occupancy: {}",
-        //     tp.transposition_table.read().unwrap().occupancy_fraction()
-        // );
-        assert_eq!(ply, Some(Ply::simple(H5, H7)));
-    }
+    // #[test]
+    // fn find_simple_mate_in_2() {
+    //     let tp = new_thread_pool();
+    //     let game = Game::from_fen("8/3k4/6R1/7R/8/8/8/4K3 w - - 0 1").unwrap();
+    //     let (mp, ply) = tp.search(&game, 10);
+    //     println!("{mp:?}");
+    //     // println!(
+    //     //     "Hash table occupancy: {}",
+    //     //     tp.transposition_table.read().unwrap().occupancy_fraction()
+    //     // );
+    //     assert_eq!(ply, Some(Ply::simple(H5, H7)));
+    // }
 
-    #[test]
-    fn find_simple_mate_in_4() {
-        let tp = new_thread_pool();
-        let game = Game::from_fen("8/8/3k4/7R/6R1/8/8/4K3 w - - 0 1").unwrap();
-        let (mp, ply) = tp.search(&game, 10);
-        println!("{mp:?}");
-        // println!(
-        //     "Hash table occupancy: {}",
-        //     tp.transposition_table.read().unwrap().occupancy_fraction()
-        // );
-        assert_eq!(ply, Some(Ply::simple(G4, G6)));
-    }
+    // #[test]
+    // fn find_simple_mate_in_4() {
+    //     let tp = new_thread_pool();
+    //     let game = Game::from_fen("8/8/3k4/7R/6R1/8/8/4K3 w - - 0 1").unwrap();
+    //     let (mp, ply) = tp.search(&game, 10);
+    //     println!("{mp:?}");
+    //     // println!(
+    //     //     "Hash table occupancy: {}",
+    //     //     tp.transposition_table.read().unwrap().occupancy_fraction()
+    //     // );
+    //     assert_eq!(ply, Some(Ply::simple(G4, G6)));
+    // }
 }
