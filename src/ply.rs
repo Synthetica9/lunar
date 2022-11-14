@@ -226,9 +226,17 @@ pub fn _combination_moves(
     }
 }
 
+#[cfg(debug_assertions)]
 impl PartialEq for Ply {
     fn eq(&self, other: &Ply) -> bool {
         self.normalize().0 == other.normalize().0
+    }
+}
+
+#[cfg(not(debug_assertions))]
+impl PartialEq for Ply {
+    fn eq(&self, other: &Ply) -> bool {
+        self.0 == other.0
     }
 }
 

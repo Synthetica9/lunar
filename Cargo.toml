@@ -20,6 +20,7 @@ opt-level = 3
 strum = "0.24"
 strum_macros = "0.24"
 crossbeam-channel = "0.5"
+smallvec = "1.10"
 
 [dependencies.rand]
 version = "0.8"

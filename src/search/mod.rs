@@ -9,7 +9,9 @@ use std::time::Instant;
 
 // TODO: use stock rust channels?
 use crossbeam_channel as channel;
+use smallvec::SmallVec;
 
+use crate::bitboard::Bitboard;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
@@ -93,15 +95,25 @@ struct ThreadData {
     // repetition_table: RwLock<TranspositionTable>,
 }
 
+#[inline(always)]
 fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns {
     // @first specifies whether to immediately quit after finding a plausible advantage.
     let sq = ply.dst();
     let board = game.board();
     let attackers_defenders = board.squares_attacking_defending(sq);
 
-    let mut get_attackers = |side, include_current| {
-        let attackers = attackers_defenders & board.get_color(side);
-        let mut res = Vec::with_capacity(attackers.popcount() as usize + include_current as usize);
+    let mut get_attackers = &move |side, is_attacking| {
+        let attackers = {
+            let mut res = attackers_defenders;
+            res &= board.get_color(side);
+            if is_attacking {
+                // Handled seperately, must be the first attacker to be counted.
+                res &= !Bitboard::from_square(ply.src());
+            }
+            res
+        };
+        // let mut res = Vec::with_capacity(attackers.popcount() as usize + is_attacking as usize);
+        let mut res = SmallVec::<[_; 8]>::new();
         for attacker in attackers.iter_squares() {
             let piece = board.occupant_piece(attacker);
             debug_assert!(piece.is_some());
@@ -112,29 +124,28 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
         }
 
         // TODO: use PESTO midgame/endgame tables?
-        // Reversed sort.
         res.sort();
+        // These therefore have the most valuable pieces first. This means pop will
+        // return the least valuable one.
         res.reverse();
 
         // For defending, current occupant piece is also the first defender.
-        if include_current {
-            let piece = board.occupant_piece(sq);
-            debug_assert!(piece.is_some());
-            if let Some(piece) = piece {
-                res.push(piece.base_value());
-            }
+        // When attacking the src piece is also the first attacker.
+        let piece = board.occupant_piece(if is_attacking { ply.src() } else { sq });
+
+        debug_assert!(piece.is_some());
+
+        if let Some(piece) = piece {
+            res.push(piece.base_value());
         }
 
         res
     };
 
-    // These therefore have the most valuable pieces first. This means pop will
-    // return the least valuable one.
-
     let to_move = game.to_move();
     let to_move_other = to_move.other();
-    let mut attackers = get_attackers(&to_move, false);
-    let mut defenders = get_attackers(&to_move_other, true);
+    let mut attackers = get_attackers(&to_move, true);
+    let mut defenders = get_attackers(&to_move_other, false);
 
     debug_assert!(!attackers.is_empty());
     debug_assert!(!defenders.is_empty());
@@ -191,10 +202,9 @@ fn test_see() {
     use crate::square::squares::*;
     let game = Game::from_fen("8/K1k5/4p1b1/5q2/4PR2/8/8/8 w - - 0 1").unwrap();
     let ply = Ply::simple(E4, F5);
-    assert_eq!(
-        _static_exchange_evaluation(&game, ply, false),
-        Millipawns(8000)
-    );
+    assert_eq!(static_exchange_evaluation(&game, ply), Millipawns(8000));
+    let ply = Ply::simple(F4, F5);
+    assert_eq!(static_exchange_evaluation(&game, ply), Millipawns(4000));
 }
 
 impl ThreadData {
@@ -281,7 +291,7 @@ impl ThreadData {
         // TODO: Is this sound?
         // let evaluation = ...;
         (
-            100000 * (is_hash as i32) + 100 * (is_killer as i32) + see,
+            (1 << 16) * (is_hash as i32) + (1 << 7) * (is_killer as i32) + see,
             after_hash_value,
         )
     }
@@ -539,7 +549,7 @@ impl ThreadData {
 
         // TODO: static_assert
         debug_assert!(this.len() == 2);
-        if this[0] != Some(ply) {
+        if this[0].map_or(0, |x| x.as_u16()) != ply.as_u16() {
             this[1] = this[0];
             this[0] = Some(ply);
         }

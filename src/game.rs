@@ -1,3 +1,4 @@
+use smallvec::SmallVec;
 use strum::IntoEnumIterator;
 
 use crate::basic_enums::{CastleDirection, Color};
@@ -608,10 +609,10 @@ impl Game {
         self.filter_legal(&self.quiescence_pseudo_legal_moves())
     }
 
-    pub fn pins(&self, to: Square) -> Vec<(Square, Square)> {
+    pub fn pins(&self, to: Square) -> SmallVec<[(Square, Square); 4]> {
         // TODO: not king specific.
         // TODO: move to Board
-        let mut res = Vec::new();
+        let mut res = SmallVec::new();
 
         let board = &self.board;
         let occupied = board.get_occupied();
@@ -646,7 +647,7 @@ impl Game {
         res
     }
 
-    pub fn absolute_pins(&self) -> Vec<(Square, Square)> {
+    pub fn absolute_pins(&self) -> SmallVec<[(Square, Square); 4]> {
         let king = self
             .board
             .get(&self.to_move, &Piece::King)
