@@ -216,9 +216,13 @@ pub fn _combination_moves(
         let potential = move_table[src];
 
         for dst in (potential & *dsts).iter_squares() {
-            if can_promote {
+            use crate::square::ranks::*;
+            if can_promote && (dst.rank() == EIGHT || dst.rank() == ONE) {
                 // TODO: this is dumb. This should just happen here tbh.
-                plyset.push_mk_promotion(src, dst);
+                use Piece::*;
+                for piece in &[Queen, Rook, Bishop, Knight] {
+                    plyset.push(Ply::promotion(src, dst, *piece));
+                }
             } else {
                 plyset.push(Ply::simple(src, dst));
             }
