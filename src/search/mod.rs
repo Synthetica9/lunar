@@ -16,10 +16,10 @@ use smallvec::SmallVec;
 use crate::bitboard::Bitboard;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
+use crate::piece::Piece;
 use crate::ply::Ply;
 use crate::transposition_table::{TranspositionEntry, TranspositionTable};
 use crate::uci::TimePolicy;
-use crate::piece::Piece;
 use crate::zobrist_hash::ZobristHash;
 
 mod currently_searching;
@@ -103,7 +103,7 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
     // @first specifies whether to immediately quit after finding a plausible advantage.
     let board = game.board();
 
-    if !ply.is_capture(game) {
+    if !ply.is_capture(game) && !ply.is_en_passant() {
         return Millipawns(0);
     }
 
@@ -125,7 +125,7 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
 
         for piece in Piece::iter().rev() {
             if piece == Piece::King {
-                continue
+                continue;
             }
 
             let piece_attackers = attackers & board.get_piece(&piece);
@@ -136,7 +136,6 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
             // These have the most valuable pieces first. This means pop will
             // return the least valuable one.
         }
-
 
         // For defending, current occupant piece is also the first defender.
         // When attacking the src piece is also the first attacker.
@@ -314,6 +313,8 @@ impl ThreadData {
     ) -> Result<(Millipawns, Option<Ply>), ThreadCommand> {
         use crate::millipawns::*;
 
+        // Must be only incremented here because it is also used to initiate
+        // communication.
         self.nodes_searched += 1;
 
         // This causes a lot of branch mispredictions...
@@ -504,7 +505,6 @@ impl ThreadData {
         };
         self.transposition_table.put(game.hash(), tte);
 
-        // TODO: Account for distance effects, including mate in N
         Ok((alpha, best_move))
     }
 
@@ -515,7 +515,6 @@ impl ThreadData {
         beta: Millipawns,
     ) -> Millipawns {
         self.quiescence_nodes_searched += 1;
-        self.nodes_searched += 1;
 
         let stand_pat = game.evaluation();
 
@@ -606,7 +605,6 @@ impl SearchThreadPool {
             currently_searching,
             transposition_table,
 
-            // TODO: these fields are weird
             ponder: false,
             state: PoolState::Idle,
         }
@@ -683,7 +681,7 @@ impl SearchThreadPool {
                             nodes_searched,
                             quiescence_nodes_searched,
                         } => {
-                            *old_nodes_searched += nodes_searched;
+                            *old_nodes_searched += nodes_searched + quiescence_nodes_searched;
                             *old_quiescence_nodes_searched += quiescence_nodes_searched;
                         }
                     }
@@ -718,7 +716,8 @@ impl SearchThreadPool {
             match time_policy {
                 TimePolicy::Depth(depth) => best_depth >= depth,
                 TimePolicy::MoveTime(time) => {
-                    let elapsed = start_time.elapsed();
+                    // TODO: configurable
+                    let elapsed = start_time.elapsed() + Duration::from_millis(100);
                     elapsed >= *time
                 }
                 TimePolicy::Infinite => false,
@@ -753,7 +752,11 @@ impl SearchThreadPool {
 
             let mut info = String::new();
             info.push_str(&format!("info depth {} ", best_depth));
-            info.push_str(&format!("score cp {} ", score.0 / 10));
+            info.push_str(&if let Some(n) = score.is_mate_in_n() {
+                format!("score mate {} ", n)
+            } else {
+                format!("score cp {} ", score.0 / 10)
+            });
             info.push_str(&format!("nodes {} ", nodes_searched));
             info.push_str(&format!("nps {} ", nodes_per_second as usize));
             info.push_str(&format!("qnodes {} ", quiescence_nodes_searched));
@@ -773,17 +776,22 @@ impl SearchThreadPool {
         match self.state {
             PoolState::Idle => None,
             PoolState::Searching {
-                ref mut is_pondering,
-                best_move,
-                game,
-                ..
+                best_move, game, ..
             } => {
                 if policy_finished {
                     if self.ponder {
-                        *is_pondering = true;
                         let mut cpy = game.clone();
                         cpy.apply_ply(&best_move.unwrap());
                         self.start_search(&cpy, TimePolicy::Infinite);
+                        if let PoolState::Searching {
+                            ref mut is_pondering,
+                            ..
+                        } = self.state
+                        {
+                            *is_pondering = true;
+                        } else {
+                            unreachable!()
+                        }
                     } else {
                         self.stop();
                         self.state = PoolState::Idle;

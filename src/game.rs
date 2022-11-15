@@ -20,7 +20,6 @@ pub struct Game {
     board: Board,
     to_move: Color,
     castle_rights: CastleRights,
-    // TODO: should be a file, probably
     en_passant: Option<Square>,
     half_move: i16,
 
@@ -376,6 +375,7 @@ impl Game {
 
         let mut plyset = PlySet::new();
         // TODO: en passant?
+        // TODO: pawn promotions!
         self._pawn_captures(&mut plyset);
         self._knight_moves(&mut plyset, Must);
         self._bishop_moves(&mut plyset, Must);
@@ -577,13 +577,12 @@ impl Game {
                 // If we're not in check, we only need to check absolutely
                 // pinned pieces for illegal moves.
                 if absolute_pins.get(ply.src()) {
-                    // TODO: we know one exists, so we can load A1 or smth
-                    // instead of adding a mis-predictable panic jump.
+                    use crate::square::squares::A1;
                     let pinner = absolute_pin_pairs
                         .iter()
                         .filter(|p| p.0 == ply.src())
                         .next()
-                        .unwrap()
+                        .unwrap_or(&(A1, A1))
                         .1;
 
                     // Move on the pin or capture the pinning piece.
@@ -610,7 +609,6 @@ impl Game {
     }
 
     pub fn pins(&self, to: Square) -> SmallVec<[(Square, Square); 4]> {
-        // TODO: not king specific.
         // TODO: move to Board
         let mut res = SmallVec::new();
 
@@ -632,9 +630,10 @@ impl Game {
                 & (board.get_piece(&other) | queen);
             // TODO: up to here can be split out into a "pinners" function.
 
-            // Now we have a bitboard of pieces pinning something to the king.
+            // Now we have a bitboard of pieces pinning something to the square.
             // We need to find the piece that it is pinning.
             for pinner in pinners.iter_squares() {
+                // Todo: is an explicit interposition check better here?
                 // look in reverse
                 let path = Bitboard::magic_attacks(pinner, other, occupied);
                 let path = path & candidates;
@@ -789,7 +788,7 @@ impl Game {
         let dst = Square::from_fen_part(&name[2..4])?;
 
         let promotion_piece = match name.len() {
-            6 => Some(Piece::from_char(name.chars().nth(5).unwrap())?),
+            5 => Some(Piece::from_char(name.chars().nth(4).unwrap())?),
             _ => None,
         };
 

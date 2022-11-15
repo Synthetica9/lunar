@@ -40,17 +40,18 @@ fn squares() -> Vec<String> {
         .collect()
 }
 
-fn gen_squares() {
+fn gen_squares() -> std::io::Result<()> {
     let lines: Vec<_> = squares()
         .iter()
         .zip(0..64)
         .map(|(sq, i)| format!("pub const {}: Square = Square::from_index({});\n", sq, i))
         .collect();
 
-    let mut file = open("squares").unwrap();
+    let mut file = open("squares")?;
 
-    file.write_all("use crate::square::Square;\n\n".as_bytes());
+    file.write_all("use crate::square::Square;\n\n".as_bytes())?;
     for line in lines {
-        file.write_all(line.as_bytes()).unwrap();
+        file.write_all(line.as_bytes())?;
     }
+    Ok(())
 }

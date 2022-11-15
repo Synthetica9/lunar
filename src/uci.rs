@@ -60,7 +60,8 @@ impl UCIState {
         self.log("Warning. This is a debug build. 10x slower than release build.");
 
         loop {
-            match reader_chan.try_recv() {
+            use crossbeam_channel::RecvTimeoutError::*;
+            match reader_chan.recv_timeout(Duration::from_millis(50)) {
                 Ok(line) => {
                     let line = line.trim().to_string();
                     match self.interpret(&line) {
@@ -69,9 +70,10 @@ impl UCIState {
                     };
                 }
                 // No data available, this is fine.
-                Err(_) => {
-                    // sleep for 50ms
-                    std::thread::sleep(Duration::from_millis(200));
+                Err(Timeout) => {}
+                // The channel is closed, this is not fine.
+                Err(Disconnected) => {
+                    panic!("Reader thread disconnected");
                 }
             }
 
@@ -146,6 +148,9 @@ impl UCIState {
                         "fen" => {
                             while let Some(part) = parts.next() {
                                 if part == "moves" {
+                                    while let Some(part) = parts.next() {
+                                        moves.push(part.to_string());
+                                    }
                                     break;
                                 }
                                 fen.push_str(part);
@@ -438,16 +443,16 @@ pub fn run_uci() {
 }
 
 fn spawn_reader_thread() -> crossbeam_channel::Receiver<String> {
-    let stdin = std::io::stdin();
     let (tx, rx) = crossbeam_channel::unbounded();
 
     std::thread::spawn(move || {
-        let mut line = String::new();
-        loop {
-            line.clear();
-            stdin.read_line(&mut line).unwrap();
-            tx.send(line.trim().to_string()).unwrap();
+        use std::io::BufRead;
+        let lines = std::io::stdin().lock().lines();
+        for line in lines {
+            tx.send(line.expect("No line?").trim().to_string()).unwrap();
         }
+        // This kills the process.
+        tx.send("quit".to_string()).unwrap();
     });
 
     rx
