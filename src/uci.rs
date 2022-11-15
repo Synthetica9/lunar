@@ -54,6 +54,11 @@ impl UCIState {
     pub fn run(&mut self) {
         let reader_chan = spawn_reader_thread();
 
+        self.log(&format!("Starting {} v{}", NAME, VERSION));
+
+        #[cfg(debug_assertions)]
+        self.log("Warning. This is a debug build. 10x slower than release build.");
+
         loop {
             match reader_chan.try_recv() {
                 Ok(line) => {

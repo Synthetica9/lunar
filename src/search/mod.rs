@@ -1,6 +1,8 @@
 // Simplified ABDADA.
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
+use strum::IntoEnumIterator;
+
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
@@ -17,6 +19,7 @@ use crate::millipawns::Millipawns;
 use crate::ply::Ply;
 use crate::transposition_table::{TranspositionEntry, TranspositionTable};
 use crate::uci::TimePolicy;
+use crate::piece::Piece;
 use crate::zobrist_hash::ZobristHash;
 
 mod currently_searching;
@@ -98,8 +101,13 @@ struct ThreadData {
 #[inline(always)]
 fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns {
     // @first specifies whether to immediately quit after finding a plausible advantage.
-    let sq = ply.dst();
     let board = game.board();
+
+    if !ply.is_capture(game) {
+        return Millipawns(0);
+    }
+
+    let sq = ply.dst();
     let attackers_defenders = board.squares_attacking_defending(sq);
 
     let mut get_attackers = &move |side, is_attacking| {
@@ -114,20 +122,21 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
         };
         // let mut res = Vec::with_capacity(attackers.popcount() as usize + is_attacking as usize);
         let mut res = SmallVec::<[_; 8]>::new();
-        for attacker in attackers.iter_squares() {
-            let piece = board.occupant_piece(attacker);
-            debug_assert!(piece.is_some());
-            if let Some(piece) = piece {
-                // println!("{:?} is attacking {:?} with {:?}", side, sq, piece);
+
+        for piece in Piece::iter().rev() {
+            if piece == Piece::King {
+                continue
+            }
+
+            let piece_attackers = attackers & board.get_piece(&piece);
+            for i in 0..piece_attackers.popcount() {
+                // TODO: use PESTO midgame/endgame tables?
                 res.push(piece.base_value());
             }
+            // These have the most valuable pieces first. This means pop will
+            // return the least valuable one.
         }
 
-        // TODO: use PESTO midgame/endgame tables?
-        res.sort();
-        // These therefore have the most valuable pieces first. This means pop will
-        // return the least valuable one.
-        res.reverse();
 
         // For defending, current occupant piece is also the first defender.
         // When attacking the src piece is also the first attacker.
@@ -291,7 +300,7 @@ impl ThreadData {
         // TODO: Is this sound?
         // let evaluation = ...;
         (
-            (1 << 16) * (is_hash as i32) + (1 << 7) * (is_killer as i32) + see,
+            (1 << 24) * (is_hash as i32) + (1024) * (is_killer as i32) + see,
             after_hash_value,
         )
     }
@@ -506,6 +515,7 @@ impl ThreadData {
         beta: Millipawns,
     ) -> Millipawns {
         self.quiescence_nodes_searched += 1;
+        self.nodes_searched += 1;
 
         let stand_pat = game.evaluation();
 
@@ -765,11 +775,15 @@ impl SearchThreadPool {
             PoolState::Searching {
                 ref mut is_pondering,
                 best_move,
+                game,
                 ..
             } => {
-                if !*is_pondering && policy_finished {
+                if policy_finished {
                     if self.ponder {
                         *is_pondering = true;
+                        let mut cpy = game.clone();
+                        cpy.apply_ply(&best_move.unwrap());
+                        self.start_search(&cpy, TimePolicy::Infinite);
                     } else {
                         self.stop();
                         self.state = PoolState::Idle;

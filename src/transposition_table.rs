@@ -12,12 +12,12 @@ pub struct TranspositionTable {
 
 unsafe impl Sync for TranspositionTable {}
 
+// TODO: depth + always replace strategy.
 struct TranspositionLine {
     key: u64,
     value: TranspositionEntry,
 }
 
-// TODO: drop the option, use zero hash if not present.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TranspositionEntry {
     pub depth: u8,
