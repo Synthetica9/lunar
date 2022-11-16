@@ -304,7 +304,13 @@ impl Game {
             Color::Black => &bitboard_map::BLACK_PAWN_ATTACKS,
         };
 
-        self._step_moves_for(plyset, &Piece::Pawn, move_table, CapturePolicy::Must, quiescence_moves)
+        self._step_moves_for(
+            plyset,
+            &Piece::Pawn,
+            move_table,
+            CapturePolicy::Must,
+            quiescence_moves,
+        )
     }
 
     fn _en_passant_captures(&self, plyset: &mut PlySet) {

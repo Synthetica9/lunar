@@ -61,6 +61,7 @@ enum PoolState {
         score: Millipawns,
         best_move: Option<Ply>,
         best_depth: usize,
+        pv: Vec<Ply>,
 
         nodes_searched: usize,
         quiescence_nodes_searched: usize,
@@ -103,7 +104,7 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
     // @first specifies whether to immediately quit after finding a plausible advantage.
     let board = game.board();
 
-    if !ply.is_capture(game) && !ply.is_en_passant() {
+    if !ply.is_capture(game) || ply.is_en_passant() {
         return Millipawns(0);
     }
 
@@ -141,6 +142,7 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
         // When attacking the src piece is also the first attacker.
         let piece = board.occupant_piece(if is_attacking { ply.src() } else { sq });
 
+        // println!("ply: {:?}", ply);
         debug_assert!(piece.is_some());
 
         if let Some(piece) = piece {
@@ -631,6 +633,7 @@ impl SearchThreadPool {
             best_move: None,
             score: game.evaluation(),
             best_depth: 0,
+            pv: Vec::new(),
 
             nodes_searched: 0,
             quiescence_nodes_searched: 0,
@@ -642,7 +645,29 @@ impl SearchThreadPool {
         self.state = PoolState::Idle;
     }
 
+    fn update_pv(&mut self) {
+        match self.state {
+            PoolState::Searching {
+                game,
+                best_move,
+                ref mut pv,
+                ..
+            } => {
+                let old = if best_move.is_some() && (pv.is_empty() || pv[0] != best_move.unwrap()) {
+                    vec![best_move.unwrap()]
+                } else {
+                    pv.clone()
+                };
+
+                *pv = self.transposition_table.update_pv(&game, &old);
+            }
+            _ => {}
+        }
+    }
+
     pub fn communicate(&mut self) {
+        self.update_pv();
+
         for (_, _, status_r) in &self.threads {
             while let Ok(status) = status_r.try_recv() {
                 if let PoolState::Searching {
@@ -705,6 +730,13 @@ impl SearchThreadPool {
         self.ponder = ponder;
     }
 
+    pub fn pv(&self) -> Vec<Ply> {
+        match &self.state {
+            PoolState::Searching { pv, .. } => pv.clone(),
+            _ => Vec::new(),
+        }
+    }
+
     pub fn time_policy_finished(&self) -> bool {
         if let PoolState::Searching {
             start_time,
@@ -737,6 +769,7 @@ impl SearchThreadPool {
             start_time,
             best_depth,
             score,
+            pv,
             best_move,
             nodes_searched,
             quiescence_nodes_searched,
@@ -762,7 +795,10 @@ impl SearchThreadPool {
             info.push_str(&format!("qnodes {} ", quiescence_nodes_searched));
             info.push_str(&format!("qnps {} ", quiescence_nodes_per_second as usize));
             info.push_str(&format!("time {} ", (elapsed * 1000.0) as usize));
-            info.push_str(&format!("pv {} ", self.transposition_table.pv_uci(game)));
+            info.push_str(&format!(
+                "pv {} ",
+                crate::transposition_table::pv_uci(game, &pv)
+            ));
             info
         } else {
             "info string idle".to_string()

@@ -48,7 +48,8 @@ impl UCIState {
     }
 
     pub fn pv_string(&self) -> String {
-        self.transposition_table.pv_string(&self.game)
+        let pv = self.search_thread_pool.pv();
+        crate::transposition_table::pv_string(&self.game, &pv)
     }
 
     pub fn run(&mut self) {

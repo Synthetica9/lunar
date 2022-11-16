@@ -139,46 +139,43 @@ impl TranspositionTable {
         }
     }
 
-    pub fn pv_string(&self, game: &Game) -> String {
-        use crate::basic_enums::Color::*;
-
-        let pv = self.principle_variation(game);
-        let mut res = String::new();
-        let mut is_first = true;
+    pub fn update_pv(&self, game: &Game, old_pv: &[Ply]) -> Vec<Ply> {
         let mut game = *game;
+        let mut res = Vec::new();
+        let mut old_pv_relevant = true;
 
-        for ply in pv {
-            if is_first || game.to_move() == White {
-                res.push_str(&game.full_move().to_string());
-                res.push_str(". ");
+        for entry in old_pv.iter() {
+            let from_tt = self.get(game.hash());
+
+            let next = match from_tt {
+                Some(tte) => {
+                    if let Some(ply) = tte.best_move {
+                        if ply == *entry {
+                            Some(ply)
+                        } else {
+                            let pv = self.principle_variation(&game);
+                            res.extend(pv);
+                            return res
+                        }
+                    } else {
+                        None
+                    }
+                }
+                None => {
+                    Some(*entry)
+                }
+            };
+
+            match next {
+                Some(ply) => {
+                    res.push(ply);
+                    game.apply_ply(&ply);
+                }
+                None => {
+                    break;
+                }
             }
-
-            if is_first && game.to_move() == Black {
-                res.push_str("... ");
-            }
-
-            res.push_str(&game.ply_name(&ply));
-            res.push(' ');
-
-            game.apply_ply(&ply);
-            is_first = false;
         }
-
-        res
-    }
-
-    pub fn pv_uci(&self, game: &Game) -> String {
-        let pv = self.principle_variation(game);
-        let mut res = String::new();
-        let mut is_first = true;
-        for ply in pv {
-            if !is_first {
-                res.push(' ');
-            }
-            res.push_str(&ply.long_name());
-            is_first = false;
-        }
-
         res
     }
 
@@ -201,6 +198,48 @@ impl TranspositionTable {
 
         return false;
     }
+}
+
+// TODO: move to other file
+pub fn pv_string(game: &Game, pv: &[Ply]) -> String {
+    use crate::basic_enums::Color::*;
+
+    let mut res = String::new();
+    let mut is_first = true;
+    let mut game = *game;
+
+    for ply in pv {
+        if is_first || game.to_move() == White {
+            res.push_str(&game.full_move().to_string());
+            res.push_str(". ");
+        }
+
+        if is_first && game.to_move() == Black {
+            res.push_str("... ");
+        }
+
+        res.push_str(&game.ply_name(&ply));
+        res.push(' ');
+
+        game.apply_ply(&ply);
+        is_first = false;
+    }
+
+    res
+}
+
+pub fn pv_uci(game: &Game, pv: &[Ply]) -> String {
+    let mut res = String::new();
+    let mut is_first = true;
+    for ply in pv {
+        if !is_first {
+            res.push(' ');
+        }
+        res.push_str(&ply.long_name());
+        is_first = false;
+    }
+
+    res
 }
 
 #[cfg(test)]
