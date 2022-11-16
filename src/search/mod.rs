@@ -26,7 +26,7 @@ mod currently_searching;
 
 use currently_searching::CurrentlySearching;
 
-pub const COMMS_INTERVAL: usize = 1 << 16;
+pub const COMMS_INTERVAL: usize = 1 << 10;
 pub const ONE_MP: Millipawns = Millipawns(1);
 pub const N_KILLER_MOVES: usize = 2;
 
@@ -263,7 +263,7 @@ impl ThreadData {
     pub fn search(&mut self, game: &Game) -> ThreadCommand {
         use crate::millipawns::*;
         for depth in 1..255 {
-            // TODO: narrow alpha and beta?
+            // TODO: narrow alpha and beta? (aspiration windows)
             match self.alpha_beta_search(game, LOSS, WIN, depth) {
                 Ok((score, best_move)) => {
                     self.status_channel
@@ -294,7 +294,7 @@ impl ThreadData {
             .map_or(false, |tte| tte.best_move == Some(ply));
 
         let after_hash_value = match self.transposition_table.get(after.hash()) {
-            Some(tte) => tte.alpha,
+            Some(tte) => tte.value,
             None => crate::millipawns::LOSS,
         };
 
@@ -314,6 +314,7 @@ impl ThreadData {
         depth: usize,
     ) -> Result<(Millipawns, Option<Ply>), ThreadCommand> {
         use crate::millipawns::*;
+        use crate::transposition_table::TranspositionEntryType::*;
 
         // Must be only incremented here because it is also used to initiate
         // communication.
@@ -324,35 +325,42 @@ impl ThreadData {
             self.communicate()?;
         }
 
+        let alphaOrig = alpha;
+        let mut alpha = alpha;
+        let mut beta = beta;
+
         if let Some(tte) = self.transposition_table.get(game.hash()) {
-            if depth <= tte.depth as usize
-                && tte.alpha > alpha
-                && tte.beta < beta
-                && tte.best_move.is_some()
-            {
-                return Ok((tte.alpha, tte.best_move));
+            if depth <= tte.depth as usize && tte.value <= beta && tte.value >= alpha {
+                // println!("Transposition table hit");
+                // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
+                match tte.value_type {
+                    Exact => return Ok((tte.value, tte.best_move)),
+                    LowerBound => alpha = alpha.max(tte.value),
+                    UpperBound => beta = beta.min(tte.value),
+                }
+
+                if alpha >= beta {
+                    return Ok((tte.value, tte.best_move));
+                }
             }
         }
 
         if depth == 0 {
             use std::cmp::{max, min};
             let score = self.quiescence_search(game, alpha, beta);
-            let alpha = max(alpha, score);
-            let beta = min(beta, score);
-            let tte = TranspositionEntry {
-                depth: 0,
-                alpha,
-                beta,
-                best_move: None,
-            };
-            self.transposition_table.put(game.hash(), tte);
+            // let tte = TranspositionEntry {
+            //     depth: 0,
+            //     value: score,
+            //     value_type: Exact,
+            //     best_move: None,
+            // };
+            // self.transposition_table.put(game.hash(), tte);
             return Ok((score, None));
         }
 
         let mut deferred: Vec<(Ply, Game)> = Vec::new();
 
         let mut best_move = None;
-        let mut alpha = alpha;
 
         let moves = {
             use crate::ply::ApplyPly;
@@ -376,18 +384,17 @@ impl ThreadData {
 
         let mut i = -1;
 
-        // let mut next_depth = || {
-        //     if i < 6 || depth <= 3 { depth - 1 } else { depth / 3 }
-        // };
-
+        let mut x = LOSS;
         for (ply, next_game) in moves {
             i += 1;
 
             let is_first_move = i == 0;
 
-            let res = if is_first_move {
+            x = if is_first_move {
                 best_move = Some(ply);
-                self.alpha_beta_search(&next_game, -beta, -alpha, depth - 1)?
+                -self
+                    .alpha_beta_search(&next_game, -beta, -alpha, depth - 1)?
+                    .0
             } else {
                 if self.currently_searching.defer_move(next_game.hash(), depth) {
                     deferred.push((ply, next_game));
@@ -403,111 +410,91 @@ impl ThreadData {
                 self.currently_searching
                     .starting_search(next_game.hash(), next_depth);
 
-                // let depth = next_depth();
-                // let next_depth = depth - 1;
-
                 // Null-window search
-                let x = self.alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, next_depth)?;
+                x = -self
+                    .alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, next_depth)?
+                    .0;
 
-                let score = -(x.0);
-                let res = if score > alpha && score < beta {
-                    self.alpha_beta_search(&next_game, -beta, -alpha, next_depth)?
-                } else {
-                    x
+                if x > alpha && x < beta {
+                    x = -self
+                        .alpha_beta_search(&next_game, -beta, -alpha, next_depth)?
+                        .0;
                 };
 
                 self.currently_searching
                     .finished_search(next_game.hash(), next_depth);
 
-                res
+                x
             };
-
-            let x = -res.0;
 
             if x > alpha {
                 alpha = x;
                 best_move = Some(ply);
+            }
 
-                if alpha >= beta && !is_first_move {
-                    assert!(game.half_move_total() >= 0);
-                    self.insert_killer_move(ply, game.half_move_total() as usize);
-
-                    return if alpha.is_mate_in_n().is_some() {
-                        Ok((alpha - ONE_MP, best_move))
-                    } else {
-                        Ok((alpha, best_move))
-                    };
-                }
-
-                let tte = TranspositionEntry {
-                    depth: depth as u8,
-                    alpha,
-                    beta,
-                    best_move,
-                };
-                self.transposition_table.put(game.hash(), tte);
-            };
+            if alpha >= beta {
+                self.insert_killer_move(ply, game.half_move_total() as usize);
+                break;
+            }
         }
 
-        for (ply, next_game) in deferred {
-            i += 1;
+        if alpha < beta {
+            for (ply, next_game) in deferred {
+                i += 1;
 
-            // let next_depth = depth - 1;
-            let next_depth = if i < 6 || depth <= 3 {
-                depth - 1
-            } else {
-                depth / 3
-            };
-            // let depth = next_depth();
+                let next_depth = if i < 5 || depth <= 3 {
+                    depth - 1
+                } else {
+                    depth / 3
+                };
 
-            let res = self.alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, next_depth)?;
-            let x = -res.0;
-            let res = if x > alpha && x < beta {
-                self.alpha_beta_search(&next_game, -beta, -alpha, next_depth)?
-            } else {
-                res
-            };
-            let x = -res.0;
+                // Null-window search
+                x = -self
+                    .alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, next_depth)?
+                    .0;
 
-            if x > alpha {
-                alpha = x;
-                best_move = Some(ply);
+                if x > alpha && x < beta {
+                    x = -self
+                        .alpha_beta_search(&next_game, -beta, -alpha, next_depth)?
+                        .0;
+                };
 
-                if alpha >= beta {
-                    // save killer move
-                    self.insert_killer_move(ply, game.half_move_total() as usize);
-
-                    return Ok((alpha, best_move));
+                if x > alpha {
+                    alpha = x;
+                    best_move = Some(ply);
                 }
 
-                let tte = TranspositionEntry {
-                    depth: depth as u8,
-                    alpha,
-                    beta,
-                    best_move,
-                };
-                self.transposition_table.put(game.hash(), tte);
+                if alpha >= beta {
+                    self.insert_killer_move(ply, game.half_move_total() as usize);
+                    break;
+                }
             }
         }
 
         let alpha = if game.half_move() >= 100 {
             // TODO: start tapering off eval after ~50 halfmoves or so?
             DRAW
-        } else if alpha.is_mate_in_n().is_some() {
-            alpha - ONE_MP
         } else {
             alpha
         };
 
+        let value_type = if alpha <= alphaOrig {
+            UpperBound
+        } else if alpha >= beta {
+            LowerBound
+        } else {
+            Exact
+        };
+
         let tte = TranspositionEntry {
             depth: depth as u8,
-            alpha,
-            beta,
+            value: x,
+            value_type,
             best_move,
         };
         self.transposition_table.put(game.hash(), tte);
 
-        Ok((alpha, best_move))
+        Ok((x, best_move))
     }
 
     fn quiescence_search(
@@ -815,9 +802,17 @@ impl SearchThreadPool {
                 best_move, game, ..
             } => {
                 if policy_finished {
+                    let best_move = match best_move {
+                        Some(m) => m,
+                        None => {
+                            eprintln!("No best move found... this is bad!");
+
+                            game.legal_moves()[0]
+                        }
+                    };
                     if self.ponder {
                         let mut cpy = game.clone();
-                        cpy.apply_ply(&best_move.unwrap());
+                        cpy.apply_ply(&best_move);
                         self.start_search(&cpy, TimePolicy::Infinite);
                         if let PoolState::Searching {
                             ref mut is_pondering,
@@ -832,7 +827,7 @@ impl SearchThreadPool {
                         self.stop();
                         self.state = PoolState::Idle;
                     }
-                    Some(format!("bestmove {}", best_move.unwrap().long_name()))
+                    Some(format!("bestmove {}", best_move.long_name()))
                 } else {
                     None
                 }

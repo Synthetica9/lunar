@@ -19,30 +19,35 @@ struct TranspositionLine {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
+pub enum TranspositionEntryType {
+    Exact,
+    LowerBound,
+    UpperBound,
+}
+
+// TODO: aging?
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TranspositionEntry {
     pub depth: u8,
-    pub alpha: Millipawns,
-    pub beta: Millipawns,
     pub best_move: Option<Ply>,
+    pub value: Millipawns,
+    pub value_type: TranspositionEntryType,
 }
 
 impl TranspositionEntry {
     fn checksum(&self) -> u64 {
-        let mut res = 0;
-        res ^= ((self.depth as u64) << 0) ^ (self.best_move.map_or(0, |x| x.as_u16() as u64) << 8);
-
-        // 32 bit values
-        res ^= ((self.alpha.0 as u64) << 0) ^ ((self.beta.0 as u64) << 32);
-
-        res
+        ((self.depth as u64) << 0)
+            ^ ((self.value_type as u64) << 8)
+            ^ (self.best_move.map_or(0, |x| x.as_u16() as u64) << 16)
+            ^ ((self.value.0 as u64) << 32)
     }
 }
 
 const ZERO_ENTRY: TranspositionEntry = TranspositionEntry {
     depth: 0,
-    alpha: Millipawns(0),
-    beta: Millipawns(0),
+    value: Millipawns(0),
     best_move: None,
+    value_type: TranspositionEntryType::Exact,
 };
 
 const ENTRY_SIZE: usize = std::mem::size_of::<TranspositionLine>();
@@ -155,15 +160,13 @@ impl TranspositionTable {
                         } else {
                             let pv = self.principle_variation(&game);
                             res.extend(pv);
-                            return res
+                            return res;
                         }
                     } else {
                         None
                     }
                 }
-                None => {
-                    Some(*entry)
-                }
+                None => Some(*entry),
             };
 
             match next {
@@ -188,15 +191,9 @@ impl TranspositionTable {
             return true;
         }
 
-        // Check if the window is narrower
-        if (cand.alpha - cand.beta) <= (old.alpha - old.beta)
-        // And if it overlaps with the old window...
-            && (old.alpha <= cand.alpha || old.beta >= cand.beta)
-        {
-            return true;
-        }
+        // TODO: replace upper/lower bounds with exact values.
 
-        return false;
+        return true;
     }
 }
 
