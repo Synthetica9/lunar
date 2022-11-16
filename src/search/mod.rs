@@ -264,6 +264,8 @@ impl ThreadData {
         use crate::millipawns::*;
         for depth in 1..255 {
             // TODO: narrow alpha and beta? (aspiration windows)
+            // Tried this, available in aspiration-windows branch, but it
+            // seems to significantly weaken self-play.
             match self.alpha_beta_search(game, LOSS, WIN, depth) {
                 Ok((score, best_move)) => {
                     self.status_channel
