@@ -202,6 +202,7 @@ pub fn _combination_moves(
     dsts: &Bitboard,
     move_table: &BitboardMap,
     can_promote: bool,
+    quiescence_moves: bool,
 ) {
     // TODO: terrible name.
 
@@ -211,6 +212,7 @@ pub fn _combination_moves(
     // srcs is typically where pieces/pawns are
     // dsts is empty/enemy squares
     // can_promote determines whether we can promote.
+    // quiescence_moves determines whether we can promote to a non-queen piece.
 
     for src in srcs.iter_squares() {
         let potential = move_table[src];
@@ -219,8 +221,12 @@ pub fn _combination_moves(
             use crate::square::ranks::*;
             if can_promote && (dst.rank() == EIGHT || dst.rank() == ONE) {
                 use Piece::*;
-                for piece in &[Queen, Rook, Bishop, Knight] {
-                    plyset.push(Ply::promotion(src, dst, *piece));
+                if quiescence_moves {
+                    plyset.push(Ply::promotion(src, dst, Queen));
+                } else {
+                    for piece in &[Queen, Rook, Bishop, Knight] {
+                        plyset.push(Ply::promotion(src, dst, *piece));
+                    }
                 }
             } else {
                 plyset.push(Ply::simple(src, dst));

@@ -172,6 +172,7 @@ impl Game {
         piece_type: &Piece,
         move_table: &BitboardMap,
         capture_policy: CapturePolicy,
+        quiescence_moves: bool,
     ) {
         let board = &self.board;
         let color = &self.to_move;
@@ -183,25 +184,38 @@ impl Game {
         };
         let can_promote = piece_type == &Piece::Pawn;
 
-        _combination_moves(plyset, &srcs, &dsts, move_table, can_promote)
+        _combination_moves(
+            plyset,
+            &srcs,
+            &dsts,
+            move_table,
+            can_promote,
+            quiescence_moves,
+        )
     }
 
-    fn _knight_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
+    fn _knight_moves(&self, plyset: &mut PlySet, quiescence_moves: bool) {
+        use CapturePolicy::*;
+
         self._step_moves_for(
             plyset,
             &Piece::Knight,
             &bitboard_map::KNIGHT_MOVES,
-            capture_policy,
+            if quiescence_moves { Must } else { Can },
+            quiescence_moves,
         )
     }
 
     // Disregards castling
-    fn _simple_king_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
+    fn _simple_king_moves(&self, plyset: &mut PlySet, quiescence_moves: bool) {
+        use CapturePolicy::*;
+
         self._step_moves_for(
             plyset,
             &Piece::King,
             &bitboard_map::KING_MOVES,
-            capture_policy,
+            if quiescence_moves { Must } else { Can },
+            quiescence_moves,
         )
     }
 
@@ -237,17 +251,17 @@ impl Game {
     pub fn _king_moves(&self, plyset: &mut PlySet) {
         // Order matters here! Simple moves must be generated first to
         // efficiently check castling rules. (specifically castling through check)
-        self._simple_king_moves(plyset, CapturePolicy::Can);
+        self._simple_king_moves(plyset, false);
         self._castle_moves(plyset);
     }
 
-    fn _pawn_pushes(&self, plyset: &mut PlySet) {
+    fn _pawn_pushes(&self, plyset: &mut PlySet, quiescence_moves: bool) {
         let color = self.to_move;
         let pawns = self.board.get(&color, &Piece::Pawn);
         let direction = color.pawn_move_direction();
         let occupied = self.board.get_occupied();
 
-        {
+        if !quiescence_moves {
             // Double pushes
             let pawns_on_start_rank = pawns & color.pawn_start_rank().as_bitboard();
             let blocker_row = color.en_passant_rank().as_bitboard();
@@ -262,7 +276,14 @@ impl Game {
                 Color::Black => &bitboard_map::BLACK_PAWN_DOUBLE_MOVES,
             };
 
-            _combination_moves(plyset, &pawns_on_start_rank, &double_pushes, tbl, false);
+            _combination_moves(
+                plyset,
+                &pawns_on_start_rank,
+                &double_pushes,
+                tbl,
+                false,
+                false,
+            );
         }
         {
             // Single pushes
@@ -273,17 +294,17 @@ impl Game {
 
             let single_pushes = pawns.shift(direction) & !occupied;
 
-            _combination_moves(plyset, &pawns, &single_pushes, tbl, true);
+            _combination_moves(plyset, &pawns, &single_pushes, tbl, true, quiescence_moves);
         }
     }
 
-    fn _pawn_captures(&self, plyset: &mut PlySet) {
+    fn _pawn_captures(&self, plyset: &mut PlySet, quiescence_moves: bool) {
         let move_table = match self.to_move {
             Color::White => &bitboard_map::WHITE_PAWN_ATTACKS,
             Color::Black => &bitboard_map::BLACK_PAWN_ATTACKS,
         };
 
-        self._step_moves_for(plyset, &Piece::Pawn, move_table, CapturePolicy::Must)
+        self._step_moves_for(plyset, &Piece::Pawn, move_table, CapturePolicy::Must, quiescence_moves)
     }
 
     fn _en_passant_captures(&self, plyset: &mut PlySet) {
@@ -318,10 +339,12 @@ impl Game {
         }
     }
 
-    fn _pawn_moves(&self, plyset: &mut PlySet) {
-        self._pawn_pushes(plyset);
-        self._pawn_captures(plyset);
-        self._en_passant_captures(plyset);
+    fn _pawn_moves(&self, plyset: &mut PlySet, quiescence_moves: bool) {
+        self._pawn_pushes(plyset, quiescence_moves);
+        self._pawn_captures(plyset, quiescence_moves);
+        if !quiescence_moves {
+            self._en_passant_captures(plyset);
+        }
     }
 
     #[inline(always)]
@@ -361,8 +384,8 @@ impl Game {
         use CapturePolicy::Can;
         let mut plyset = PlySet::new();
 
-        self._pawn_moves(&mut plyset);
-        self._knight_moves(&mut plyset, Can);
+        self._pawn_moves(&mut plyset, false);
+        self._knight_moves(&mut plyset, false);
         self._bishop_moves(&mut plyset, Can);
         self._rook_moves(&mut plyset, Can);
         self._queen_moves(&mut plyset, Can);
@@ -372,16 +395,15 @@ impl Game {
 
     pub fn quiescence_pseudo_legal_moves(&self) -> PlySet {
         use CapturePolicy::Must;
-
         let mut plyset = PlySet::new();
         // TODO: en passant?
         // TODO: pawn promotions!
-        self._pawn_captures(&mut plyset);
-        self._knight_moves(&mut plyset, Must);
+        self._pawn_captures(&mut plyset, true);
+        self._knight_moves(&mut plyset, true);
         self._bishop_moves(&mut plyset, Must);
         self._rook_moves(&mut plyset, Must);
         self._queen_moves(&mut plyset, Must);
-        self._simple_king_moves(&mut plyset, Must);
+        self._simple_king_moves(&mut plyset, true);
 
         plyset
     }
@@ -442,7 +464,7 @@ impl Game {
 
         if check_count >= 2 {
             let mut candidates = PlySet::new();
-            self._simple_king_moves(&mut candidates, CapturePolicy::Can);
+            self._simple_king_moves(&mut candidates, false);
             return candidates
                 .iter()
                 .filter(|x| {
