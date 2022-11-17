@@ -10,7 +10,7 @@ pub mod pesto;
 
 pub fn good_bishop(game: &Game) -> Millipawns {
     use crate::bitboard::*;
-    let bonus_per_pawn = Millipawns(100);
+    let bonus_per_pawn = Millipawns(20);
 
     let board = game.board();
 
