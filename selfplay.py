@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -6,12 +8,15 @@ import sys
 
 
 def selfplay(old, new):
+    old_name, old_path = old
+    new_name, new_path = new
+
     with setup_chess_cli() as cli:
         subprocess.check_call(
             [
                 str(cli),
-                *("-engine", "name=lunar new", f"cmd={new}"),
-                *("-engine", "name=lunar old", f"cmd={old}"),
+                *("-engine", f"name=lunar new ({new_name})", f"cmd={new_path}"),
+                *("-engine", f"name=lunar old ({old_name})", f"cmd={old_path}"),
                 # Set opening book
                 *(
                     "-openings",
@@ -35,7 +40,7 @@ def compile_rev(rev):
         p = Path(d) / rev
         subprocess.check_call(["git", "worktree", "add", "--detach", str(p), rev])
         subprocess.check_call(["cargo", "build", "--release"], cwd=p)
-        yield p / "target/release/lunar"
+        yield (rev, p / "target/release/lunar")
         subprocess.check_call(["git", "worktree", "remove", str(p)])
 
 
