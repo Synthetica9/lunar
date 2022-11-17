@@ -10,8 +10,15 @@ def selfplay(old, new):
         subprocess.check_call(
             [
                 str(cli),
-                *("-engine", "name=lunar old", f"cmd={old}"),
                 *("-engine", "name=lunar new", f"cmd={new}"),
+                *("-engine", "name=lunar old", f"cmd={old}"),
+                # Set opening book
+                *(
+                    "-openings",
+                    "file=./test_data/blitz_openings.fen",
+                    "order=random",
+                    "-repeat",
+                ),
                 *("-each", "tc=20+1", "option.Hash=128"),
                 *("-pgn", "out.pgn"),
                 *("-sprt",),
