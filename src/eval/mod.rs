@@ -24,13 +24,22 @@ pub fn good_bishop(game: &Game) -> Millipawns {
         let is_white = white.get(sq);
         let our_pawns = pawns & white.flip_if(!is_white);
 
-        let other_color_pawns = our_pawns & LIGHT_SQUARES.flip_if(is_light);
+        // Only count pawns in front of the bishop.
+        let relevant_squares = if is_white {
+            !Bitboard::n_rows((sq.rank().as_index() as i8))
+        } else {
+            !Bitboard::n_rows(-(8 - sq.rank().as_index() as i8))
+        };
+
+        let relevant_pawns = our_pawns & relevant_squares;
+
+        let other_color_pawns = relevant_pawns & LIGHT_SQUARES.flip_if(is_light);
 
         score += bonus_per_pawn * multiplier * (other_color_pawns.popcount() as i32);
 
         // Biting on granite is especially bad.
         let attack_pattern = Bitboard::bishop_attacks(sq, EMPTY);
-        let granite_pawns = our_pawns & attack_pattern;
+        let granite_pawns = relevant_pawns & attack_pattern;
         score -= bonus_per_pawn * multiplier * (granite_pawns.popcount() as i32);
     }
 
@@ -40,12 +49,12 @@ pub fn good_bishop(game: &Game) -> Millipawns {
 #[test]
 fn test_good_bishop() {
     // White has a good bishop, black has an especially bad one.
-    let game = Game::from_fen("b3kb2/1p6/1Pp5/2Pp4/3Pp3/1B2P3/8/4K3 w - - 0 1").unwrap();
+    let game = Game::from_fen("b3k3/1p6/1Pp5/2Pp4/3Pp3/1B2P3/8/4K3 w - - 0 1").unwrap();
 
     let score = good_bishop(&game);
     println!("Score: {:?}", score);
 
-    assert!(good_bishop(&game) > Millipawns(0));
+    assert!(score > Millipawns(0));
 }
 
 pub fn rook_on_open_file(game: &Game) -> Millipawns {
@@ -82,7 +91,7 @@ fn test_rook_on_open_file() {
     let score = rook_on_open_file(&game);
     println!("Score: {:?}", score);
 
-    assert!(rook_on_open_file(&game) > Millipawns(0));
+    assert!(score > Millipawns(0));
 }
 
 pub fn evaluation(game: &Game) -> Millipawns {
