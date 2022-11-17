@@ -27,6 +27,8 @@ pub struct Game {
     // management? (Along with 3-fold draw bookkeeping.)
     half_move_total: i16,
     hash: ZobristHash,
+
+    last_move: Option<Ply>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,6 +71,10 @@ impl Game {
 
     pub const fn half_move_total(&self) -> i16 {
         self.half_move_total
+    }
+
+    pub const fn last_move(&self) -> Option<Ply> {
+        self.last_move
     }
 
     pub const fn hash(&self) -> ZobristHash {
@@ -116,6 +122,7 @@ impl Game {
             en_passant,
             half_move,
             half_move_total: (full_move - 1) * 2 + (to_move as i16),
+            last_move: None,
             hash,
         };
 
@@ -154,6 +161,8 @@ impl Game {
 
         // self.hash.apply_ply(&cln, ply);
         self._apply_ply(&cln, ply);
+
+        self.last_move = Some(*ply);
 
         debug_assert!(self.board.is_valid(), "board got hecked. {ply:?}");
     }

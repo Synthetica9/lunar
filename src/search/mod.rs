@@ -95,6 +95,7 @@ struct ThreadData {
     currently_searching: CurrentlySearching,
 
     killer_moves: Vec<[Option<Ply>; N_KILLER_MOVES]>,
+    counter_moves: [[Option<Ply>; 64]; 64],
     // TODO: implement
     // repetition_table: RwLock<TranspositionTable>,
 }
@@ -290,6 +291,11 @@ impl ThreadData {
             .get(game.half_move_total() as usize)
             .map_or(false, |x| x.contains(&Some(ply)));
 
+        let is_counter = game
+            .last_move()
+            .map_or(None, |x| *self.counter_move(x))
+            .map_or(false, |x| x == ply);
+
         let is_hash = self
             .transposition_table
             .get(game.hash())
@@ -303,7 +309,10 @@ impl ThreadData {
         // TODO: Is this sound?
         // let evaluation = ...;
         (
-            (1 << 24) * (is_hash as i32) + (1024) * (is_killer as i32) + see,
+            (1 << 24) * (is_hash as i32)
+                + (1024) * (is_killer as i32)
+                + (1024) * (is_counter as i32)
+                + see,
             after_hash_value,
         )
     }
@@ -436,6 +445,9 @@ impl ThreadData {
 
             if alpha >= beta {
                 self.insert_killer_move(ply, game.half_move_total() as usize);
+                if let Some(last_move) = game.last_move() {
+                    self.insert_counter_move(last_move, ply);
+                }
                 break;
             }
         }
@@ -468,6 +480,9 @@ impl ThreadData {
 
                 if alpha >= beta {
                     self.insert_killer_move(ply, game.half_move_total() as usize);
+                    if let Some(last_move) = game.last_move() {
+                        self.insert_counter_move(last_move, ply);
+                    }
                     break;
                 }
             }
@@ -557,6 +572,20 @@ impl ThreadData {
             this[0] = Some(ply);
         }
     }
+
+    fn insert_counter_move(&mut self, orig: Ply, counter: Ply) {
+        let src = orig.src();
+        let dst = orig.dst();
+
+        self.counter_moves[src.as_index()][dst.as_index()] = Some(counter);
+    }
+
+    fn counter_move<'a>(&'a self, ply: Ply) -> &'a Option<Ply> {
+        let src = ply.src();
+        let dst = ply.dst();
+
+        &self.counter_moves[src.as_index()][dst.as_index()]
+    }
 }
 
 impl SearchThreadPool {
@@ -588,6 +617,7 @@ impl SearchThreadPool {
                     transposition_table,
 
                     killer_moves: Vec::new(),
+                    counter_moves: [[None; 64]; 64],
                 };
                 runner.run();
             });
@@ -747,7 +777,13 @@ impl SearchThreadPool {
                     elapsed >= *time
                 }
                 Infinite => false,
-                FreeTime { wtime, btime, winc, binc, movestogo } => {
+                FreeTime {
+                    wtime,
+                    btime,
+                    winc,
+                    binc,
+                    movestogo,
+                } => {
                     // TODO: more accurate time management
                     // (things like waiting longer when the opponent has less time,
                     //  when the evaluation swings wildly, pv keeps changing, etc.)
