@@ -510,7 +510,7 @@ impl ThreadData {
     ) -> Millipawns {
         self.quiescence_nodes_searched += 1;
 
-        let stand_pat = game.evaluation();
+        let stand_pat = crate::eval::evaluation(game);
 
         if stand_pat >= beta {
             return beta;
@@ -623,7 +623,7 @@ impl SearchThreadPool {
             time_policy,
 
             best_move: None,
-            score: game.evaluation(),
+            score: crate::eval::evaluation(game),
             best_depth: 0,
             pv: Vec::new(),
 
@@ -747,7 +747,13 @@ impl SearchThreadPool {
                     elapsed >= *time
                 }
                 Infinite => false,
-                FreeTime { wtime, btime, winc, binc, movestogo } => {
+                FreeTime {
+                    wtime,
+                    btime,
+                    winc,
+                    binc,
+                    movestogo,
+                } => {
                     // TODO: more accurate time management
                     // (things like waiting longer when the opponent has less time,
                     //  when the evaluation swings wildly, pv keeps changing, etc.)

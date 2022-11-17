@@ -334,8 +334,8 @@ impl Board {
         use crate::bitboard::*;
 
         let bishops = self.get(color, &Piece::Bishop);
-        let has_black_bishop = !(bishops.and(BLACK_SQUARES)).is_empty();
-        let has_white_bishop = !(bishops.and(WHITE_SQUARES)).is_empty();
+        let has_black_bishop = !(bishops.and(LIGHT_SQUARES)).is_empty();
+        let has_white_bishop = !(bishops.and(DARK_SQUARES)).is_empty();
         has_black_bishop && has_white_bishop
     }
 

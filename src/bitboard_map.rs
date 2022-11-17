@@ -3,6 +3,8 @@ use crate::bitboard::{Bitboard, EMPTY};
 use crate::direction::{directions, Direction};
 use crate::square::Square;
 
+// TODO: These functions should be in a block and called once tbh. Probably
+// closer to the use site.
 pub struct BitboardMap([Bitboard; 64]);
 
 const fn step_moves(source: Square, directions: &[Direction]) -> Bitboard {

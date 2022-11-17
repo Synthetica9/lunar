@@ -143,6 +143,14 @@ impl Bitboard {
         *self ^= Bitboard::from_square(square);
     }
 
+    pub const fn flip_if(&self, cond: bool) -> Bitboard {
+        if cond {
+            self.not_const()
+        } else {
+            *self
+        }
+    }
+
     pub const fn row(row: u8) -> Bitboard {
         // TODO: replace with transpose
         // TODO: independent of row/col order
@@ -354,8 +362,8 @@ pub const VALID_CASTLE_DSTS: Bitboard = EMPTY
     .set(squares::C8)
     .set(squares::G8);
 
-pub const BLACK_SQUARES: Bitboard = Bitboard(0xAA55AA55AA55AA55);
-pub const WHITE_SQUARES: Bitboard = BLACK_SQUARES.not_const();
+pub const DARK_SQUARES: Bitboard = Bitboard(0xAA55AA55AA55AA55);
+pub const LIGHT_SQUARES: Bitboard = DARK_SQUARES.not_const();
 
 impl Debug for Bitboard {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> std::fmt::Result {
@@ -457,11 +465,10 @@ impl std::ops::Not for Bitboard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::square::squares::*;
 
     #[test]
     fn test_constants() {
-        use crate::square::squares::*;
-
         assert!(ROW_1.get(D1));
         assert!(ROW_2.get(E2));
         assert!(ROW_8.get(A8));
@@ -471,13 +478,12 @@ mod tests {
 
         assert!(CENTRAL_16.get(D4));
 
-        assert!(BLACK_SQUARES.get(A1));
+        assert!(DARK_SQUARES.get(A1));
     }
 
     #[test]
     fn test_shift_single() {
         use crate::direction::directions::*;
-        use crate::square::squares::*;
 
         let sq = Bitboard::from_square(D4);
         assert_eq!(sq.shift(N), Bitboard::from_square(D5));
@@ -534,8 +540,6 @@ mod tests {
 
     #[test]
     fn test_popcount() {
-        use crate::square::squares::*;
-
         let bb = EMPTY;
         assert_eq!(bb.popcount(), 0);
         let bb = bb.set(A1);
@@ -551,8 +555,6 @@ mod tests {
 
     #[test]
     fn test_bitboard_square_iter() {
-        use crate::square::squares::*;
-
         let bb = Bitboard::from_squares(&[A1, H8]);
         let mut iter = bb.iter_squares();
         assert_eq!(iter.next(), Some(A1));
@@ -562,8 +564,6 @@ mod tests {
 
     #[test]
     fn test_first_last_occupied() {
-        use crate::square::squares::*;
-
         let bb = Bitboard::from_squares(&[A1, A8, H1, H8]);
         assert_eq!(bb.first_occupied(), Some(A1));
         assert_eq!(bb.last_occupied(), Some(H8));
@@ -573,7 +573,6 @@ mod tests {
 
     #[test]
     fn test_first_occupied_or_a1() {
-        use crate::square::squares::*;
         assert_eq!(EMPTY.first_occupied_or_a1(), A1);
         assert_eq!(Bitboard::from_square(B2).first_occupied_or_a1(), B2);
     }

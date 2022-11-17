@@ -859,15 +859,6 @@ impl Game {
         self.board.simple_render()
     }
 
-    pub fn evaluation(&self) -> Millipawns {
-        use crate::millipawns::*;
-        use crate::pesto;
-        let mut res = Millipawns(0);
-        // res -= Millipawns(100) * (self.is_in_check() as i32);
-        res += pesto::eval(self);
-        return res;
-    }
-
     pub fn perft(&self, depth: u8, print: bool) -> u64 {
         if depth == 0 {
             return 1;

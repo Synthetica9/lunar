@@ -207,6 +207,15 @@ impl Square {
     pub const fn flip_vert(&self) -> Square {
         Square(self.0 ^ 56)
     }
+
+    pub const fn is_dark(&self) -> bool {
+        // B1 is light, A1 is dark.
+        self.as_index() % 2 == 0
+    }
+
+    pub const fn is_light(&self) -> bool {
+        !self.is_dark()
+    }
 }
 
 pub struct SquareIter(Range<u8>);
