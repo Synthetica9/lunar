@@ -18,6 +18,7 @@ struct TranspositionLine {
     value: TranspositionEntry,
 }
 
+// TODO: rename to ValueType?
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum TranspositionEntryType {
     Exact,
@@ -250,9 +251,9 @@ mod tests {
         let game = Game::new();
         let entry = TranspositionEntry {
             depth: 123,
-            alpha: Millipawns(456),
-            beta: Millipawns(789),
+            value: Millipawns(456),
             best_move: None,
+            value_type: TranspositionEntryType::Exact,
         };
 
         tt.put(game.hash(), entry);
