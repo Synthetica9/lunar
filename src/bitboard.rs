@@ -10,13 +10,8 @@ use crate::square::{files, ranks, squares, Square, SquareIter};
 pub struct Bitboard(pub u64);
 
 impl Bitboard {
-    #[cfg_attr(target_arch = "x86_64", target_feature(enable = "popcnt"))]
-    const unsafe fn _popcount(self) -> u8 {
-        self.0.count_ones() as u8
-    }
-
     pub const fn popcount(self) -> u8 {
-        unsafe { self._popcount() }
+        self.0.count_ones() as u8
     }
 
     pub const fn is_empty(self) -> bool {
