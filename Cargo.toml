@@ -11,6 +11,8 @@ authors = [
 [profile.release]
 lto = true
 opt-level = 3
+panic = "abort"
+codegen-units = 1
 
 # Make the build script run faster.
 [profile.dev]
