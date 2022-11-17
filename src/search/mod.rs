@@ -734,18 +734,37 @@ impl SearchThreadPool {
             start_time,
             time_policy,
             best_depth,
+            game,
             ..
         } = &self.state
         {
+            use TimePolicy::*;
             match time_policy {
-                TimePolicy::Depth(depth) => best_depth >= depth,
-                TimePolicy::MoveTime(time) => {
+                Depth(depth) => best_depth >= depth,
+                MoveTime(time) => {
                     // TODO: configurable
                     let elapsed = start_time.elapsed() + Duration::from_millis(100);
                     elapsed >= *time
                 }
-                TimePolicy::Infinite => false,
-                _ => todo!(),
+                Infinite => false,
+                FreeTime { wtime, btime, winc, binc, movestogo } => {
+                    // TODO: more accurate time management
+                    // (things like waiting longer when the opponent has less time,
+                    //  when the evaluation swings wildly, pv keeps changing, etc.)
+                    use crate::basic_enums::Color::*;
+
+                    let elapsed = start_time.elapsed();
+                    let (time, inc) = match game.to_move() {
+                        White => (*wtime, *winc),
+                        Black => (*btime, *binc),
+                    };
+
+                    let inc = inc.unwrap_or(Duration::from_millis(0));
+
+                    let moves_to_go = movestogo.unwrap_or(40) as u32;
+                    let time_per_move = (time + inc * (moves_to_go - 1)) / moves_to_go;
+                    elapsed >= time_per_move
+                }
             }
         } else {
             false

@@ -178,16 +178,17 @@ impl UCIState {
                 }
             }
             "go" => {
+                use TimePolicy::*;
                 let mut time_policy = TimePolicy::Infinite;
                 while let Some(part) = parts.next() {
-                    time_policy = match part {
+                    match part {
                         "depth" => {
                             let depth = parts
                                 .next()
                                 .ok_or("depth not specified")?
                                 .parse::<usize>()
                                 .map_err(|x| x.to_string())?;
-                            TimePolicy::Depth(depth)
+                            time_policy = Depth(depth)
                         }
                         "movetime" => {
                             let move_time = parts
@@ -195,14 +196,49 @@ impl UCIState {
                                 .ok_or("time not specified")?
                                 .parse::<u64>()
                                 .map_err(|x| x.to_string())?;
-                            TimePolicy::MoveTime(Duration::from_millis(move_time))
+                            time_policy = MoveTime(Duration::from_millis(move_time))
                         }
-                        "infinite" => TimePolicy::Infinite,
+                        "infinite" => time_policy = Infinite,
+                        "wtime" | "btime" | "winc" | "binc" | "movestogo" => {
+                            // All specify free time is gonna be used.
+                            // First, make sure we are using free time.
+                            match time_policy {
+                                FreeTime { .. } => {}
+                                _ => {
+                                    time_policy = NEW_FREE_TIME;
+                                }
+                            }
+
+                            // Now, update the time policy.
+                            let val = parts
+                                .next()
+                                .ok_or(format!("{} not specified", part))?
+                                .parse::<u64>()
+                                .map_err(|x| x.to_string())?;
+                            if let FreeTime {
+                                ref mut wtime,
+                                ref mut btime,
+                                ref mut winc,
+                                ref mut binc,
+                                ref mut movestogo,
+                            } = time_policy
+                            {
+                                match part {
+                                    "wtime" => *wtime = Duration::from_millis(val),
+                                    "btime" => *btime = Duration::from_millis(val),
+                                    "winc" => *winc = Some(Duration::from_millis(val)),
+                                    "binc" => *binc = Some(Duration::from_millis(val)),
+                                    "movestogo" => *movestogo = Some(val),
+                                    _ => unreachable!(),
+                                }
+                            }
+                        }
                         _ => {
                             return Err(format!("Unknown go command: {}", part));
                         }
                     };
                 }
+                println!("Time policy: {:?}", time_policy);
                 self.search_thread_pool
                     .start_search(&self.game, time_policy);
             }
@@ -344,19 +380,27 @@ const AVAILABLE_OPTIONS: &AvailableOptions = &AvailableOptions({
     ]
 });
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum TimePolicy {
     MoveTime(std::time::Duration),
     Depth(usize),
     Infinite,
     FreeTime {
-        wtime: i64,
-        btime: i64,
-        winc: i64,
-        binc: i64,
-        movestogo: i64,
+        wtime: std::time::Duration,
+        btime: std::time::Duration,
+        winc: Option<std::time::Duration>,
+        binc: Option<std::time::Duration>,
+        movestogo: Option<u64>,
     },
 }
+
+const NEW_FREE_TIME: TimePolicy = TimePolicy::FreeTime {
+    wtime: Duration::from_millis(0),
+    btime: Duration::from_millis(0),
+    winc: None,
+    binc: None,
+    movestogo: None,
+};
 
 struct AvailableOptions<'a>([UCIOption<'a>; 4]);
 
