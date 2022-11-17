@@ -485,6 +485,9 @@ impl ThreadData {
         } else if alpha >= beta {
             LowerBound
         } else {
+            if let Some(_) = x.is_mate_in_n() {
+                x -= ONE_MP * x.0.signum();
+            }
             Exact
         };
 
