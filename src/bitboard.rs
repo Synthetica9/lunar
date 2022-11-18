@@ -180,11 +180,15 @@ impl Bitboard {
     pub fn flip_vertical(self) -> Bitboard {
         // https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating#Vertical
         // TODO: which flavour of x86_64 supports this?
-        #[cfg(all(target_arch = "x86_64", feature="asm"))]
+        #[cfg(all(target_arch = "x86_64", feature = "asm"))]
         {
             let mut res = self.0;
             unsafe {
-                std::arch::asm!("bswap {x}", x = inout(reg) res);
+                std::arch::asm!(
+                    "bswap {x}",
+                    x = inout(reg) res,
+                    options(pure, nomem, nostack, preserves_flags)
+                );
             }
             return Bitboard(res);
         }
