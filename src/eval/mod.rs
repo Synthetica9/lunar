@@ -1,3 +1,5 @@
+use strum::IntoEnumIterator;
+
 use crate::basic_enums::Color;
 use crate::bitboard::Bitboard;
 use crate::bitboard_map::BitboardMap;
@@ -111,6 +113,45 @@ fn test_rook_on_open_file() {
     assert!(score < Millipawns(0));
 }
 
+fn doubled_pawns(game: &Game) -> Millipawns {
+    let mut score = Millipawns(0);
+    let penalty_per_doubled_pawn = Millipawns(-100);
+
+    let board = game.board();
+    let pawns = board.get_piece(&Piece::Pawn);
+    let white = board.get_color(&Color::White);
+
+    for color in Color::iter() {
+        let mult = if color == Color::White { 1 } else { -1 };
+
+        let pawns = pawns & white.flip_if(color != Color::White);
+        let doubled = pawns & pawns.shift(crate::direction::directions::N);
+        let n_doubled = doubled.popcount() as i32;
+
+        score += penalty_per_doubled_pawn * n_doubled * mult;
+    }
+
+    let multiplier = if game.to_move() == Color::White { 1 } else { -1 };
+    return score * multiplier;
+}
+
+#[test]
+fn test_doubled_pawns() {
+    let mut game = Game::from_fen("4k3/1p1p1p1p/1p1p1p1p/8/8/8/PPPPPPPP/4K3 w - - 0 1").unwrap();
+    let score = doubled_pawns(&game);
+
+    println!("Score: {:?}", score);
+
+    assert!(score > Millipawns(0));
+
+    game.make_move("a3").unwrap();
+
+    let score = doubled_pawns(&game);
+    println!("Score: {:?}", score);
+
+    assert!(score < Millipawns(0));
+}
+
 pub fn evaluation(game: &Game) -> Millipawns {
     use crate::eval::pesto;
     use crate::millipawns::*;
@@ -118,5 +159,6 @@ pub fn evaluation(game: &Game) -> Millipawns {
     res += pesto::eval(game);
     res += good_bishop(game);
     res += rook_on_open_file(game);
+    res += doubled_pawns(game);
     res
 }
