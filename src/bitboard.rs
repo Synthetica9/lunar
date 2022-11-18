@@ -177,11 +177,31 @@ impl Bitboard {
         todo!();
     }
 
-    pub const fn flip_vertical(self) -> Bitboard {
-        todo!();
+    pub fn flip_vertical(self) -> Bitboard {
+        // https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating#Vertical
+        // TODO: which flavour of x86_64 supports this?
+        #[cfg(target_arch = "x86_64")]
+        {
+            let mut res = self.0;
+            unsafe {
+                std::arch::asm!("bswap {x}", x = inout(reg) res);
+            }
+            return Bitboard(res);
+        }
+
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            let k1 = 0x00FF00FF00FF00FF;
+            let k2 = 0x0000FFFF0000FFFF;
+            let x = self.0;
+            let x = ((x >> 8) & k1) | ((x & k1) << 8);
+            let x = ((x >> 16) & k2) | ((x & k2) << 16);
+            let x = (x >> 32) | (x << 32);
+            return Bitboard(x);
+        }
     }
 
-    pub const fn transpose(self) -> Bitboard {
+    pub fn transpose(self) -> Bitboard {
         // is this correct?
         self.flip_vertical().flip_horizontal()
     }
@@ -575,5 +595,19 @@ mod tests {
     fn test_first_occupied_or_a1() {
         assert_eq!(EMPTY.first_occupied_or_a1(), A1);
         assert_eq!(Bitboard::from_square(B2).first_occupied_or_a1(), B2);
+    }
+
+    #[test]
+    fn test_flip_vertical() {
+        let bb = Bitboard::from_squares(&[A1, B2, C3, D4, E5, F6, G7, H8]);
+        println!("Before:\n{}", bb.simple_render());
+
+        let flipped = bb.flip_vertical();
+        println!("After:\n{}", flipped.simple_render());
+
+        assert_eq!(
+            flipped,
+            Bitboard::from_squares(&[A8, B7, C6, D5, E4, F3, G2, H1])
+        );
     }
 }
