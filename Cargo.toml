@@ -8,6 +8,12 @@ authors = [
   "Patrick Hilhorst"
 ]
 
+[features]
+default = ["asm"]
+# Enables custom assembly. Can be disabled on platforms that support it
+# to test "generic" code. All ASM _should_ be feature-gated.
+asm = []
+
 [profile.release]
 lto = true
 opt-level = 3

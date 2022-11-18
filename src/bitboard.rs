@@ -180,7 +180,7 @@ impl Bitboard {
     pub fn flip_vertical(self) -> Bitboard {
         // https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating#Vertical
         // TODO: which flavour of x86_64 supports this?
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(all(target_arch = "x86_64", feature="asm"))]
         {
             let mut res = self.0;
             unsafe {
@@ -189,16 +189,13 @@ impl Bitboard {
             return Bitboard(res);
         }
 
-        #[cfg(not(target_arch = "x86_64"))]
-        {
-            let k1 = 0x00FF00FF00FF00FF;
-            let k2 = 0x0000FFFF0000FFFF;
-            let x = self.0;
-            let x = ((x >> 8) & k1) | ((x & k1) << 8);
-            let x = ((x >> 16) & k2) | ((x & k2) << 16);
-            let x = (x >> 32) | (x << 32);
-            return Bitboard(x);
-        }
+        let k1 = 0x00FF00FF00FF00FF;
+        let k2 = 0x0000FFFF0000FFFF;
+        let x = self.0;
+        let x = ((x >> 8) & k1) | ((x & k1) << 8);
+        let x = ((x >> 16) & k2) | ((x & k2) << 16);
+        let x = (x >> 32) | (x << 32);
+        Bitboard(x)
     }
 
     pub fn transpose(self) -> Bitboard {
