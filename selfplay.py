@@ -25,6 +25,8 @@ def selfplay(old, new):
                     "-repeat",
                 ),
                 *("-each", "tc=20+1", "option.Hash=128"),
+                *("-resign", "score=1000", "count=10"),
+                *("-draw", "number=40", "score=50", "count=20"),
                 *("-pgn", "out.pgn"),
                 *("-sprt",),
                 *("-concurrency", "2"),
