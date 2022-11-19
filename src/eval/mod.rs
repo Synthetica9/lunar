@@ -131,7 +131,11 @@ fn doubled_pawns(game: &Game) -> Millipawns {
         score += penalty_per_doubled_pawn * n_doubled * mult;
     }
 
-    let multiplier = if game.to_move() == Color::White { 1 } else { -1 };
+    let multiplier = if game.to_move() == Color::White {
+        1
+    } else {
+        -1
+    };
     return score * multiplier;
 }
 

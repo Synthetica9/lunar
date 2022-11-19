@@ -87,6 +87,7 @@ impl TranspositionTable {
     }
 
     pub fn get(&self, hash: ZobristHash) -> Option<TranspositionEntry> {
+        // TODO: check if hash matches current value. If not, replace with zeros.
         let slot = self.slot(hash);
         let ptr: *mut TranspositionLine = self.table[slot].get();
         let content: TranspositionLine = unsafe {
@@ -188,13 +189,13 @@ impl TranspositionTable {
         //     return true;
         // }
 
-        if old.depth <= cand.depth {
+        if old.depth < cand.depth {
             return true;
         }
 
         // TODO: replace upper/lower bounds with exact values.
 
-        return true;
+        return false;
     }
 }
 

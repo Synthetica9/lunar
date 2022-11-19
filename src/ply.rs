@@ -18,7 +18,7 @@ use crate::square::{files, Square};
 /// bit 14-15: promotion piece type - 1 (from KNIGHT-1 to QUEEN-1)
 /// NOTE: EN-PASSANT bit is set only when a pawn can be captured
 
-#[derive(Copy, Clone, Eq)]
+#[derive(Copy, Clone, Eq, Ord, PartialOrd)]
 pub struct Ply(u16);
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -202,7 +202,6 @@ pub fn _combination_moves(
     dsts: &Bitboard,
     move_table: &BitboardMap,
     can_promote: bool,
-    quiescence_moves: bool,
 ) {
     // TODO: terrible name.
 
@@ -221,12 +220,8 @@ pub fn _combination_moves(
             use crate::square::ranks::*;
             if can_promote && (dst.rank() == EIGHT || dst.rank() == ONE) {
                 use Piece::*;
-                if quiescence_moves {
-                    plyset.push(Ply::promotion(src, dst, Queen));
-                } else {
-                    for piece in &[Queen, Rook, Bishop, Knight] {
-                        plyset.push(Ply::promotion(src, dst, *piece));
-                    }
+                for piece in &[Queen, Rook, Bishop, Knight] {
+                    plyset.push(Ply::promotion(src, dst, *piece));
                 }
             } else {
                 plyset.push(Ply::simple(src, dst));
