@@ -7,6 +7,7 @@ pub mod castlerights;
 pub mod direction;
 pub mod eval;
 pub mod game;
+pub mod legality;
 pub mod millipawns;
 pub mod piece;
 pub mod ply;

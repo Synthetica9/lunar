@@ -169,9 +169,11 @@ impl ThreadData {
     fn order_number(&self, ply: Ply, game: &Game, after: &Game) -> (i32, Millipawns) {
         let see = static_exchange_evaluation(game, ply).0;
 
+        let move_total = game.half_move() as usize;
+
         let is_killer = self
             .killer_moves
-            .get(game.half_move_total() as usize)
+            .get(move_total)
             .map_or(false, |x| x.contains(&Some(ply)));
 
         let is_hash = self

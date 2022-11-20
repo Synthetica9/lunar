@@ -52,6 +52,12 @@ impl Board {
         self.get_color(color).and(self.get_piece(piece))
     }
 
+    pub const fn king_square(&self, color: &Color) -> Square {
+        let king = self.get(color, &Piece::King);
+        debug_assert!(!king.is_empty());
+        king.first_occupied_or_a1()
+    }
+
     const PIECE_OPTION_ARRAY: [Option<Piece>; 8] = {
         use crate::piece::Piece::*;
 

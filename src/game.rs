@@ -412,213 +412,24 @@ impl Game {
         pseudo_legal_moves.iter().collect::<Vec<_>>().contains(&ply)
     }
 
-    fn filter_legal(&self, candidates: &PlySet) -> Vec<Ply> {
-        let leaves_own_king_in_check = |ply| {
-            // At the top to not accidentally shadow any variables.
-            let mut cpy = self.clone();
-            cpy.apply_ply(ply);
-
-            // TODO: move to Board.get_king_square(color)
-            let king = cpy.board.get(&cpy.to_move.other(), &Piece::King);
-            debug_assert!(!king.is_empty());
-            let king_sq = king.first_occupied_or_a1();
-            let attackers = cpy.board.squares_attacking(&cpy.to_move, king_sq);
-
-            !attackers.is_empty()
-        };
-
-        // Fen is used in multiple debug statements. We don't want to calculate
-        // it with every move even in debug mode, but don't want to calculate it
-        // at all in production.
-        let fen = {
-            #[cfg(debug_assertions)]
-            let res = self.to_fen();
-
-            #[cfg(not(debug_assertions))]
-            let res = 0;
-
-            res
-        };
-
-        let king = self.board.get(&self.to_move, &Piece::King);
-        let king_sq = king.first_occupied_or_a1();
-
-        let king_attackers = self.board.squares_attacking(&self.to_move.other(), king_sq);
-        let check_count = king_attackers.popcount();
-
-        let occupancy = self.board.get_occupied();
-
-        // If the king wasn't there, which squares would be attacked?
-        let attackers_without_king = self
-            .board
-            .attacked_squares_with_occupancy(&self.to_move.other(), occupancy & !king);
-
-        if check_count >= 2 {
-            let mut candidates = PlySet::new();
-            self._simple_king_moves(&mut candidates, false);
-            return candidates
-                .iter()
-                .filter(|x| {
-                    let is_safe = !attackers_without_king.get(x.dst());
-                    debug_assert!(
-                        is_safe == !leaves_own_king_in_check(x),
-                        "Inconsistency between is_safe and reference impl! {x:?}\n{fen}"
-                    );
-                    is_safe
-                })
-                .map(|x| *x)
-                .collect();
-        }
-
-        let mut res = Vec::with_capacity(candidates.len());
-
-        let in_check = check_count != 0;
-        let absolute_pin_pairs = self.absolute_pins();
-        let absolute_pins = {
-            let mut res = Bitboard::new();
-            for (pin, _pinner) in absolute_pin_pairs.iter() {
-                res |= Bitboard::from_square(*pin);
-            }
-            res
-        };
-        let occupied = self.board.get_occupied();
-
-        // Use some assumed knowledge: "normal" king moves come before castling moves.
-        // This means we know whether king moves are legal or not by the time we get to castling moves.
-        let mut partial_oo_legal = false;
-        let mut partial_ooo_legal = false;
-
-        for ply in candidates.iter() {
-            if ply.src() == king_sq {
-                use crate::square::files;
-
-                let dst_attacked = attackers_without_king.get(ply.dst());
-                debug_assert!(
-                    ply.is_castling() || (dst_attacked == leaves_own_king_in_check(ply)),
-                    "Attacked destination not equivalent to leaving in check! {ply:?}\n{fen}"
-                );
-
-                if dst_attacked {
-                    continue;
-                }
-
-                if !ply.is_castling() {
-                    // At this point, we know that the king move is legal.
-                    // We still do the bookkeeping for castling legality.
-                    if ply.dst().rank() == self.to_move.home_rank() {
-                        match ply.dst().file() {
-                            files::D => partial_ooo_legal = true,
-                            files::F => partial_oo_legal = true,
-                            _ => (),
-                        }
-                    }
-                }
-                // Castling
-                else {
-                    if in_check {
-                        // Can't castle out of check.
-                        continue;
-                    }
-
-                    // Can't castle through check.
-                    // Castling _into_ check is handled by the regular logic.
-                    match ply.dst().file() {
-                        files::C => {
-                            if !partial_ooo_legal {
-                                continue;
-                            }
-                        }
-                        files::G => {
-                            if !partial_oo_legal {
-                                continue;
-                            }
-                        }
-                        _ => panic!("Invalid castle"),
-                    }
-                }
-            } else if ply.is_en_passant() {
-                // En passant can just be a bit tricky.
-                // See for example:
-                // 8/8/3p4/1Pp4r/1K3p2/6k1/4P1P1/1R6 w - c6 0 3
-                // TODO: use correct heuristics here.
-                if leaves_own_king_in_check(ply) {
-                    continue;
-                }
-            } else if in_check {
-                // We're not moving the king. Also, we're in (single) check.
-                debug_assert!(king_attackers.popcount() == 1);
-                debug_assert!(ply.moved_piece(self) != Piece::King);
-
-                let moves_absolute_pin = absolute_pins.get(ply.src());
-                if moves_absolute_pin {
-                    debug_assert!(
-                        leaves_own_king_in_check(ply),
-                        "moved out of absolute pin in check, but it was resolved? {ply:?}\n{fen}"
-                    );
-                    continue;
-                };
-
-                // 3 ways out of check:
-
-                // 1. "King moves to non attacked squares, sliding check x-rays the king"
-                // This is checked in king moves, since we know we're not moving
-                // the king here.
-
-                // 2. "Capture of checking piece. The capturing piece is not absolutely pinned"
-                let checking_piece = king_attackers.first_occupied_or_a1();
-                let is_capture_of_checking_piece = ply.dst() == checking_piece;
-
-                // 3. "Interposing moves in case of distant sliding check. The
-                // moving piece is not absolutely pinned.
-                let is_interposing = ply.dst().interposes(king_sq, checking_piece);
-
-                // For both ways we have already checked that we're not pinned.
-                let is_mitigation = is_capture_of_checking_piece || is_interposing;
-
-                debug_assert!(
-                    !is_mitigation == leaves_own_king_in_check(ply),
-                    "Mitigation check failed! {ply:?}\n{fen}"
-                );
-                if !is_mitigation {
-                    continue;
-                }
-            } else {
-                // We're not in check and not moving the king.
-                debug_assert!(king_attackers.popcount() == 0);
-                debug_assert!(ply.moved_piece(self) != Piece::King);
-
-                // If we're not in check, we only need to check absolutely
-                // pinned pieces for illegal moves.
-                if absolute_pins.get(ply.src()) {
-                    use crate::square::squares::A1;
-                    let pinner = absolute_pin_pairs
-                        .iter()
-                        .filter(|p| p.0 == ply.src())
-                        .next()
-                        .unwrap_or(&(A1, A1))
-                        .1;
-
-                    // Move on the pin or capture the pinning piece.
-                    let is_ok = ply.dst().interposes(king_sq, pinner) || ply.dst() == pinner;
-
-                    if !is_ok {
-                        continue;
-                    }
-                }
-            }
-
-            res.push(*ply);
-        }
-
-        res
-    }
-
     pub fn legal_moves(&self) -> Vec<Ply> {
-        self.filter_legal(&self.pseudo_legal_moves())
+        use crate::legality::LegalityChecker;
+        let legality_checker = LegalityChecker::new(self);
+        self.pseudo_legal_moves()
+            .iter()
+            .filter(|ply| legality_checker.is_legal(ply))
+            .map(|x| *x)
+            .collect()
     }
 
     pub fn quiescence_moves(&self) -> Vec<Ply> {
-        self.filter_legal(&self.quiescence_pseudo_legal_moves())
+        use crate::legality::LegalityChecker;
+        let legality_checker = LegalityChecker::new(self);
+        self.quiescence_pseudo_legal_moves()
+            .iter()
+            .filter(|ply| legality_checker.is_legal(ply))
+            .map(|x| *x)
+            .collect()
     }
 
     pub fn pins(&self, to: Square) -> SmallVec<[(Square, Square); 4]> {

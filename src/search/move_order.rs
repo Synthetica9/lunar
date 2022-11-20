@@ -140,7 +140,17 @@ enum SearchCommand {
     GetKillerMoves,
     WinningCapture { see: Millipawns, ply: Ply },
     GetQuiescenceMoves,
-    HashMove(Ply),
+    HashMove { ply: Ply },
     GetHashMove,
     // Should be searched _first_
 }
+
+const INITIAL_SEARCH_COMMANDS: [SearchCommand; 4] = {
+    use SearchCommand::*;
+    [
+        GetHashMove,
+        GetQuiescenceMoves,
+        GetKillerMoves,
+        GetQuietMoves,
+    ]
+};
