@@ -213,31 +213,29 @@ impl ThreadData {
             self.communicate()?;
         }
 
+        if depth == 0 {
+            let score = self.quiescence_search(game, alpha, beta);
+            return Ok((score, None));
+        }
+
         let alphaOrig = alpha;
         let mut alpha = alpha;
         let mut beta = beta;
 
-        if depth >= 3 {
-            if let Some(tte) = self.transposition_table.get(game.hash()) {
-                if depth <= tte.depth as usize && tte.value <= beta && tte.value >= alpha {
-                    // println!("Transposition table hit");
-                    // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
-                    match tte.value_type {
-                        Exact => return Ok((tte.value, tte.best_move)),
-                        LowerBound => alpha = alpha.max(tte.value),
-                        UpperBound => beta = beta.min(tte.value),
-                    }
+        if let Some(tte) = self.transposition_table.get(game.hash()) {
+            if depth <= tte.depth as usize && tte.value <= beta && tte.value >= alpha {
+                // println!("Transposition table hit");
+                // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
+                match tte.value_type {
+                    Exact => return Ok((tte.value, tte.best_move)),
+                    LowerBound => alpha = alpha.max(tte.value),
+                    UpperBound => beta = beta.min(tte.value),
+                }
 
-                    if alpha >= beta {
-                        return Ok((tte.value, tte.best_move));
-                    }
+                if alpha >= beta {
+                    return Ok((tte.value, tte.best_move));
                 }
             }
-        }
-
-        if depth == 0 {
-            let score = self.quiescence_search(game, alpha, beta);
-            return Ok((score, None));
         }
 
         let mut deferred: Vec<(Ply, Game)> = Vec::new();
