@@ -66,6 +66,8 @@ impl LegalityChecker {
     }
 
     pub fn is_legal(&self, ply: &Ply) -> bool {
+        debug_assert!(self.game.is_pseudo_legal(ply));
+
         // Fen is used in multiple debug statements. We don't want to calculate
         // it with every move even in debug mode, but don't want to calculate it
         // at all in production.

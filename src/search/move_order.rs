@@ -127,30 +127,76 @@ fn test_see() {
     assert_eq!(static_exchange_evaluation(&game, ply), Millipawns(4000));
 }
 
+#[derive(Eq, PartialEq, PartialOrd, Ord)]
+pub enum CaptureValue {
+    // Based on SEE
+    Static(Millipawns),
+    // Based on hash table
+    Hash(Millipawns),
+}
+
 // You can re-order these to change the search order that is used by alpha-beta.
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
-enum SearchCommand {
+#[derive(Eq, PartialEq, PartialOrd, Ord)]
+pub enum SearchCommand {
     // Should be searched _last_
-    DeferredMove { index: Reverse<usize>, ply: Ply },
-    LosingCapture { see: Millipawns, ply: Ply },
-    QuietMove { is_check: bool, ply: Ply },
-    GetQuietMoves,
-    EqualCapture { ply: Ply }, // see = 0 (TODO: MVV-LVA?)
-    KillerMove { ply: Ply },
-    GetKillerMoves,
-    WinningCapture { see: Millipawns, ply: Ply },
-    GetQuiescenceMoves,
-    HashMove { ply: Ply },
+    DeferredMove {
+        index: Reverse<usize>,
+        ply: Ply,
+    },
+    MovesExhausted,
+    LosingCapture {
+        value: CaptureValue,
+        ply: Ply,
+    },
+    QuietMove {
+        value: Millipawns,
+        is_check: bool,
+        ply: Ply,
+    },
+    GenQuietMoves,
+    EqualCapture {
+        value: CaptureValue,
+        ply: Ply,
+    }, // see = 0 (TODO: MVV-LVA?)
+    KillerMove {
+        ply: Ply,
+    },
+    GenKillerMoves,
+    WinningCapture {
+        value: CaptureValue,
+        ply: Ply,
+    },
+    GenQuiescenceMoves,
     GetHashMove,
     // Should be searched _first_
 }
 
-const INITIAL_SEARCH_COMMANDS: [SearchCommand; 4] = {
+impl SearchCommand {
+    // TODO: reference?
+    pub fn ply(&self) -> Option<Ply> {
+        use SearchCommand::*;
+
+        let ply = match self {
+            DeferredMove { ply, .. } => ply,
+            LosingCapture { ply, .. } => ply,
+            QuietMove { ply, .. } => ply,
+            EqualCapture { ply, .. } => ply,
+            KillerMove { ply, .. } => ply,
+            WinningCapture { ply, .. } => ply,
+            _ => return None,
+        };
+
+        return Some(*ply);
+    }
+}
+
+pub const INITIAL_SEARCH_COMMANDS: [SearchCommand; 5] = {
     use SearchCommand::*;
     [
         GetHashMove,
-        GetQuiescenceMoves,
-        GetKillerMoves,
-        GetQuietMoves,
+        GenQuiescenceMoves,
+        GenKillerMoves,
+        GenQuietMoves,
+        MovesExhausted,
     ]
 };
