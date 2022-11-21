@@ -241,13 +241,11 @@ impl ThreadData {
             }
         }
 
-        let (curr_value, mut best_move) = if is_pv && depth > 5 {
+        let mut best_move = if is_pv && depth > 5 {
             // Internal iterative deepening
-            self.alpha_beta_search(game, alpha, beta, depth / 2, true)?
-        } else if let Some(tte) = from_tt {
-            (tte.value, tte.best_move)
+            self.alpha_beta_search(game, alpha, beta, depth / 2, true)?.1
         } else {
-            (crate::eval::evaluation(game), None)
+            from_tt.map(|x| x.best_move).flatten()
         };
 
         let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
@@ -278,7 +276,7 @@ impl ThreadData {
                         let value = if let Some(tte) = tte {
                             // TODO: upper/lower bound?
                             // TODO: merge these?
-                            CaptureValue::Hash(tte.value - curr_value)
+                            CaptureValue::Hash(tte.value)
                         } else {
                             CaptureValue::Static(see)
                         };
