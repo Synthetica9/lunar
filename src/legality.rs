@@ -54,7 +54,7 @@ impl LegalityChecker {
     }
 
     fn leaves_king_in_check(&self, ply: &Ply) -> bool {
-        let mut cpy = self.game.clone();
+        let mut cpy = self.game;
         cpy.apply_ply(ply);
 
         let to_move = cpy.to_move();
@@ -157,7 +157,7 @@ impl LegalityChecker {
             let is_mitigation = is_capture_of_checking_piece || is_interposing;
 
             debug_assert!(
-                !is_mitigation == self.leaves_king_in_check(ply),
+                is_mitigation != self.leaves_king_in_check(ply),
                 "Mitigation check failed! {ply:?}\n{fen}"
             );
             is_mitigation
@@ -173,15 +173,13 @@ impl LegalityChecker {
                 let pinner = self
                     .absolute_pin_pairs
                     .iter()
-                    .filter(|p| p.0 == ply.src())
-                    .next()
+                    .find(|p| p.0 == ply.src())
                     .unwrap_or(&(A1, A1))
                     .1;
 
                 // Move on the pin or capture the pinning piece.
-                let is_ok = ply.dst().interposes(self.king_square, pinner) || ply.dst() == pinner;
 
-                is_ok
+                ply.dst().interposes(self.king_square, pinner) || ply.dst() == pinner
             } else {
                 true
             }

@@ -70,11 +70,11 @@ impl CastleRights {
                 'Q' => (Color::White, CastleDirection::Queenside),
                 'k' => (Color::Black, CastleDirection::Kingside),
                 'q' => (Color::Black, CastleDirection::Queenside),
-                _ => return Err(format!("Invalid castle character: {}", c)),
+                _ => return Err(format!("Invalid castle character: {c}")),
             };
 
             if castle.get(color, side) {
-                return Err(format!("Duplicate castle character: {}", c));
+                return Err(format!("Duplicate castle character: {c}"));
             }
 
             castle = castle.set(color, side);

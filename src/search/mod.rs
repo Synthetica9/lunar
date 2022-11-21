@@ -11,16 +11,12 @@ use std::time::Instant;
 
 // TODO: use stock rust channels?
 use crossbeam_channel as channel;
-use smallvec::SmallVec;
 
-use crate::bitboard::Bitboard;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
-use crate::piece::Piece;
 use crate::ply::Ply;
 use crate::transposition_table::{TranspositionEntry, TranspositionTable};
 use crate::uci::TimePolicy;
-use crate::zobrist_hash::ZobristHash;
 
 mod currently_searching;
 mod move_order;
@@ -243,9 +239,10 @@ impl ThreadData {
 
         let mut best_move = if is_pv && depth > 5 {
             // Internal iterative deepening
-            self.alpha_beta_search(game, alpha, beta, depth / 2, true)?.1
+            self.alpha_beta_search(game, alpha, beta, depth / 2, true)?
+                .1
         } else {
-            from_tt.map(|x| x.best_move).flatten()
+            from_tt.and_then(|x| x.best_move)
         };
 
         let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
@@ -334,7 +331,7 @@ impl ThreadData {
 
             any_moves_seen = true;
             let next_game = {
-                let mut cpy = game.clone();
+                let mut cpy = *game;
                 cpy.apply_ply(&ply);
                 cpy
             };
@@ -412,7 +409,7 @@ impl ThreadData {
         } else if alpha >= beta {
             LowerBound
         } else {
-            if let Some(_) = x.is_mate_in_n() {
+            if x.is_mate_in_n().is_some() {
                 x -= ONE_MP * x.0.signum();
             }
             Exact
@@ -451,7 +448,7 @@ impl ThreadData {
         }
 
         for ply in game.quiescence_moves() {
-            if !static_exchange_evaluation_winning(&game, ply) {
+            if !static_exchange_evaluation_winning(game, ply) {
                 continue;
             }
 
@@ -469,7 +466,7 @@ impl ThreadData {
             }
         }
 
-        return alpha;
+        alpha
     }
 
     fn insert_killer_move(&mut self, ply: Ply, half_move_total: usize) {
@@ -536,7 +533,7 @@ impl SearchThreadPool {
     pub fn kill(&mut self) {
         // https://stackoverflow.com/a/68978386
         self.broadcast(ThreadCommand::Quit);
-        while self.threads.len() > 0 {
+        while !self.threads.is_empty() {
             let (cur_thread, _, _) = self.threads.remove(0);
             cur_thread.join().expect("Unable to kill thread");
         }
@@ -546,7 +543,7 @@ impl SearchThreadPool {
         self.broadcast(ThreadCommand::SearchThis(*game));
 
         self.state = PoolState::Searching {
-            game: game.clone(),
+            game: *game,
             start_time: Instant::now(),
             is_pondering: false,
             time_policy,
@@ -623,7 +620,7 @@ impl SearchThreadPool {
                         }
 
                         ThreadStatus::StatusUpdate {
-                            thread_id,
+                            thread_id: _,
                             nodes_searched,
                             quiescence_nodes_searched,
                         } => {
@@ -716,7 +713,6 @@ impl SearchThreadPool {
             best_depth,
             score,
             pv,
-            best_move,
             nodes_searched,
             quiescence_nodes_searched,
             game,
@@ -730,21 +726,18 @@ impl SearchThreadPool {
             let quiescence_nodes_per_second = *quiescence_nodes_searched as f64 / elapsed;
 
             let mut info = String::new();
-            info.push_str(&format!("info depth {} ", best_depth));
+            info.push_str(&format!("info depth {best_depth} "));
             info.push_str(&if let Some(n) = score.is_mate_in_n() {
-                format!("score mate {} ", n)
+                format!("score mate {n} ")
             } else {
                 format!("score cp {} ", score.0 / 10)
             });
-            info.push_str(&format!("nodes {} ", nodes_searched));
+            info.push_str(&format!("nodes {nodes_searched} "));
             info.push_str(&format!("nps {} ", nodes_per_second as usize));
-            info.push_str(&format!("qnodes {} ", quiescence_nodes_searched));
+            info.push_str(&format!("qnodes {quiescence_nodes_searched} "));
             info.push_str(&format!("qnps {} ", quiescence_nodes_per_second as usize));
             info.push_str(&format!("time {} ", (elapsed * 1000.0) as usize));
-            info.push_str(&format!(
-                "pv {} ",
-                crate::transposition_table::pv_uci(game, &pv)
-            ));
+            info.push_str(&format!("pv {} ", crate::transposition_table::pv_uci(pv)));
             info
         } else {
             "info string idle".to_string()
@@ -770,7 +763,7 @@ impl SearchThreadPool {
                         }
                     };
                     if self.ponder {
-                        let mut cpy = game.clone();
+                        let mut cpy = game;
                         cpy.apply_ply(&best_move);
                         self.start_search(&cpy, TimePolicy::Infinite);
                         if let PoolState::Searching {
@@ -804,11 +797,10 @@ impl Drop for SearchThreadPool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::square::squares::*;
 
     fn new_thread_pool() -> SearchThreadPool {
         // 64kB transposition table
-        let mut tt = Arc::new(TranspositionTable::new(1024 * 1024));
+        let tt = Arc::new(TranspositionTable::new(1024 * 1024));
         SearchThreadPool::new(4, tt)
     }
 

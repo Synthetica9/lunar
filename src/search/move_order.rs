@@ -21,7 +21,7 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
     let sq = ply.dst();
     let attackers_defenders = board.squares_attacking_defending(sq);
 
-    let mut get_attackers = &move |side, is_attacking| {
+    let get_attackers = &move |side, is_attacking| {
         let attackers = {
             let mut res = attackers_defenders;
             res &= board.get_color(side);
@@ -40,7 +40,7 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
             }
 
             let piece_attackers = attackers & board.get_piece(&piece);
-            for i in 0..piece_attackers.popcount() {
+            for _i in 0..piece_attackers.popcount() {
                 // TODO: use PESTO midgame/endgame tables?
                 res.push(piece.base_value());
             }
@@ -186,7 +186,7 @@ impl SearchCommand {
             _ => return None,
         };
 
-        return Some(*ply);
+        Some(*ply)
     }
 
     pub fn is_regular_ply(&self) -> bool {

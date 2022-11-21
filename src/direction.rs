@@ -38,11 +38,11 @@ impl Direction {
     }
 
     pub const fn north_component(self) -> Direction {
-        return Direction::new(self.north, 0);
+        Direction::new(self.north, 0)
     }
 
     pub const fn east_component(self) -> Direction {
-        return Direction::new(0, self.east);
+        Direction::new(0, self.east)
     }
 
     pub const fn clone_const(self) -> Direction {

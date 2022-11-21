@@ -157,7 +157,7 @@ impl Square {
         let r = Rank::new(rank.to_ascii_lowercase() as u8 - b'1');
 
         if f > files::H {
-            return Err(format!("Invalid file: {}", file));
+            return Err(format!("Invalid file: {file}"));
         }
 
         if r > ranks::EIGHT {
@@ -180,7 +180,7 @@ impl Square {
         use std::cmp::{max, min};
         let l = min(a.file(), b.file());
         let r = max(a.file(), b.file());
-        return l < self.file() && self.file() < r;
+        l < self.file() && self.file() < r
     }
 
     pub fn interposes_straight(&self, a: Square, b: Square) -> bool {
@@ -224,7 +224,7 @@ impl Iterator for SquareIter {
     type Item = Square;
 
     fn next(&mut self) -> Option<Square> {
-        self.0.next().map(|x| Square(x))
+        self.0.next().map(Square)
     }
 }
 

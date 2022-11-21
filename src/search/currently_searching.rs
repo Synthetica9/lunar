@@ -52,7 +52,7 @@ impl CurrentlySearching {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     fn put(&self, hash: ZobristHash) {

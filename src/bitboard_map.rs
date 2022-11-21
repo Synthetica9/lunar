@@ -57,7 +57,6 @@ impl BitboardMap {
 
     const fn pawn_moves(side: Color) -> BitboardMap {
         let direction = side.pawn_move_direction();
-        let double_directions = direction.add_const(direction);
 
         BitboardMap::step_moves(&[direction])
     }

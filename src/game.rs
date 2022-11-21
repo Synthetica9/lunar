@@ -7,7 +7,7 @@ use crate::bitboard_map;
 use crate::bitboard_map::BitboardMap;
 use crate::board::Board;
 use crate::castlerights::CastleRights;
-use crate::millipawns::Millipawns;
+
 use crate::piece::Piece;
 use crate::ply::{ApplyPly, Ply, SpecialFlag, _combination_moves};
 use crate::plyset::PlySet;
@@ -100,13 +100,13 @@ impl Game {
             .next()
             .ok_or("No half move clock")?
             .parse::<i16>()
-            .map_err(|e| format!("Error parsing half move clock: {}", e))?;
+            .map_err(|e| format!("Error parsing half move clock: {e}"))?;
 
         let full_move = parts
             .next()
             .ok_or("No full move number")?
             .parse::<i16>()
-            .map_err(|e| format!("Error parsing full move number: {}", e))?;
+            .map_err(|e| format!("Error parsing full move number: {e}"))?;
 
         let hash = ZobristHash::new();
         let mut res = Game {
@@ -145,12 +145,12 @@ impl Game {
         if ply.resets_halfmove_clock(self) {
             self.half_move = 0;
         } else {
-            self.half_move = self.half_move + 1;
+            self.half_move += 1;
         };
 
         self.half_move_total += 1;
 
-        let cln = self.clone();
+        let cln = *self;
 
         // self.hash.apply_ply(&cln, ply);
         self._apply_ply(&cln, ply);
@@ -172,7 +172,7 @@ impl Game {
         piece_type: &Piece,
         move_table: &BitboardMap,
         capture_policy: CapturePolicy,
-        quiescence_moves: bool,
+        _quiescence_moves: bool,
     ) {
         let board = &self.board;
         let color = &self.to_move;
@@ -418,7 +418,7 @@ impl Game {
         self.pseudo_legal_moves()
             .iter()
             .filter(|ply| legality_checker.is_legal(ply))
-            .map(|x| *x)
+            .copied()
             .collect()
     }
 
@@ -428,7 +428,7 @@ impl Game {
         self.quiescence_pseudo_legal_moves()
             .iter()
             .filter(|ply| legality_checker.is_legal(ply))
-            .map(|x| *x)
+            .copied()
             .collect()
     }
 
@@ -498,14 +498,14 @@ impl Game {
     }
 
     pub fn is_check(&self, ply: &Ply) -> bool {
-        let mut cpy = self.clone();
+        let mut cpy = *self;
 
         cpy.apply_ply(ply);
         cpy.is_in_check()
     }
 
     pub fn is_in_mate(&self) -> bool {
-        self.legal_moves().len() == 0
+        self.legal_moves().is_empty()
     }
 
     pub fn is_in_checkmate(&self) -> bool {
@@ -517,7 +517,7 @@ impl Game {
     }
 
     pub fn is_mate(&self, ply: &Ply) -> bool {
-        let mut cpy = self.clone();
+        let mut cpy = *self;
         cpy.apply_ply(ply);
         cpy.is_in_mate()
     }
@@ -561,7 +561,7 @@ impl Game {
             .count()
             >= 1;
         let is_en_passant = ply.is_en_passant();
-        let empty_string = String::new();
+        let _empty_string = String::new();
 
         let mut res = String::new();
 
@@ -645,7 +645,7 @@ impl Game {
         // Convenience function to make a move and mutate the board.
         let ply = self
             .ply_from_name(name)
-            .ok_or(format!("Invalid move: {}", name))?;
+            .ok_or(format!("Invalid move: {name}"))?;
         self.apply_ply(&ply);
 
         Ok(())
@@ -661,19 +661,19 @@ impl Game {
         }
         let mut count = 0;
         for ply in self.legal_moves() {
-            let mut game = self.clone();
+            let mut game = *self;
             game.apply_ply(&ply);
             if print {
                 print!("{}: ", ply.long_name());
             }
             let subres = &game.perft(depth - 1, false);
             if print {
-                println!("{}", subres);
+                println!("{subres}");
             }
             count += subres;
         }
         if print {
-            println!("{} nodes at depth {}", count, depth);
+            println!("{count} nodes at depth {depth}");
         }
         count
     }

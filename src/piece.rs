@@ -22,7 +22,7 @@ impl Piece {
             'r' => Ok(Piece::Rook),
             'q' => Ok(Piece::Queen),
             'k' => Ok(Piece::King),
-            _ => Err(format!("Invalid piece: {}", c)),
+            _ => Err(format!("Invalid piece: {c}")),
         }
     }
 

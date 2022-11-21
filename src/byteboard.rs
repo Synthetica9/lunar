@@ -24,7 +24,7 @@ impl Byteboard {
     }
 
     pub fn to_bitboard(&self) -> Bitboard {
-        return Bitboard::from(self);
+        Bitboard::from(self)
     }
 
     pub fn add_bitboard_mut(&mut self, bitboard: Bitboard) {

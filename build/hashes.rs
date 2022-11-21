@@ -6,7 +6,7 @@ use std::io::Write;
 fn hash_array(name: &str, len: usize, rng: &mut Rng) -> String {
     let mut res = String::new();
 
-    res.push_str(&format!("pub const {}: [u64; {}] = [\n", name, len));
+    res.push_str(&format!("pub const {name}: [u64; {len}] = [\n"));
 
     for _ in 0..len {
         res.push_str(&format!("    {:#018x},\n", rng.next_u64()));

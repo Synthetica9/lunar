@@ -1,7 +1,7 @@
 use crate::basic_enums::CastleDirection;
 use crate::basic_enums::Color;
 use crate::bitboard::Bitboard;
-use crate::bitboard::VALID_CASTLE_DSTS;
+
 use crate::bitboard_map::BitboardMap;
 use crate::castlerights::CastleRights;
 use crate::game::Game;
@@ -64,7 +64,7 @@ impl SpecialFlag {
 impl Ply {
     pub const fn new(src: Square, dst: Square, flag: Option<SpecialFlag>) -> Ply {
         let mut val = 0;
-        val |= (src.as_index() as u16) << 0;
+        val |= src.as_index() as u16;
         val |= (dst.as_index() as u16) << 6;
         if let Some(flag) = flag {
             val |= (flag.as_u8() as u16) << 12;
@@ -92,7 +92,7 @@ impl Ply {
     }
 
     pub const fn src(&self) -> Square {
-        Square::from_index((self.0 >> 0) as u8 & 0x3F)
+        Square::from_index(self.0 as u8 & 0x3F)
     }
 
     pub const fn dst(&self) -> Square {
@@ -430,10 +430,10 @@ mod tests {
     #[test]
     fn test_flag_pack_unpack() {
         for flag in ALL_SPECIAL_FLAGS {
-            println!("Testing {:?}", flag);
+            println!("Testing {flag:?}");
             let packed = flag.as_u8();
             let unpacked = SpecialFlag::from_u8(packed).expect("unpacked flag");
-            println!("unpacked: {:?}", unpacked);
+            println!("unpacked: {unpacked:?}");
             assert_eq!(flag.as_u8(), unpacked.as_u8());
         }
     }

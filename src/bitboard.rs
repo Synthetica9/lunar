@@ -309,7 +309,7 @@ impl Bitboard {
                     return Bitboard::magic_attacks(square, Piece::Bishop, occupancy)
                         | (Bitboard::magic_attacks(square, Piece::Rook, occupancy));
                 }
-                _ => panic!("Not a magic piece: {:?}", piece),
+                _ => panic!("Not a magic piece: {piece:?}"),
             }
         };
 
@@ -423,8 +423,7 @@ impl Iterator for BitboardSquareIter {
     type Item = Square;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let sq = self.0.pop_square();
-        sq
+        self.0.pop_square()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

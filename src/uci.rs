@@ -28,7 +28,7 @@ impl UCIState {
         UCIState {
             game: Game::new(),
             transposition_table: tt.clone(),
-            search_thread_pool: SearchThreadPool::new(1, tt.clone()),
+            search_thread_pool: SearchThreadPool::new(1, tt),
             // stderr is the default log file
             log_file: Box::new(std::io::stderr()),
             debug: false,
@@ -36,14 +36,14 @@ impl UCIState {
     }
 
     pub fn log(&mut self, message: &str) {
-        writeln!(self.log_file, "{}", message);
+        writeln!(self.log_file, "{message}");
         if self.debug {
-            println!("info string {}", message);
+            println!("info string {message}");
         }
     }
 
     pub fn send(&mut self, message: &str) {
-        println!("{}", message);
+        println!("{message}");
         self.log(&format!("< {message}"));
     }
 
@@ -55,7 +55,7 @@ impl UCIState {
     pub fn run(&mut self) {
         let reader_chan = spawn_reader_thread();
 
-        self.log(&format!("Starting {} v{}", NAME, VERSION));
+        self.log(&format!("Starting {NAME} v{VERSION}"));
 
         #[cfg(debug_assertions)]
         self.log("Warning. This is a debug build. 10x slower than release build.");
@@ -100,14 +100,14 @@ impl UCIState {
         let command = parts.next().ok_or("No command")?;
         match command {
             "uci" => {
-                self.send(&format!("id name {}", NAME));
-                self.send(&format!("id author {}", AUTHOR));
-                self.send(&format!("id version {}", VERSION));
+                self.send(&format!("id name {NAME}"));
+                self.send(&format!("id author {AUTHOR}"));
+                self.send(&format!("id version {VERSION}"));
                 AVAILABLE_OPTIONS.print_uci_options(self);
-                self.send(&"uciok");
+                self.send("uciok");
             }
             "isready" => {
-                self.send(&"readyok");
+                self.send("readyok");
             }
             "ucinewgame" => {
                 self.game = Game::new();
@@ -118,7 +118,7 @@ impl UCIState {
                 }
 
                 let mut name = String::new();
-                while let Some(part) = parts.next() {
+                for part in parts.by_ref() {
                     if part == "value" {
                         break;
                     }
@@ -130,15 +130,15 @@ impl UCIState {
 
                 let mut value = String::new();
 
-                while let Some(part) = parts.next() {
+                for part in parts.by_ref() {
                     value.push_str(part);
                     value.push(' ');
                 }
 
                 let value = value.trim();
 
-                self.log(&format!("Setting option {} to {}", name, value));
-                self.set_option(&name, &value)?;
+                self.log(&format!("Setting option {name} to {value}"));
+                self.set_option(name, value)?;
             }
             "position" => {
                 let mut fen = String::new();
@@ -149,7 +149,7 @@ impl UCIState {
                         "fen" => {
                             while let Some(part) = parts.next() {
                                 if part == "moves" {
-                                    while let Some(part) = parts.next() {
+                                    for part in parts.by_ref() {
                                         moves.push(part.to_string());
                                     }
                                     break;
@@ -162,12 +162,12 @@ impl UCIState {
                             fen = crate::game::STARTING_POSITION.to_string();
                         }
                         "moves" => {
-                            while let Some(part) = parts.next() {
+                            for part in parts.by_ref() {
                                 moves.push(part.to_string());
                             }
                         }
                         _ => {
-                            self.log(&format!("Unknown position command: {}", part));
+                            self.log(&format!("Unknown position command: {part}"));
                         }
                     }
                     next = parts.next();
@@ -212,7 +212,7 @@ impl UCIState {
                             // Now, update the time policy.
                             let val = parts
                                 .next()
-                                .ok_or(format!("{} not specified", part))?
+                                .ok_or(format!("{part} not specified"))?
                                 .parse::<u64>()
                                 .map_err(|x| x.to_string())?;
                             if let FreeTime {
@@ -234,11 +234,11 @@ impl UCIState {
                             }
                         }
                         _ => {
-                            return Err(format!("Unknown go command: {}", part));
+                            return Err(format!("Unknown go command: {part}"));
                         }
                     };
                 }
-                println!("Time policy: {:?}", time_policy);
+                println!("Time policy: {time_policy:?}");
                 self.search_thread_pool
                     .start_search(&self.game, time_policy);
             }
@@ -267,7 +267,7 @@ impl UCIState {
                 self.log("Done waiting");
             }
             _ => {
-                self.log(&format!("Unknown command: {}", command));
+                self.log(&format!("Unknown command: {command}"));
             }
         }
         Ok(())
@@ -341,7 +341,7 @@ const AVAILABLE_OPTIONS: &AvailableOptions = &AvailableOptions({
 
     [
         UCIOption {
-            name: &"Hash",
+            name: "Hash",
             typ: &Spin {
                 // In MiB. Max=1TB, but this is not a hard limit.
                 min: 1,
@@ -351,7 +351,7 @@ const AVAILABLE_OPTIONS: &AvailableOptions = &AvailableOptions({
             setter: &hash_setter,
         },
         UCIOption {
-            name: &"Threads",
+            name: "Threads",
             typ: &Spin {
                 min: 1,
                 max: 1024,
@@ -360,7 +360,7 @@ const AVAILABLE_OPTIONS: &AvailableOptions = &AvailableOptions({
             setter: &thread_setter,
         },
         UCIOption {
-            name: &"Log File",
+            name: "Log File",
             typ: &Str { default: "" },
             setter: &|value, state| {
                 let file = std::fs::File::create(value).map_err(|x| x.to_string())?;
@@ -370,7 +370,7 @@ const AVAILABLE_OPTIONS: &AvailableOptions = &AvailableOptions({
             },
         },
         UCIOption {
-            name: &"Ponder",
+            name: "Ponder",
             typ: &Check { default: false },
             setter: &|value, state| {
                 state.search_thread_pool.set_ponder(parse_bool(value)?);
@@ -409,7 +409,7 @@ impl<'a> AvailableOptions<'a> {
         use UCIOptionType::*;
         for line in self.0.iter() {
             let content = match line.typ {
-                Button => format!("type button"),
+                Button => "type button".to_string(),
                 Spin { min, max, default } => {
                     format!("type spin default {default} min {min} max {max}")
                 }
@@ -423,7 +423,7 @@ impl<'a> AvailableOptions<'a> {
                     res
                 }
             };
-            state.send(&format!("option name {} {}", line.name, content));
+            state.send(&format!("option name {} {content}", line.name));
         }
     }
 
@@ -434,7 +434,7 @@ impl<'a> AvailableOptions<'a> {
             }
         }
 
-        Err(format!("Option not found: {}", name))
+        Err(format!("Option not found: {name}"))
     }
 
     pub fn set_option(&self, state: &mut UCIState, name: &str, value: &str) -> Result<(), String> {
@@ -444,7 +444,7 @@ impl<'a> AvailableOptions<'a> {
     }
 }
 
-fn ucinewgame(parts: &[&str], state: &mut UCIState) -> Result<(), String> {
+fn ucinewgame(_parts: &[&str], _state: &mut UCIState) -> Result<(), String> {
     // TODO: clear hash table?
 
     Ok(())
@@ -457,7 +457,7 @@ fn position(parts: &[&str], state: &mut UCIState) -> Result<(), String> {
         &"startpos" => {
             if let Some(x) = parts.next() {
                 if x != &"moves" {
-                    return Err(format!("Expecting 'moves'"));
+                    return Err("Expecting 'moves'".to_string());
                 }
             }
             Game::new()
@@ -466,9 +466,9 @@ fn position(parts: &[&str], state: &mut UCIState) -> Result<(), String> {
             let fen_parts: Vec<_> = parts
                 .by_ref()
                 .take_while(|x| *x != &"moves")
-                .map(|x| *x)
+                .copied()
                 .collect();
-            let fen = (&fen_parts).join(" ");
+            let fen = fen_parts.join(" ");
             Game::from_fen(&fen)?
         }
         _ => Err("Unknown subcommand")?,

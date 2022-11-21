@@ -21,9 +21,9 @@ fn main() -> std::io::Result<()> {
 
 fn open(name: &str) -> std::io::Result<File> {
     let out_dir = std::env::var("OUT_DIR").unwrap();
-    let dest_path = format!("{}/{}.rs", out_dir, name);
+    let dest_path = format!("{out_dir}/{name}.rs");
 
-    File::create(&dest_path)
+    File::create(dest_path)
 }
 
 fn squares() -> Vec<String> {
@@ -32,8 +32,8 @@ fn squares() -> Vec<String> {
             let file = i % 8;
             let rank = i / 8;
 
-            let file = 'A' as u8 + file;
-            let rank = '1' as u8 + rank;
+            let file = b'A' + file;
+            let rank = b'1' + rank;
 
             format!("{}{}", file as char, rank as char)
         })
@@ -44,7 +44,7 @@ fn gen_squares() -> std::io::Result<()> {
     let lines: Vec<_> = squares()
         .iter()
         .zip(0..64)
-        .map(|(sq, i)| format!("pub const {}: Square = Square::from_index({});\n", sq, i))
+        .map(|(sq, i)| format!("pub const {sq}: Square = Square::from_index({i});\n"))
         .collect();
 
     let mut file = open("squares")?;

@@ -235,7 +235,7 @@ pub fn gen_magics_file(file: &mut std::fs::File) -> std::io::Result<()> {
         };
 
         // TODO: explicit struct
-        writeln!(file, "// Magic, premask, postmask, LUT for {}", name)?;
+        writeln!(file, "// Magic, premask, postmask, LUT for {name}")?;
         writeln!(
             file,
             "pub const {}_MAGICS: [(u64, u64, u64, &[u64]); 64] = [",
@@ -247,8 +247,8 @@ pub fn gen_magics_file(file: &mut std::fs::File) -> std::io::Result<()> {
         for square in 0..64i64 {
             let target = 1 << bits[square as usize];
             let group = sharing_idx[square as usize];
-            let mut db = &mut sharing_db[group];
-            println!("{}. Current length: {}", square, db.len());
+            let db = &mut sharing_db[group];
+            println!("{square}. Current length: {}", db.len());
             while db.len() < target {
                 db.push(0);
             }
@@ -256,7 +256,7 @@ pub fn gen_magics_file(file: &mut std::fs::File) -> std::io::Result<()> {
 
         for square in 0..64 {
             let sharing = sharing_idx[square as usize];
-            let mut db = &mut sharing_db[sharing];
+            let db = &mut sharing_db[sharing];
             let (magic, used) = find_magic(
                 square,
                 (db.len().trailing_zeros()).try_into().unwrap(),
@@ -275,19 +275,19 @@ pub fn gen_magics_file(file: &mut std::fs::File) -> std::io::Result<()> {
             };
 
             writeln!(file, "    (")?;
-            writeln!(file, "        0x{:016x},", magic)?;
-            writeln!(file, "        0x{:016x},", premask)?;
-            writeln!(file, "        0x{:016x},", postmask)?;
-            writeln!(file, "        &SHARED_{}_MAGIC_{}", name, sharing)?;
+            writeln!(file, "        0x{magic:016x},")?;
+            writeln!(file, "        0x{premask:016x},")?;
+            writeln!(file, "        0x{postmask:016x},")?;
+            writeln!(file, "        &SHARED_{name}_MAGIC_{sharing}")?;
             writeln!(file, "    ),")?;
         }
         writeln!(file, "];\n")?;
 
         // write sharing db
         for (i, db) in sharing_db.iter().enumerate() {
-            writeln!(file, "const SHARED_{}_MAGIC_{}: &[u64] = &[", name, i)?;
+            writeln!(file, "const SHARED_{name}_MAGIC_{i}: &[u64] = &[")?;
             for &entry in db.iter() {
-                writeln!(file, "    0x{:016x},", entry)?;
+                writeln!(file, "    0x{entry:016x},")?;
             }
             writeln!(file, "];")?;
         }

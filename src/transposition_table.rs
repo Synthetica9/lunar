@@ -37,7 +37,7 @@ pub struct TranspositionEntry {
 
 impl TranspositionEntry {
     fn checksum(&self) -> u64 {
-        ((self.depth as u64) << 0)
+        (self.depth as u64)
             ^ ((self.value_type as u64) << 8)
             ^ (self.best_move.map_or(0, |x| x.as_u16() as u64) << 16)
             ^ ((self.value.0 as u64) << 32)
@@ -99,9 +99,9 @@ impl TranspositionTable {
         let computed_key = checksum ^ hash.as_u64();
 
         if computed_key != content.key {
-            return None;
+            None
         } else {
-            return Some(content.value);
+            Some(content.value)
         }
     }
 
@@ -149,25 +149,13 @@ impl TranspositionTable {
     pub fn update_pv(&self, game: &Game, old_pv: &[Ply]) -> Vec<Ply> {
         let mut game = *game;
         let mut res = Vec::new();
-        let mut old_pv_relevant = true;
+        let _old_pv_relevant = true;
 
         for entry in old_pv.iter() {
             let from_tt = self.get(game.hash());
 
             let next = match from_tt {
-                Some(tte) => {
-                    if let Some(ply) = tte.best_move {
-                        if ply == *entry {
-                            Some(ply)
-                        } else {
-                            let pv = self.principle_variation(&game);
-                            res.extend(pv);
-                            return res;
-                        }
-                    } else {
-                        None
-                    }
-                }
+                Some(tte) => tte.best_move.filter(|&ply| ply == *entry),
                 None => Some(*entry),
             };
 
@@ -195,7 +183,7 @@ impl TranspositionTable {
 
         // TODO: replace upper/lower bounds with exact values.
 
-        return false;
+        false
     }
 }
 
@@ -217,17 +205,17 @@ pub fn pv_string(game: &Game, pv: &[Ply]) -> String {
             res.push_str("... ");
         }
 
-        res.push_str(&game.ply_name(&ply));
+        res.push_str(&game.ply_name(ply));
         res.push(' ');
 
-        game.apply_ply(&ply);
+        game.apply_ply(ply);
         is_first = false;
     }
 
     res
 }
 
-pub fn pv_uci(game: &Game, pv: &[Ply]) -> String {
+pub fn pv_uci(pv: &[Ply]) -> String {
     let mut res = String::new();
     let mut is_first = true;
     for ply in pv {

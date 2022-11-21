@@ -5,7 +5,6 @@ use strum::IntoEnumIterator;
 
 use crate::basic_enums::Color;
 use crate::board::Board;
-use crate::byteboard::Byteboard;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;

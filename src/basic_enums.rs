@@ -1,9 +1,9 @@
 use strum_macros::EnumIter;
 
 use crate::direction::{directions, Direction};
-use crate::millipawns::Millipawns;
+
 use crate::ply::{Ply, SpecialFlag};
-use crate::square::{files, ranks, File, Rank, Square};
+use crate::square::{files, ranks, Rank, Square};
 
 #[derive(Debug, Clone, PartialEq, Copy, EnumIter)]
 pub enum Color {
@@ -18,7 +18,7 @@ impl Color {
         match fen_part {
             "w" => Ok(Color::White),
             "b" => Ok(Color::Black),
-            _ => Err(format!("Invalid color: {}", fen_part)),
+            _ => Err(format!("Invalid color: {fen_part}")),
         }
     }
 

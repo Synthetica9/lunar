@@ -1,12 +1,9 @@
 use strum::IntoEnumIterator;
 
 use crate::basic_enums::Color;
-use crate::bitboard::Bitboard;
-use crate::bitboard_map::BitboardMap;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
-use crate::square::Square;
 
 pub mod pesto;
 
@@ -57,14 +54,14 @@ fn test_good_bishop() {
     let mut game = Game::from_fen("b3k3/1p6/1Pp5/2Pp4/3Pp3/1B2P3/8/4K3 w - - 0 1").unwrap();
 
     let score = good_bishop(&game);
-    println!("Score: {:?}", score);
+    println!("Score: {score:?}");
 
     assert!(score > Millipawns(0));
 
     game.make_move("Kf1").unwrap();
 
     let score = good_bishop(&game);
-    println!("Score: {:?}", score);
+    println!("Score: {score:?}");
 
     assert!(score < Millipawns(0));
 }
@@ -81,7 +78,6 @@ pub fn rook_on_open_file(game: &Game) -> Millipawns {
     for sq in board.get_piece(&Piece::Rook).iter_squares() {
         let multiplier = if ours.get(sq) { 1 } else { -1 };
 
-        let is_light = sq.is_light();
         let is_ours = ours.get(sq);
 
         let file = sq.file().as_bitboard();
@@ -102,14 +98,14 @@ fn test_rook_on_open_file() {
     let mut game = Game::from_fen("r3k2r/ppppp1pp/8/8/8/8/PPP1P1PP/3RKR2 w kq - 0 1").unwrap();
 
     let score = rook_on_open_file(&game);
-    println!("Score: {:?}", score);
+    println!("Score: {score:?}");
 
     assert!(score > Millipawns(0));
 
     game.make_move("a3").unwrap();
 
     let score = rook_on_open_file(&game);
-    println!("Score: {:?}", score);
+    println!("Score: {score:?}");
     assert!(score < Millipawns(0));
 }
 
@@ -136,7 +132,7 @@ fn doubled_pawns(game: &Game) -> Millipawns {
     } else {
         -1
     };
-    return score * multiplier;
+    score * multiplier
 }
 
 #[test]
@@ -144,14 +140,14 @@ fn test_doubled_pawns() {
     let mut game = Game::from_fen("4k3/1p1p1p1p/1p1p1p1p/8/8/8/PPPPPPPP/4K3 w - - 0 1").unwrap();
     let score = doubled_pawns(&game);
 
-    println!("Score: {:?}", score);
+    println!("Score: {score:?}");
 
     assert!(score > Millipawns(0));
 
     game.make_move("a3").unwrap();
 
     let score = doubled_pawns(&game);
-    println!("Score: {:?}", score);
+    println!("Score: {score:?}");
 
     assert!(score < Millipawns(0));
 }

@@ -90,7 +90,7 @@ impl Board {
         let bit_1 = knight.or(bishop).or(king).intersects(sq_bb);
         let bit_3 = rook.or(queen).or(king).intersects(sq_bb);
 
-        let idx = (bit_0 as usize) << 0 | (bit_1 as usize) << 1 | (bit_3 as usize) << 2;
+        let idx = (bit_0 as usize) | (bit_1 as usize) << 1 | (bit_3 as usize) << 2;
 
         Board::PIECE_OPTION_ARRAY[idx]
     }
@@ -226,7 +226,7 @@ impl Board {
                 if file >= 8 {
                     return Err(format!("Too many characters in row: {}", rank + 1));
                 }
-                if c.is_digit(10) {
+                if c.is_ascii_digit() {
                     file += c.to_digit(10).unwrap() as usize;
                 } else {
                     let piece = Piece::from_char(c)?;
@@ -296,8 +296,8 @@ impl Board {
         // Both sides should have one and only one king
         for color in Color::iter() {
             match self.get(&color, &Piece::King).popcount().cmp(&1) {
-                Ordering::Less => return Err(format!("{:?} has no king", color)),
-                Ordering::Greater => return Err(format!("{:?} has more than one king", color)),
+                Ordering::Less => return Err(format!("{color:?} has no king")),
+                Ordering::Greater => return Err(format!("{color:?} has more than one king")),
                 Ordering::Equal => (),
             }
         }
@@ -422,7 +422,7 @@ impl Board {
         res |= self.get_piece(&Piece::King) & Bitboard::king_attacks(square);
 
         if let Some(color) = color {
-            res &= self.get_color(&color)
+            res &= self.get_color(color)
         };
 
         res
@@ -472,8 +472,8 @@ impl ApplyPly for Board {
         *self.get_piece_mut(&piece) ^= bb;
     }
 
-    fn toggle_castle_rights(&mut self, rights: CastleRights) {}
-    fn toggle_en_passant(&mut self, square: Square) {}
+    fn toggle_castle_rights(&mut self, _rights: CastleRights) {}
+    fn toggle_en_passant(&mut self, _square: Square) {}
     fn flip_side(&mut self) {}
 }
 
@@ -487,30 +487,29 @@ mod tests {
         assert!(board.is_valid());
 
         let res = Board::from_fen_part("8/8/8/8/8/8/8/8");
-        assert!(!res.is_ok());
+        assert!(res.is_err());
         assert!(res.unwrap_err().contains("has no king"));
 
         let res = Board::from_fen_part("7/8/8/8/8/8/8/8");
-        assert!(!res.is_ok());
+        assert!(res.is_err());
         // assert!(res.unwrap_err().contains("Too few characters"));
 
         let res = Board::from_fen_part("9/8/8/8/8/8/8/8");
-        assert!(!res.is_ok());
+        assert!(res.is_err());
         // assert!(res.unwrap_err().contains("Too many characters"));
 
         let res = Board::from_fen_part("8/8/8/8/8/8/8");
-        assert!(!res.is_ok());
+        assert!(res.is_err());
         assert!(res.unwrap_err().contains("Too few rows"));
 
         let res = Board::from_fen_part("8/8/8/8/8/8/8/8/8");
-        assert!(!res.is_ok());
+        assert!(res.is_err());
         assert!(res.unwrap_err().contains("Too many rows"));
     }
 
     #[test]
     fn test_occupant_piece() {
         use crate::game::Game;
-        use crate::square::squares::*;
 
         let game = Game::new();
         let board = game.board();
