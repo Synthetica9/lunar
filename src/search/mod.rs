@@ -180,6 +180,10 @@ impl ThreadData {
             self.communicate()?;
         }
 
+        if self.history.as_ref().unwrap().repetition_count_at_least_3() {
+            return Ok((DRAW, None));
+        }
+
         if depth == 0 {
             let score = self.quiescence_search(&game, alpha, beta);
             return Ok((score, None));
@@ -223,7 +227,7 @@ impl ThreadData {
         while let Some(command) = commands.pop() {
             use SearchCommand::*;
             let is_deferred = matches!(command, DeferredMove { .. });
-            let ply: Ply = match command {
+            let ply: Ply = match &command {
                 GetHashMove => {
                     if let Some(ply) = best_move {
                         ply
@@ -292,6 +296,11 @@ impl ThreadData {
                 command => command.ply().unwrap(),
             };
 
+            debug_assert!(
+                game.is_pseudo_legal(&ply),
+                "{command:?} generated illegal move {ply:?} in {game:?} (depth {depth})"
+            );
+
             // TODO: don't re-search hash and killer moves
             // Deferred moves have already been checked for legality.
             if !is_deferred && !legality_checker.is_legal(&ply) {
@@ -309,15 +318,14 @@ impl ThreadData {
             x = if is_first_move {
                 best_move = Some(ply);
                 -self.alpha_beta_search(-beta, -alpha, depth - 1, is_pv)?.0
+            } else if !is_deferred && self.currently_searching.defer_move(next_game.hash(), depth) {
+                commands.push(DeferredMove {
+                    ply,
+                    index: std::cmp::Reverse(i as usize),
+                });
+                // Arbitrary low value
+                Millipawns(i32::MIN)
             } else {
-                if !is_deferred && self.currently_searching.defer_move(next_game.hash(), depth) {
-                    commands.push(DeferredMove {
-                        ply,
-                        index: std::cmp::Reverse(i as usize),
-                    });
-                    continue;
-                }
-
                 let next_depth = if i < 5 || depth <= 3 {
                     depth - 1
                 } else {

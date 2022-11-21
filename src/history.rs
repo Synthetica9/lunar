@@ -28,6 +28,7 @@ impl History {
 
     pub fn push(&mut self, ply: &Ply) {
         let mut game = self.last().clone();
+        debug_assert!(game.is_pseudo_legal(ply));
         game.apply_ply(ply);
         self.states.push((game, *ply));
         self.hash_table[game.hash().hash as usize % HASH_TABLE_SIZE] += 1;
@@ -41,7 +42,7 @@ impl History {
 
     pub fn repetition_count_at_least_3(&self) -> bool {
         let last = self.last();
-        let hash_count = self.hash_table[last.hash().hash as usize & HASH_TABLE_SIZE];
+        let hash_count = self.hash_table[last.hash().hash as usize % HASH_TABLE_SIZE];
         debug_assert!(hash_count != 0);
         if hash_count < 3 {
             // No false positives possible.
