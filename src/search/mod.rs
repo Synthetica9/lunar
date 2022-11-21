@@ -150,7 +150,7 @@ impl ThreadData {
             // TODO: narrow alpha and beta? (aspiration windows)
             // Tried this, available in aspiration-windows branch, but it
             // seems to significantly weaken self-play.
-            match self.alpha_beta_search(game, LOSS, WIN, depth) {
+            match self.alpha_beta_search(game, LOSS, WIN, depth, true) {
                 Ok((score, best_move)) => {
                     self.status_channel
                         .send(ThreadStatus::SearchFinished {
@@ -200,6 +200,7 @@ impl ThreadData {
         alpha: Millipawns,
         beta: Millipawns,
         depth: usize,
+        is_pv: bool,
     ) -> Result<(Millipawns, Option<Ply>), ThreadCommand> {
         use crate::millipawns::*;
         use crate::transposition_table::TranspositionEntryType::*;
@@ -240,15 +241,15 @@ impl ThreadData {
             }
         }
 
-        let curr_value = if let Some(tte) = from_tt {
-            // TODO: if this is lower or upper bound, can we still use this?
-            tte.value
+        let (curr_value, mut best_move) = if is_pv && depth > 5 {
+            // Internal iterative deepening
+            self.alpha_beta_search(game, alpha, beta, depth / 2, true)?
+        } else if let Some(tte) = from_tt {
+            (tte.value, tte.best_move)
         } else {
-            // TODO: internal iterative deepening on PV nodes
-            crate::eval::evaluation(game)
+            (crate::eval::evaluation(game), None)
         };
 
-        let mut best_move = None;
         let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
         let mut i = -1;
         let mut x = LOSS;
@@ -261,11 +262,7 @@ impl ThreadData {
             let is_deferred = matches!(command, DeferredMove { .. });
             let ply: Ply = match command {
                 GetHashMove => {
-                    let ply = from_tt
-                        .map(|tte| tte.best_move)
-                        .flatten()
-                        .filter(|ply| game.is_pseudo_legal(ply));
-                    if let Some(ply) = ply {
+                    if let Some(ply) = best_move {
                         ply
                     } else {
                         continue;
@@ -331,6 +328,7 @@ impl ThreadData {
                 command => command.ply().unwrap(),
             };
 
+            // TODO: don't re-search hash and killer moves
             // Deferred moves have already been checked for legality.
             if !is_deferred && !legality_checker.is_legal(&ply) {
                 continue;
@@ -350,7 +348,7 @@ impl ThreadData {
             x = if is_first_move {
                 best_move = Some(ply);
                 -self
-                    .alpha_beta_search(&next_game, -beta, -alpha, depth - 1)?
+                    .alpha_beta_search(&next_game, -beta, -alpha, depth - 1, is_pv)?
                     .0
             } else {
                 if !is_deferred && self.currently_searching.defer_move(next_game.hash(), depth) {
@@ -374,12 +372,12 @@ impl ThreadData {
 
                 // Null-window search
                 x = -self
-                    .alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, next_depth)?
+                    .alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, next_depth, false)?
                     .0;
 
                 if x > alpha && x < beta {
                     x = -self
-                        .alpha_beta_search(&next_game, -beta, -alpha, next_depth)?
+                        .alpha_beta_search(&next_game, -beta, -alpha, next_depth, false)?
                         .0;
                 };
 
@@ -397,7 +395,9 @@ impl ThreadData {
             }
 
             if alpha >= beta {
-                self.insert_killer_move(ply, game.half_move_total() as usize);
+                if !ply.is_capture(game) {
+                    self.insert_killer_move(ply, game.half_move_total() as usize);
+                }
                 break;
             }
         }

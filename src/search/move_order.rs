@@ -188,6 +188,16 @@ impl SearchCommand {
 
         return Some(*ply);
     }
+
+    pub fn is_regular_ply(&self) -> bool {
+        use SearchCommand::*;
+
+        match self {
+            KillerMove { .. } => false,
+            GetHashMove => false,
+            _ => true,
+        }
+    }
 }
 
 pub const INITIAL_SEARCH_COMMANDS: [SearchCommand; 5] = {
