@@ -9,7 +9,7 @@ pub fn main() {
         "ucinewgame",
         "position startpos",
         "d",
-        "go depth 6",
+        "go depth 8",
         "wait",
         "quit",
     ];

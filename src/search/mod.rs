@@ -11,6 +11,7 @@ use std::time::Instant;
 use crossbeam_channel as channel;
 
 use crate::game::Game;
+use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
 use crate::transposition_table::{TranspositionEntry, TranspositionTable};
@@ -25,11 +26,11 @@ pub const COMMS_INTERVAL: usize = 1 << 10;
 pub const ONE_MP: Millipawns = Millipawns(1);
 pub const N_KILLER_MOVES: usize = 2;
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 enum ThreadCommand {
     Quit,
     StopSearch,
-    SearchThis(Game),
+    SearchThis(History),
 }
 
 enum ThreadStatus {
@@ -44,10 +45,11 @@ enum ThreadStatus {
     },
 }
 
+#[derive(Clone)]
 enum PoolState {
     Idle,
     Searching {
-        game: Game,
+        history: History,
         time_policy: TimePolicy,
         start_time: Instant,
         is_pondering: bool,
@@ -76,6 +78,8 @@ pub struct SearchThreadPool {
 
 // TODO: does this struct need to exist?
 struct ThreadData {
+    history: Option<History>,
+
     command_channel: channel::Receiver<ThreadCommand>,
     status_channel: channel::Sender<ThreadStatus>,
     nodes_searched: usize,
@@ -91,10 +95,9 @@ struct ThreadData {
 
 impl ThreadData {
     fn run(&mut self) {
-        let mut game = None;
         loop {
-            let command = match game {
-                Some(game) => self.search(&game),
+            let command = match self.history {
+                Some(_) => self.search(),
                 None => self.command_channel.recv().unwrap(),
             };
 
@@ -102,10 +105,10 @@ impl ThreadData {
             match command {
                 Quit => return,
                 StopSearch => {
-                    game = None;
+                    self.history = None;
                 }
-                SearchThis(new_game) => {
-                    game = Some(new_game);
+                SearchThis(new_history) => {
+                    self.history = Some(new_history);
                 }
             };
         }
@@ -133,13 +136,13 @@ impl ThreadData {
         }
     }
 
-    pub fn search(&mut self, game: &Game) -> ThreadCommand {
+    pub fn search(&mut self) -> ThreadCommand {
         use crate::millipawns::*;
         for depth in 1..255 {
             // TODO: narrow alpha and beta? (aspiration windows)
             // Tried this, available in aspiration-windows branch, but it
             // seems to significantly weaken self-play.
-            match self.alpha_beta_search(game, LOSS, WIN, depth, true) {
+            match self.alpha_beta_search(LOSS, WIN, depth, true) {
                 Ok((score, best_move)) => {
                     self.status_channel
                         .send(ThreadStatus::SearchFinished {
@@ -157,7 +160,6 @@ impl ThreadData {
 
     fn alpha_beta_search(
         &mut self,
-        game: &Game,
         alpha: Millipawns,
         beta: Millipawns,
         depth: usize,
@@ -166,6 +168,8 @@ impl ThreadData {
         use crate::millipawns::*;
         use crate::transposition_table::TranspositionEntryType::*;
         use move_order::*;
+
+        let game = *self.history.as_ref().unwrap().last();
 
         // Must be only incremented here because it is also used to initiate
         // communication.
@@ -177,7 +181,7 @@ impl ThreadData {
         }
 
         if depth == 0 {
-            let score = self.quiescence_search(game, alpha, beta);
+            let score = self.quiescence_search(&game, alpha, beta);
             return Ok((score, None));
         }
 
@@ -204,8 +208,7 @@ impl ThreadData {
 
         let mut best_move = if is_pv && depth > 5 {
             // Internal iterative deepening
-            self.alpha_beta_search(game, alpha, beta, depth / 2, true)?
-                .1
+            self.alpha_beta_search(alpha, beta, depth / 2, true)?.1
         } else {
             from_tt.and_then(|x| x.best_move)
         };
@@ -214,7 +217,7 @@ impl ThreadData {
         let mut i = -1;
         let mut x = LOSS;
 
-        let legality_checker = crate::legality::LegalityChecker::new(game);
+        let legality_checker = crate::legality::LegalityChecker::new(&game);
         let mut any_moves_seen = false;
 
         while let Some(command) = commands.pop() {
@@ -234,7 +237,7 @@ impl ThreadData {
                         let after_hash = game.hash_after_ply(&ply);
                         let tte = self.transposition_table.get(after_hash);
 
-                        let see = static_exchange_evaluation(game, ply);
+                        let see = static_exchange_evaluation(&game, ply);
                         let value = if let Some(tte) = tte {
                             // TODO: upper/lower bound?
                             // TODO: merge these?
@@ -296,21 +299,16 @@ impl ThreadData {
             }
 
             any_moves_seen = true;
-            let next_game = {
-                let mut cpy = *game;
-                cpy.apply_ply(&ply);
-                cpy
-            };
-
             i += 1;
 
             let is_first_move = i == 0;
 
+            self.history.as_mut().unwrap().push(&ply);
+            let next_game: Game = *self.history.as_ref().unwrap().last();
+
             x = if is_first_move {
                 best_move = Some(ply);
-                -self
-                    .alpha_beta_search(&next_game, -beta, -alpha, depth - 1, is_pv)?
-                    .0
+                -self.alpha_beta_search(-beta, -alpha, depth - 1, is_pv)?.0
             } else {
                 if !is_deferred && self.currently_searching.defer_move(next_game.hash(), depth) {
                     commands.push(DeferredMove {
@@ -333,13 +331,11 @@ impl ThreadData {
 
                 // Null-window search
                 x = -self
-                    .alpha_beta_search(&next_game, -alpha - ONE_MP, -alpha, next_depth, false)?
+                    .alpha_beta_search(-alpha - ONE_MP, -alpha, next_depth, false)?
                     .0;
 
                 if x > alpha && x < beta {
-                    x = -self
-                        .alpha_beta_search(&next_game, -beta, -alpha, next_depth, false)?
-                        .0;
+                    x = -self.alpha_beta_search(-beta, -alpha, next_depth, false)?.0;
                 };
 
                 if !is_deferred {
@@ -350,13 +346,15 @@ impl ThreadData {
                 x
             };
 
+            self.history.as_mut().unwrap().pop();
+
             if x > alpha {
                 alpha = x;
                 best_move = Some(ply);
             }
 
             if alpha >= beta {
-                if !ply.is_capture(game) {
+                if !ply.is_capture(&game) {
                     self.insert_killer_move(ply, game.half_move_total() as usize);
                 }
                 break;
@@ -468,6 +466,8 @@ impl SearchThreadPool {
 
             let thread = thread::spawn(move || {
                 let mut runner = ThreadData {
+                    history: None::<History>,
+
                     command_channel: command_r,
                     status_channel: status_s,
                     nodes_searched: 0,
@@ -494,24 +494,26 @@ impl SearchThreadPool {
 
     pub fn kill(&mut self) {
         // https://stackoverflow.com/a/68978386
-        self.broadcast(ThreadCommand::Quit).unwrap();
+        self.broadcast(&ThreadCommand::Quit).unwrap();
         while !self.threads.is_empty() {
             let (cur_thread, _, _) = self.threads.remove(0);
             cur_thread.join().expect("Unable to kill thread");
         }
     }
 
-    pub fn start_search(&mut self, game: &Game, time_policy: TimePolicy) {
-        self.broadcast(ThreadCommand::SearchThis(*game)).unwrap();
+    pub fn start_search(&mut self, history: &History, time_policy: TimePolicy) {
+        self.broadcast(&ThreadCommand::SearchThis(history.clone()))
+            .unwrap();
+        let game = *history.last();
 
         self.state = PoolState::Searching {
-            game: *game,
+            history: history.clone(),
             start_time: Instant::now(),
             is_pondering: false,
             time_policy,
 
             best_move: None,
-            score: crate::eval::evaluation(game),
+            score: crate::eval::evaluation(&game),
             best_depth: 0,
             pv: Vec::new(),
 
@@ -521,17 +523,17 @@ impl SearchThreadPool {
     }
 
     pub fn stop(&mut self) {
-        self.broadcast(ThreadCommand::StopSearch).unwrap();
+        self.broadcast(&ThreadCommand::StopSearch).unwrap();
         self.state = PoolState::Idle;
     }
 
     fn update_pv(&mut self) {
         if let PoolState::Searching {
-            game,
+            history,
             best_move,
             ref mut pv,
             ..
-        } = self.state
+        } = &mut self.state
         {
             let old = if best_move.is_some() && (pv.is_empty() || pv[0] != best_move.unwrap()) {
                 vec![best_move.unwrap()]
@@ -539,6 +541,7 @@ impl SearchThreadPool {
                 pv.clone()
             };
 
+            let game = *history.last();
             *pv = self.transposition_table.update_pv(&game, &old);
         }
     }
@@ -592,9 +595,9 @@ impl SearchThreadPool {
         }
     }
 
-    fn broadcast(&self, command: ThreadCommand) -> Result<(), channel::SendError<ThreadCommand>> {
+    fn broadcast(&self, command: &ThreadCommand) -> Result<(), channel::SendError<ThreadCommand>> {
         for (_, s, _) in self.threads.iter() {
-            s.send(command)?;
+            s.send(command.clone())?;
         }
         Ok(())
     }
@@ -619,7 +622,7 @@ impl SearchThreadPool {
             start_time,
             time_policy,
             best_depth,
-            game,
+            history,
             ..
         } = &self.state
         {
@@ -643,6 +646,8 @@ impl SearchThreadPool {
                     // (things like waiting longer when the opponent has less time,
                     //  when the evaluation swings wildly, pv keeps changing, etc.)
                     use crate::basic_enums::Color::*;
+
+                    let game = history.last();
 
                     let elapsed = start_time.elapsed();
                     let (time, inc) = match game.to_move() {
@@ -705,44 +710,53 @@ impl SearchThreadPool {
     pub fn maybe_end_search(&mut self) -> Option<String> {
         // For borrow checker reasons
         let policy_finished = self.time_policy_finished();
+        let mut next_state = self.state.clone();
 
-        match self.state {
+        let mut do_stop = false;
+        let res = match &self.state {
             PoolState::Idle => None,
             PoolState::Searching {
-                best_move, game, ..
+                best_move, history, ..
             } => {
                 if policy_finished {
                     let best_move = match best_move {
-                        Some(m) => m,
+                        Some(m) => *m,
                         None => {
                             eprintln!("No best move found... this is bad!");
-
+                            let game = history.last();
                             game.legal_moves()[0]
                         }
                     };
                     if self.ponder {
-                        let mut cpy = game;
-                        cpy.apply_ply(&best_move);
+                        let mut cpy = history.clone();
+                        cpy.push(&best_move);
                         self.start_search(&cpy, TimePolicy::Infinite);
                         if let PoolState::Searching {
                             ref mut is_pondering,
                             ..
-                        } = self.state
+                        } = next_state
                         {
                             *is_pondering = true;
                         } else {
                             unreachable!()
                         }
                     } else {
-                        self.stop();
-                        self.state = PoolState::Idle;
+                        do_stop = true;
+                        next_state = PoolState::Idle;
                     }
                     Some(format!("bestmove {}", best_move.long_name()))
                 } else {
                     None
                 }
             }
+        };
+
+        if do_stop {
+            self.stop();
         }
+
+        self.state = next_state;
+        res
     }
 }
 

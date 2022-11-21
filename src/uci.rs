@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::game::Game;
+use crate::history::History;
 use crate::transposition_table::TranspositionTable;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -14,7 +15,7 @@ const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
 use crate::search::SearchThreadPool;
 
 pub struct UCIState {
-    game: Game,
+    history: History,
     transposition_table: Arc<TranspositionTable>,
     search_thread_pool: SearchThreadPool,
     log_file: Box<dyn std::io::Write>,
@@ -26,7 +27,7 @@ impl UCIState {
     pub fn new() -> UCIState {
         let tt = Arc::new(TranspositionTable::new(1024 * 1024 * 16));
         UCIState {
-            game: Game::new(),
+            history: History::new(Game::new()),
             transposition_table: tt.clone(),
             search_thread_pool: SearchThreadPool::new(1, tt),
             // stderr is the default log file
@@ -49,7 +50,7 @@ impl UCIState {
 
     pub fn pv_string(&self) -> String {
         let pv = self.search_thread_pool.pv();
-        crate::transposition_table::pv_string(&self.game, &pv)
+        crate::transposition_table::pv_string(self.history.last(), &pv)
     }
 
     pub fn run(&mut self) {
@@ -110,7 +111,7 @@ impl UCIState {
                 self.send("readyok");
             }
             "ucinewgame" => {
-                self.game = Game::new();
+                self.history = History::new(Game::new());
             }
             "setoption" => {
                 if parts.next().ok_or("No option name")? != "name" {
@@ -172,9 +173,10 @@ impl UCIState {
                     }
                     next = parts.next();
                 }
-                self.game = Game::from_fen(&fen)?;
+                self.history = History::new(Game::from_fen(&fen)?);
                 for m in moves {
-                    self.game.make_move_uci(&m)?;
+                    let ply = self.history.last().parse_uci_long_name(&m)?;
+                    self.history.push(&ply);
                 }
             }
             "go" => {
@@ -240,10 +242,10 @@ impl UCIState {
                 }
                 println!("Time policy: {time_policy:?}");
                 self.search_thread_pool
-                    .start_search(&self.game, time_policy);
+                    .start_search(&self.history, time_policy);
             }
             "d" => {
-                let game = self.game;
+                let game = self.history.last();
                 for ply in game.legal_moves() {
                     println!("{}", ply.long_name());
                 }
