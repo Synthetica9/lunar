@@ -295,7 +295,7 @@ impl ThreadData {
                     continue;
                 }
                 GenKillerMoves => {
-                    let move_total = game.half_move() as usize;
+                    let move_total = game.half_move_total() as usize;
                     if let Some(killer_moves) = self.killer_moves.get(move_total) {
                         for ply in killer_moves.iter().flatten() {
                             if game.is_pseudo_legal(ply) {
