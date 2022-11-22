@@ -358,18 +358,9 @@ impl Board {
         piece: &Piece,
         occupancy: Bitboard,
     ) -> Bitboard {
-        use Piece::*;
-
         let mut res = Bitboard::new();
         for sqr in self.get(color, piece).iter_squares() {
-            res |= match piece {
-                Pawn => Bitboard::pawn_attacks(sqr, *color),
-                Knight => Bitboard::knight_attacks(sqr),
-                Bishop => Bitboard::bishop_attacks(sqr, occupancy),
-                Rook => Bitboard::rook_attacks(sqr, occupancy),
-                Queen => Bitboard::queen_attacks(sqr, occupancy),
-                King => Bitboard::king_attacks(sqr),
-            }
+            res |= Bitboard::piece_attacks_from_with_occupancy(piece, sqr, color, occupancy)
         }
         res
     }

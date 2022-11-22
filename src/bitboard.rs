@@ -347,6 +347,23 @@ impl Bitboard {
     pub fn queen_attacks(square: Square, occupancy: Bitboard) -> Bitboard {
         Bitboard::magic_attacks(square, Piece::Queen, occupancy)
     }
+
+    pub fn piece_attacks_from_with_occupancy(
+        piece: &Piece,
+        sqr: Square,
+        color: &Color,
+        occupancy: Bitboard,
+    ) -> Bitboard {
+        use Piece::*;
+        match piece {
+            Pawn => Bitboard::pawn_attacks(sqr, *color),
+            Knight => Bitboard::knight_attacks(sqr),
+            Bishop => Bitboard::bishop_attacks(sqr, occupancy),
+            Rook => Bitboard::rook_attacks(sqr, occupancy),
+            Queen => Bitboard::queen_attacks(sqr, occupancy),
+            King => Bitboard::king_attacks(sqr),
+        }
+    }
 }
 
 pub const EMPTY: Bitboard = Bitboard::new();

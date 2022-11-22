@@ -497,10 +497,39 @@ impl Game {
     }
 
     pub fn is_check(&self, ply: &Ply) -> bool {
-        let mut cpy = *self;
+        debug_assert!(self.is_pseudo_legal(ply));
 
-        cpy.apply_ply(ply);
-        cpy.is_in_check()
+        let final_piece = if let Some(SpecialFlag::Promotion(p)) = ply.flag() {
+            p
+        } else {
+            ply.moved_piece(self)
+        };
+        let occupied = self.board.get_occupied();
+        let occupied_after = occupied & !Bitboard::from_squares(&[ply.src(), ply.dst()]);
+        let other_king_square = self.board.king_square(&self.to_move.other());
+
+        let attacks = Bitboard::piece_attacks_from_with_occupancy(
+            &final_piece,
+            ply.dst(),
+            &self.to_move(),
+            occupied_after,
+        );
+        let res = attacks.get(other_king_square);
+
+        #[cfg(debug_assertions)]
+        {
+            let mut cpy = *self;
+            cpy.apply_ply(ply);
+            let fen = self.to_fen();
+            assert_eq!(
+                res,
+                cpy.is_in_check(),
+                "Inconsistent check... {ply:?}\n{fen}\n{}",
+                attacks.simple_render()
+            );
+        }
+
+        res
     }
 
     pub fn is_in_mate(&self) -> bool {
@@ -683,7 +712,6 @@ impl Default for Game {
         Self::new()
     }
 }
-
 
 impl ApplyPly for Game {
     #[inline]
