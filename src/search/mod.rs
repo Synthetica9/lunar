@@ -192,7 +192,7 @@ impl ThreadData {
         let alpha_orig = alpha;
         let mut alpha = alpha;
         let mut beta = beta;
-        let legality_checker = crate::legality::LegalityChecker::new(&game);
+        let mut legality_checker = None;
 
         let from_tt = self.transposition_table.get(game.hash());
         if let Some(tte) = from_tt {
@@ -204,14 +204,20 @@ impl ThreadData {
 
                 if depth >= 6 {
                     if let Some(ply) = tte.best_move {
-                        accept = game.is_pseudo_legal(&ply) && legality_checker.is_legal(&ply);
+                        accept &= game.is_pseudo_legal(&ply);
                         if accept {
-                            let history = self.history.as_mut().unwrap();
-                            history.push(&ply);
-                            let is_3_fold_rep = history.repetition_count_at_least_3();
-                            history.pop();
+                            // TODO: use LazyCell?
+                            let checker = crate::legality::LegalityChecker::new(&game);
+                            accept &= checker.is_legal(&ply);
+                            legality_checker = Some(checker);
+                            if accept {
+                                let history = self.history.as_mut().unwrap();
+                                history.push(&ply);
+                                let is_3_fold_rep = history.repetition_count_at_least_3();
+                                history.pop();
 
-                            accept &= !is_3_fold_rep;
+                                accept &= !is_3_fold_rep;
+                            }
                         }
                     }
                 }
@@ -235,6 +241,12 @@ impl ThreadData {
             self.alpha_beta_search(alpha, beta, depth / 2, true)?.1
         } else {
             from_tt.and_then(|x| x.best_move)
+        };
+
+        let legality_checker = if let Some(c) = legality_checker {
+            c
+        } else {
+            crate::legality::LegalityChecker::new(&game)
         };
 
         let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
