@@ -36,7 +36,7 @@ impl UCIState {
     }
 
     pub fn log(&mut self, message: &str) {
-        writeln!(self.log_file, "{message}");
+        writeln!(self.log_file, "{message}").unwrap();
         if self.debug {
             println!("info string {message}");
         }
@@ -278,6 +278,12 @@ impl UCIState {
     }
 }
 
+impl Default for UCIState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 enum UCIOptionType<'a> {
     Button,
     Spin {
@@ -442,44 +448,6 @@ impl<'a> AvailableOptions<'a> {
         (option.setter)(value, state)?;
         Ok(())
     }
-}
-
-fn ucinewgame(_parts: &[&str], _state: &mut UCIState) -> Result<(), String> {
-    // TODO: clear hash table?
-
-    Ok(())
-}
-
-fn position(parts: &[&str], state: &mut UCIState) -> Result<(), String> {
-    let mut parts = parts.iter();
-
-    let mut game = match parts.next().ok_or("No position specified")? {
-        &"startpos" => {
-            if let Some(x) = parts.next() {
-                if x != &"moves" {
-                    return Err("Expecting 'moves'".to_string());
-                }
-            }
-            Game::new()
-        }
-        &"fen" => {
-            let fen_parts: Vec<_> = parts
-                .by_ref()
-                .take_while(|x| *x != &"moves")
-                .copied()
-                .collect();
-            let fen = fen_parts.join(" ");
-            Game::from_fen(&fen)?
-        }
-        _ => Err("Unknown subcommand")?,
-    };
-
-    for ply in parts {
-        game.make_move_uci(ply)?;
-    }
-
-    state.game = game;
-    Ok(())
 }
 
 pub fn run_uci() {

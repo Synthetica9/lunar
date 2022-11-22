@@ -455,13 +455,10 @@ impl Board {
 impl ApplyPly for Board {
     #[inline]
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
-        match self.square(square) {
-            Some((c, p)) => {
-                // There currently is a piece there. It'd better match.
-                debug_assert!(c == color);
-                debug_assert!(p == piece);
-            }
-            None => {}
+        if let Some((c, p)) = self.square(square) {
+            // There currently is a piece there. It'd better match.
+            debug_assert!(c == color);
+            debug_assert!(p == piece);
         }
         self.toggle_mut_invalid(square, color, piece);
     }

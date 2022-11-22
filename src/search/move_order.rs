@@ -192,11 +192,7 @@ impl SearchCommand {
     pub fn is_regular_ply(&self) -> bool {
         use SearchCommand::*;
 
-        match self {
-            KillerMove { .. } => false,
-            GetHashMove => false,
-            _ => true,
-        }
+        !matches!(self, KillerMove { .. } | GetHashMove)
     }
 }
 

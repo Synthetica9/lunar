@@ -122,17 +122,11 @@ impl Ply {
     }
 
     pub const fn is_promotion(&self) -> bool {
-        match self.flag() {
-            Some(SpecialFlag::Promotion(_)) => true,
-            _ => false,
-        }
+        matches!(self.flag(), Some(SpecialFlag::Promotion(_)))
     }
 
     pub const fn is_en_passant(&self) -> bool {
-        match self.flag() {
-            Some(SpecialFlag::EnPassant) => true,
-            _ => false,
-        }
+        matches!(self.flag(), Some(SpecialFlag::EnPassant))
     }
 
     pub const fn castling_direction(&self) -> Option<CastleDirection> {
@@ -150,17 +144,11 @@ impl Ply {
     }
 
     pub const fn is_castling(&self) -> bool {
-        match self.flag() {
-            Some(SpecialFlag::Castling) => true,
-            _ => false,
-        }
+        matches!(self.flag(), Some(SpecialFlag::Castling))
     }
 
     pub const fn is_special(&self) -> bool {
-        match self.flag() {
-            None => false,
-            _ => true,
-        }
+        self.flag().is_some()
     }
 
     pub const fn moved_piece(&self, game: &Game) -> Piece {

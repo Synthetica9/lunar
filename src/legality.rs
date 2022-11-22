@@ -8,7 +8,6 @@ use crate::square::Square;
 
 pub struct LegalityChecker {
     game: Game,
-    occupied: Bitboard,
     king_square: Square,
     king_attackers: Bitboard,
     absolute_pins: Bitboard,
@@ -47,7 +46,6 @@ impl LegalityChecker {
             king_attackers,
             check_count,
             attackers_without_king,
-            occupied,
             absolute_pins,
             absolute_pin_pairs,
         }

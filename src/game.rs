@@ -1,5 +1,4 @@
 use smallvec::SmallVec;
-use strum::IntoEnumIterator;
 
 use crate::basic_enums::{CastleDirection, Color};
 use crate::bitboard::Bitboard;
@@ -409,7 +408,7 @@ impl Game {
 
     pub fn is_pseudo_legal(&self, ply: &Ply) -> bool {
         let pseudo_legal_moves = self.pseudo_legal_moves();
-        pseudo_legal_moves.iter().collect::<Vec<_>>().contains(&ply)
+        pseudo_legal_moves.iter().any(|x| x == ply)
     }
 
     pub fn legal_moves(&self) -> Vec<Ply> {
@@ -678,6 +677,13 @@ impl Game {
         count
     }
 }
+
+impl Default for Game {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 
 impl ApplyPly for Game {
     #[inline]

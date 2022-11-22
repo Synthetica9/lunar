@@ -40,8 +40,7 @@ fn create_mask(
     include_edges: bool,
     blocker_mask: Bitboard,
 ) -> Bitboard {
-    let min = if include_edges { 0 } else { 1 };
-    let max = if include_edges { 7 } else { 6 };
+    let (min, max) = if include_edges { (0, 7) } else { (1, 6) };
 
     let mut mask = 0;
 
@@ -165,6 +164,7 @@ pub fn find_magic(square: Square, bits: isize, is_bishop: bool) -> (u64, Vec<Bit
 
 // Empty comments to keep rustfmt from messing up the formatting.
 
+#[allow(clippy::zero_prefixed_literal)]
 const ROOK_BITS: [isize; 64] = [
     12, 11, 11, 11, 11, 11, 11, 12, //
     11, 10, 10, 10, 10, 10, 10, 11, //
@@ -177,6 +177,7 @@ const ROOK_BITS: [isize; 64] = [
 ];
 
 // Original:
+#[allow(clippy::zero_prefixed_literal)]
 const ROOK_SHARING: [usize; 64] = [
     00, 01, 02, 03, 04, 05, 06, 07, //
     01, 00, 03, 02, 05, 04, 07, 06, //
@@ -200,6 +201,7 @@ const ROOK_SHARING: [usize; 64] = [
 //     07, 26, 28, 27, 30, 29, 19, 00, //
 // ];
 
+#[allow(clippy::zero_prefixed_literal)]
 const BISHOP_BITS: [isize; 64] = [
     6, 5, 5, 5, 5, 5, 5, 6, //
     5, 5, 5, 5, 5, 5, 5, 5, //
@@ -211,6 +213,7 @@ const BISHOP_BITS: [isize; 64] = [
     6, 5, 5, 5, 5, 5, 5, 6, //
 ];
 
+#[allow(clippy::zero_prefixed_literal)]
 const BISHOP_SHARING: [usize; 64] = [
     00, 02, 04, 04, 04, 04, 12, 14, //
     00, 02, 05, 05, 05, 05, 12, 14, //
@@ -278,7 +281,7 @@ pub fn gen_magics_file(file: &mut std::fs::File) -> std::io::Result<()> {
             writeln!(file, "        0x{magic:016x},")?;
             writeln!(file, "        0x{premask:016x},")?;
             writeln!(file, "        0x{postmask:016x},")?;
-            writeln!(file, "        &SHARED_{name}_MAGIC_{sharing}")?;
+            writeln!(file, "        SHARED_{name}_MAGIC_{sharing}")?;
             writeln!(file, "    ),")?;
         }
         writeln!(file, "];\n")?;

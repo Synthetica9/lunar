@@ -8,10 +8,6 @@ pub const DRAW: Millipawns = Millipawns(0);
 pub const LOSS: Millipawns = Millipawns(-WIN.0);
 
 impl Millipawns {
-    fn new(millipawns: i32) -> Millipawns {
-        Millipawns(millipawns)
-    }
-
     fn for_player(self, player: Color) -> Millipawns {
         if player == Color::Black {
             -self

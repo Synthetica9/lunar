@@ -78,56 +78,6 @@ impl BitboardMap {
 
         res
     }
-
-    const fn mask_map(self, mask: Bitboard) -> BitboardMap {
-        let mut res = BitboardMap::new();
-        let mut i = 64;
-        while i > 0 {
-            i -= 1;
-            let sq = Square::from_index(i);
-            res = res.set_const(&sq, self.get_const(&sq).and(mask));
-        }
-        res
-    }
-
-    const fn relevant_edges_attack() -> BitboardMap {
-        use crate::bitboard::{CORNERS, EDGES};
-        let mut res = BitboardMap::new();
-        let mut i = 64;
-        let center = EDGES.not_const();
-        while i > 0 {
-            i -= 1;
-            let sq = Square::from_index(i);
-
-            // "Center" (not on edge) is always relevant for attacks
-            let mut relevant = center;
-
-            // If we are on an edge, that specific edge is relevant
-            relevant = relevant.or(sq.file().as_bitboard());
-            relevant = relevant.or(sq.rank().as_bitboard());
-
-            // Corner squares are never relevant for attacks.
-            relevant = relevant.and(CORNERS.not_const());
-
-            res = res.set_const(&sq, relevant);
-        }
-        res
-    }
-
-    const fn and(self, other: BitboardMap) -> BitboardMap {
-        let mut res = BitboardMap::new();
-        let mut i = 64;
-        while i > 0 {
-            i -= 1;
-            let sq = Square::from_index(i);
-            res = res.set_const(&sq, self.get_const(&sq).and(*other.get_const(&sq)));
-        }
-        res
-    }
-
-    const fn trim_edges(self) -> BitboardMap {
-        self.and(BitboardMap::relevant_edges_attack())
-    }
 }
 
 impl std::ops::Index<Square> for BitboardMap {
@@ -142,22 +92,6 @@ impl std::ops::IndexMut<Square> for BitboardMap {
     fn index_mut(&mut self, index: Square) -> &mut Self::Output {
         &mut self.0[index.as_index()]
     }
-}
-
-const fn make_sliding(directions: [Direction; 4]) -> [Direction; 28] {
-    let mut res = [Direction::new(0, 0); 28];
-    let mut i = 0;
-    let mut j = 0;
-    while j < 4 {
-        let mut k = 1;
-        while k < 8 {
-            res[i] = directions[j].mult_const(k);
-            i += 1;
-            k += 1;
-        }
-        j += 1;
-    }
-    res
 }
 
 const KNIGHT_DIRECTIONS: [Direction; 8] = [

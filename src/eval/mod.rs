@@ -153,7 +153,6 @@ fn test_doubled_pawns() {
 }
 
 pub fn evaluation(game: &Game) -> Millipawns {
-    use crate::eval::pesto;
     use crate::millipawns::*;
     let mut res = Millipawns(0);
     res += pesto::eval(game);

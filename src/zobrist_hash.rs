@@ -72,6 +72,12 @@ impl ZobristHash {
     }
 }
 
+impl Default for ZobristHash {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[test]
 fn test_zobrist_hash() {
     let game = Game::new();

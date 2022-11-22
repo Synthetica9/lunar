@@ -7,10 +7,10 @@ use hashes::gen_hashes_file;
 pub mod magics;
 use magics::gen_magics_file;
 
-fn main() -> std::io::Result<()> {
+pub fn main() -> std::io::Result<()> {
     println!("cargo:rerun-if-changed=build");
 
-    gen_squares();
+    gen_squares()?;
 
     gen_magics_file(&mut open("magics")?)?;
     gen_hashes_file(&mut open("hashes")?)?;

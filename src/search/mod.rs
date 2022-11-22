@@ -1,8 +1,6 @@
 // Simplified ABDADA.
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
-use strum::IntoEnumIterator;
-
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
@@ -22,7 +20,6 @@ mod currently_searching;
 mod move_order;
 
 use currently_searching::CurrentlySearching;
-use move_order::{static_exchange_evaluation, static_exchange_evaluation_winning};
 
 pub const COMMS_INTERVAL: usize = 1 << 10;
 pub const ONE_MP: Millipawns = Millipawns(1);
@@ -37,7 +34,6 @@ enum ThreadCommand {
 
 enum ThreadStatus {
     StatusUpdate {
-        thread_id: usize,
         nodes_searched: usize,
         quiescence_nodes_searched: usize,
     },
@@ -72,7 +68,6 @@ pub struct SearchThreadPool {
         channel::Sender<ThreadCommand>,
         channel::Receiver<ThreadStatus>,
     )>,
-    currently_searching: CurrentlySearching,
     transposition_table: Arc<TranspositionTable>,
     ponder: bool,
 
@@ -81,9 +76,6 @@ pub struct SearchThreadPool {
 
 // TODO: does this struct need to exist?
 struct ThreadData {
-    thread_id: usize,
-    num_threads: usize,
-
     command_channel: channel::Receiver<ThreadCommand>,
     status_channel: channel::Sender<ThreadStatus>,
     nodes_searched: usize,
@@ -120,11 +112,12 @@ impl ThreadData {
     }
 
     fn send_status_update(&mut self) {
-        self.status_channel.send(ThreadStatus::StatusUpdate {
-            thread_id: self.thread_id,
-            nodes_searched: self.nodes_searched,
-            quiescence_nodes_searched: self.quiescence_nodes_searched,
-        });
+        self.status_channel
+            .send(ThreadStatus::StatusUpdate {
+                nodes_searched: self.nodes_searched,
+                quiescence_nodes_searched: self.quiescence_nodes_searched,
+            })
+            .unwrap();
 
         self.nodes_searched = 0;
         self.quiescence_nodes_searched = 0;
@@ -162,34 +155,6 @@ impl ThreadData {
         ThreadCommand::StopSearch
     }
 
-    fn order_number(&self, ply: Ply, game: &Game, after: &Game) -> (i32, Millipawns) {
-        let see = static_exchange_evaluation(game, ply).0;
-
-        let move_total = game.half_move() as usize;
-
-        let is_killer = self
-            .killer_moves
-            .get(move_total)
-            .map_or(false, |x| x.contains(&Some(ply)));
-
-        let is_hash = self
-            .transposition_table
-            .get(game.hash())
-            .map_or(false, |tte| tte.best_move == Some(ply));
-
-        let after_hash_value = match self.transposition_table.get(after.hash()) {
-            Some(tte) => tte.value,
-            None => crate::millipawns::LOSS,
-        };
-
-        // TODO: Is this sound?
-        // let evaluation = ...;
-        (
-            (1 << 24) * (is_hash as i32) + (1024) * (is_killer as i32) + see,
-            after_hash_value,
-        )
-    }
-
     fn alpha_beta_search(
         &mut self,
         game: &Game,
@@ -216,7 +181,7 @@ impl ThreadData {
             return Ok((score, None));
         }
 
-        let alphaOrig = alpha;
+        let alpha_orig = alpha;
         let mut alpha = alpha;
         let mut beta = beta;
 
@@ -278,12 +243,13 @@ impl ThreadData {
                             CaptureValue::Static(see)
                         };
 
-                        let command = if see > DRAW {
-                            WinningCapture { ply, value }
-                        } else if see < DRAW {
-                            LosingCapture { ply, value }
-                        } else {
-                            EqualCapture { ply, value }
+                        let command = {
+                            use std::cmp::Ordering::*;
+                            match see.cmp(&DRAW) {
+                                Greater => WinningCapture { ply, value },
+                                Less => LosingCapture { ply, value },
+                                Equal => EqualCapture { ply, value },
+                            }
                         };
 
                         commands.push(command);
@@ -404,7 +370,7 @@ impl ThreadData {
             alpha
         };
 
-        let value_type = if alpha <= alphaOrig {
+        let value_type = if alpha <= alpha_orig {
             UpperBound
         } else if alpha >= beta {
             LowerBound
@@ -448,7 +414,7 @@ impl ThreadData {
         }
 
         for ply in game.quiescence_moves() {
-            if !static_exchange_evaluation_winning(game, ply) {
+            if !move_order::static_exchange_evaluation_winning(game, ply) {
                 continue;
             }
 
@@ -494,7 +460,7 @@ impl SearchThreadPool {
 
         let currently_searching = CurrentlySearching::new();
 
-        for i in 0..num_threads {
+        for _ in 0..num_threads {
             let (command_s, command_r) = channel::unbounded();
             let (status_s, status_r) = channel::unbounded();
             let transposition_table = transposition_table.clone();
@@ -502,9 +468,6 @@ impl SearchThreadPool {
 
             let thread = thread::spawn(move || {
                 let mut runner = ThreadData {
-                    thread_id: i,
-                    num_threads,
-
                     command_channel: command_r,
                     status_channel: status_s,
                     nodes_searched: 0,
@@ -522,7 +485,6 @@ impl SearchThreadPool {
 
         SearchThreadPool {
             threads,
-            currently_searching,
             transposition_table,
 
             ponder: false,
@@ -532,7 +494,7 @@ impl SearchThreadPool {
 
     pub fn kill(&mut self) {
         // https://stackoverflow.com/a/68978386
-        self.broadcast(ThreadCommand::Quit);
+        self.broadcast(ThreadCommand::Quit).unwrap();
         while !self.threads.is_empty() {
             let (cur_thread, _, _) = self.threads.remove(0);
             cur_thread.join().expect("Unable to kill thread");
@@ -540,7 +502,7 @@ impl SearchThreadPool {
     }
 
     pub fn start_search(&mut self, game: &Game, time_policy: TimePolicy) {
-        self.broadcast(ThreadCommand::SearchThis(*game));
+        self.broadcast(ThreadCommand::SearchThis(*game)).unwrap();
 
         self.state = PoolState::Searching {
             game: *game,
@@ -559,27 +521,25 @@ impl SearchThreadPool {
     }
 
     pub fn stop(&mut self) {
-        self.broadcast(ThreadCommand::StopSearch);
+        self.broadcast(ThreadCommand::StopSearch).unwrap();
         self.state = PoolState::Idle;
     }
 
     fn update_pv(&mut self) {
-        match self.state {
-            PoolState::Searching {
-                game,
-                best_move,
-                ref mut pv,
-                ..
-            } => {
-                let old = if best_move.is_some() && (pv.is_empty() || pv[0] != best_move.unwrap()) {
-                    vec![best_move.unwrap()]
-                } else {
-                    pv.clone()
-                };
+        if let PoolState::Searching {
+            game,
+            best_move,
+            ref mut pv,
+            ..
+        } = self.state
+        {
+            let old = if best_move.is_some() && (pv.is_empty() || pv[0] != best_move.unwrap()) {
+                vec![best_move.unwrap()]
+            } else {
+                pv.clone()
+            };
 
-                *pv = self.transposition_table.update_pv(&game, &old);
-            }
-            _ => {}
+            *pv = self.transposition_table.update_pv(&game, &old);
         }
     }
 
@@ -620,7 +580,6 @@ impl SearchThreadPool {
                         }
 
                         ThreadStatus::StatusUpdate {
-                            thread_id: _,
                             nodes_searched,
                             quiescence_nodes_searched,
                         } => {
@@ -715,7 +674,6 @@ impl SearchThreadPool {
             pv,
             nodes_searched,
             quiescence_nodes_searched,
-            game,
             ..
         } = &self.state
         {

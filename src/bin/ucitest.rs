@@ -15,6 +15,6 @@ pub fn main() {
     ];
 
     for command in uci_session {
-        state.interpret(command);
+        state.interpret(command).unwrap();
     }
 }

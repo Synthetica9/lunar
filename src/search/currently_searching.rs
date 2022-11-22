@@ -22,24 +22,13 @@ unsafe impl Sync for CurrentlySearching {}
 
 impl CurrentlySearching {
     pub fn new() -> CurrentlySearching {
-        // Use maybe_uninit
         let cs: [[UnsafeCell<ZobristHash>; CS_BUCKET_SIZE]; CS_SIZE] =
-            unsafe { std::mem::uninitialized() };
-        for bucket in &cs {
-            for cell in bucket {
-                unsafe {
-                    *cell.get() = ZobristHash::new();
-                }
-            }
-        }
+            unsafe { std::mem::zeroed() };
 
         CurrentlySearching(cs.into())
     }
 
-    fn get_bucket<'a>(
-        &'a self,
-        hash: ZobristHash,
-    ) -> &'a [UnsafeCell<ZobristHash>; CS_BUCKET_SIZE] {
+    fn get_bucket(&self, hash: ZobristHash) -> &[UnsafeCell<ZobristHash>; CS_BUCKET_SIZE] {
         &self.0[hash.as_u64() as usize % CS_SIZE]
     }
 
