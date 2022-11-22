@@ -192,20 +192,40 @@ impl ThreadData {
         let alpha_orig = alpha;
         let mut alpha = alpha;
         let mut beta = beta;
+        let legality_checker = crate::legality::LegalityChecker::new(&game);
 
         let from_tt = self.transposition_table.get(game.hash());
         if let Some(tte) = from_tt {
             if depth <= tte.depth as usize && tte.value <= beta && tte.value >= alpha {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
-                match tte.value_type {
-                    Exact => return Ok((tte.value, tte.best_move)),
-                    LowerBound => alpha = alpha.max(tte.value),
-                    UpperBound => beta = beta.min(tte.value),
+
+                let mut accept = true;
+
+                if depth >= 6 {
+                    if let Some(ply) = tte.best_move {
+                        accept = game.is_pseudo_legal(&ply) && legality_checker.is_legal(&ply);
+                        if accept {
+                            let history = self.history.as_mut().unwrap();
+                            history.push(&ply);
+                            let is_3_fold_rep = history.repetition_count_at_least_3();
+                            history.pop();
+
+                            accept &= !is_3_fold_rep;
+                        }
+                    }
                 }
 
-                if alpha >= beta {
-                    return Ok((tte.value, tte.best_move));
+                if accept {
+                    match tte.value_type {
+                        Exact => return Ok((tte.value, tte.best_move)),
+                        LowerBound => alpha = alpha.max(tte.value),
+                        UpperBound => beta = beta.min(tte.value),
+                    }
+
+                    if alpha >= beta {
+                        return Ok((tte.value, tte.best_move));
+                    }
                 }
             }
         }
@@ -221,7 +241,6 @@ impl ThreadData {
         let mut i = -1;
         let mut x = LOSS;
 
-        let legality_checker = crate::legality::LegalityChecker::new(&game);
         let mut any_moves_seen = false;
 
         while let Some(command) = commands.pop() {
