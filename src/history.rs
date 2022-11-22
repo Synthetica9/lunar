@@ -1,5 +1,5 @@
-use crate::ply::Ply;
 use crate::game::Game;
+use crate::ply::Ply;
 
 pub const HASH_TABLE_SIZE: usize = 1 << 14;
 
@@ -22,12 +22,12 @@ impl History {
         res
     }
 
-    pub fn last<'a>(&'a self) -> &'a Game {
+    pub fn last(&self) -> &Game {
         self.states.last().map(|x| &x.0).unwrap_or(&self.first)
     }
 
     pub fn push(&mut self, ply: &Ply) {
-        let mut game = self.last().clone();
+        let mut game = *self.last();
         debug_assert!(game.is_pseudo_legal(ply));
         game.apply_ply(ply);
         self.states.push((game, *ply));
@@ -60,6 +60,7 @@ impl History {
                     break;
                 }
             }
+            count += (self.first.hash() == last.hash()) as u8;
             count >= 3
         }
     }
