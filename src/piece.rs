@@ -3,7 +3,7 @@ use strum_macros::EnumIter;
 use crate::basic_enums::Color;
 use crate::millipawns::Millipawns;
 
-#[derive(Debug, Clone, PartialEq, Copy, EnumIter, Eq)]
+#[derive(Debug, Clone, PartialEq, Copy, EnumIter, Eq, PartialOrd, Ord)]
 pub enum Piece {
     Pawn,
     Knight,
