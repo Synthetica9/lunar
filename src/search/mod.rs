@@ -451,20 +451,23 @@ impl ThreadData {
         }
 
         let candidates = {
+            use smallvec::SmallVec;
             use std::cmp::Reverse;
-            let mut res = game.quiescence_pseudo_legal_moves();
-            res.sort_unstable_by_key(|ply: &Ply| {
-                (Reverse(ply.captured_piece(game)), ply.moved_piece(game))
-            });
+
+            let res = game.quiescence_pseudo_legal_moves();
+            let mut res: SmallVec<[_; 32]> = res
+                .iter()
+                .map(|x| (*x, move_order::static_exchange_evaluation(game, *x)))
+                .filter(|x| x.1 >= crate::millipawns::DRAW)
+                .collect();
+            res.sort_unstable_by_key(|x| Reverse(x.1));
             res
         };
 
         let legality_checker = crate::legality::LegalityChecker::new(game);
 
-        for ply in candidates {
-            if !move_order::static_exchange_evaluation_winning(game, ply)
-                || !legality_checker.is_legal(&ply)
-            {
+        for (ply, millipawns) in candidates {
+            if !legality_checker.is_legal(&ply) {
                 continue;
             }
 
