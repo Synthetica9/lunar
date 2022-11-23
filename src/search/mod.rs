@@ -712,8 +712,9 @@ impl SearchThreadPool {
 
                     let inc = inc.unwrap_or(Duration::from_millis(0));
 
-                    let moves_to_go = movestogo.unwrap_or(40) as u32;
-                    let time_per_move = (time + inc * (moves_to_go - 1)) / moves_to_go;
+                    let moves_to_go = movestogo.unwrap_or(20) as u32;
+                    let time_per_move =
+                        (time + inc * (moves_to_go - 1)) / moves_to_go - Duration::from_millis(50);
                     elapsed >= time_per_move
                 }
             }
