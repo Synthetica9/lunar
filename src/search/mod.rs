@@ -185,8 +185,12 @@ impl ThreadData {
         }
 
         if depth == 0 {
-            let score = self.quiescence_search(&game, alpha, beta);
-            return Ok((score, None));
+            return if game.is_in_check() {
+                self.alpha_beta_search(alpha, beta, 1, is_pv)
+            } else {
+                let score = self.quiescence_search(&game, alpha, beta);
+                Ok((score, None))
+            }
         }
 
         let alpha_orig = alpha;
