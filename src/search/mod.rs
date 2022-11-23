@@ -206,52 +206,32 @@ impl ThreadData {
             } else {
                 let score = self.quiescence_search(&game, alpha, beta);
                 Ok((score, None))
-            }
+            };
         }
 
         let alpha_orig = alpha;
         let mut alpha = alpha;
         let mut beta = beta;
-        let mut legality_checker = None;
 
         let from_tt = self.transposition_table.get(game.hash());
         if let Some(tte) = from_tt {
-            if depth <= tte.depth as usize && tte.value <= beta && tte.value >= alpha {
+            if depth <= tte.depth as usize
+                && tte.value <= beta
+                && tte.value >= alpha
+                && !self.history.as_ref().unwrap().may_be_repetition()
+            {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
-                let mut accept = true;
-
-                if depth >= 6 {
-                    if let Some(ply) = tte.best_move {
-                        accept &= game.is_pseudo_legal(&ply);
-                        if accept {
-                            // TODO: use LazyCell?
-                            let checker = crate::legality::LegalityChecker::new(&game);
-                            accept &= checker.is_legal(&ply);
-                            legality_checker = Some(checker);
-                            if accept {
-                                let history = self.history.as_mut().unwrap();
-                                history.push(&ply);
-                                let is_3_fold_rep = history.repetition_count_at_least_3();
-                                history.pop();
-
-                                accept &= !is_3_fold_rep;
-                            }
-                        }
-                    }
+                // TODO: check that the move is legal.
+                match tte.value_type {
+                    Exact => return Ok((tte.value, tte.best_move)),
+                    LowerBound => alpha = alpha.max(tte.value),
+                    UpperBound => beta = beta.min(tte.value),
                 }
 
-                if accept {
-                    match tte.value_type {
-                        Exact => return Ok((tte.value, tte.best_move)),
-                        LowerBound => alpha = alpha.max(tte.value),
-                        UpperBound => beta = beta.min(tte.value),
-                    }
-
-                    if alpha >= beta {
-                        return Ok((tte.value, tte.best_move));
-                    }
+                if alpha >= beta {
+                    return Ok((tte.value, tte.best_move));
                 }
             }
         }
@@ -263,11 +243,7 @@ impl ThreadData {
             from_tt.and_then(|x| x.best_move)
         };
 
-        let legality_checker = if let Some(c) = legality_checker {
-            c
-        } else {
-            crate::legality::LegalityChecker::new(&game)
-        };
+        let legality_checker = { crate::legality::LegalityChecker::new(&game) };
 
         let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
         let mut i = -1;
