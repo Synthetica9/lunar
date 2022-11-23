@@ -76,6 +76,13 @@ impl Color {
             Color::Black => directions::S,
         }
     }
+
+    pub const fn multiplier(self) -> i32 {
+        match self {
+            Color::White => 1,
+            Color::Black => -1,
+        }
+    }
 }
 
 // TODO: move to castlerights.rs

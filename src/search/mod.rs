@@ -158,6 +158,19 @@ impl ThreadData {
         ThreadCommand::StopSearch
     }
 
+    fn draw_value(&self) -> Millipawns {
+        // TODO: contempt value instead of DRAW
+        use crate::millipawns::DRAW;
+        // If we control that we want a draw that is better than our
+        // opponent forcing it on us.
+        // We also slightly prefer a draw with more material, to avoid
+        // needlessly giving away material thinking "oh it'll be a draw anyways."
+        // base_eval is cheap, and we divide it by 500. This gives us 2mp/pawn,
+        // 6mp/knight, etc. This in concert makes it so we'd rather make our
+        // opponent take the draw than lose material, but still keep both in mind.
+        DRAW + ONE_MP + crate::eval::base_eval(self.history.as_ref().unwrap().last()) / 500
+    }
+
     fn alpha_beta_search(
         &mut self,
         alpha: Millipawns,
@@ -180,8 +193,8 @@ impl ThreadData {
             self.communicate()?;
         }
 
-        if self.history.as_ref().unwrap().repetition_count_at_least_3() {
-            return Ok((DRAW, None));
+        if game.half_move() >= 100 || self.history.as_ref().unwrap().repetition_count_at_least_3() {
+            return Ok((self.draw_value(), None));
         }
 
         if depth == 0 {
@@ -324,7 +337,14 @@ impl ThreadData {
                 }
                 MovesExhausted => {
                     if !any_moves_seen {
-                        return Ok((if game.is_in_check() { LOSS } else { DRAW }, None));
+                        return Ok((
+                            if game.is_in_check() {
+                                LOSS
+                            } else {
+                                self.draw_value()
+                            },
+                            None,
+                        ));
                     }
                     continue;
                 }
@@ -403,13 +423,6 @@ impl ThreadData {
                 break;
             }
         }
-
-        let alpha = if game.half_move() >= 100 {
-            // TODO: start tapering off eval after ~50 halfmoves or so?
-            DRAW
-        } else {
-            alpha
-        };
 
         let value_type = if alpha <= alpha_orig {
             UpperBound
