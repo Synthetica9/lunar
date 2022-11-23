@@ -193,7 +193,10 @@ impl ThreadData {
             self.communicate()?;
         }
 
-        if game.half_move() >= 100 || self.history.as_ref().unwrap().repetition_count_at_least_3() {
+        if game.half_move() >= 100
+            || self.history.as_ref().unwrap().repetition_count_at_least_3()
+            || game.board().is_insufficient_material()
+        {
             return Ok((self.draw_value(), None));
         }
 
