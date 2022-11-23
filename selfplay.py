@@ -55,7 +55,7 @@ def compile_rev(rev):
     with TemporaryDirectory() as d:
         p = Path(d) / rev
         subprocess.check_call(["git", "worktree", "add", "--detach", str(p), rev])
-        subprocess.check_call(["cargo", "build", "--release"], cwd=p)
+        subprocess.check_call(["cargo", "build", "--release", "--bin", "lunar"], cwd=p)
         yield (rev, p / "target/release/lunar")
         subprocess.check_call(["git", "worktree", "remove", str(p)])
 
