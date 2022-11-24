@@ -1,5 +1,6 @@
 use std::cell::UnsafeCell;
 
+use no_panic::no_panic;
 use static_assertions::*;
 
 use crate::game::Game;
@@ -30,10 +31,14 @@ const_assert!(LINE_SIZE <= CACHE_LINE_SIZE);
 struct TranspositionLine([TranspositionPair; ITEMS_PER_BUCKET]);
 
 impl TranspositionLine {
+    // These two are no-panic because the unrwap _could_ produce panicking code,
+    // but statically it should be verified that the size is right.
+    #[no_panic]
     pub fn merit_entries(&mut self) -> &mut [TranspositionPair; N_MERIT_ENTRIES] {
         (&mut self.0[..N_MERIT_ENTRIES]).try_into().unwrap()
     }
 
+    #[no_panic]
     pub fn fifo_entries(&mut self) -> &mut [TranspositionPair; N_FIFO_ENTRIES] {
         (&mut self.0[N_MERIT_ENTRIES..]).try_into().unwrap()
     }
