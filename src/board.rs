@@ -437,23 +437,24 @@ impl Board {
 
         let bishops = self.get_piece(&Bishop);
         let knights = self.get_piece(&Knight);
-        if (knights | bishops).popcount() == 1 {
-            // Only one knight or bishop can't checkmate.
-            return true;
+        let knights_bishops = (knights | bishops).popcount();
+
+        use crate::bitboard::{DARK_SQUARES, LIGHT_SQUARES};
+
+        if knights.is_empty() {
+            let light_bishops = bishops & LIGHT_SQUARES;
+            if light_bishops.popcount() == knights_bishops || light_bishops.is_empty() {
+                return true;
+            }
         }
+        // TODO: add evaluation term to draw almost-impossible positions.
+        // At this point, we either have a knight or opposite colored bishops.
+        debug_assert!(
+            !knights.is_empty()
+                || (!(bishops & LIGHT_SQUARES).is_empty() && !(bishops & DARK_SQUARES).is_empty()),
+        );
 
-        // two bishops or two knights remaining.
-        debug_assert!(knights.popcount() == 2 || bishops.popcount() == 2);
-
-        if knights.popcount() == 2 {
-            return false;
-        }
-
-        // Two bishops remaining. Check that they are opposite color
-        debug_assert!(bishops.popcount() == 2);
-
-        use crate::bitboard::LIGHT_SQUARES;
-        return (bishops & LIGHT_SQUARES).popcount() != 1;
+        knights_bishops <= 1
     }
 
     pub fn simple_render(&self) -> String {
