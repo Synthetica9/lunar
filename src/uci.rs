@@ -252,6 +252,8 @@ impl UCIState {
                 println!();
                 println!("{}", game.board().simple_render());
                 println!("{}", game.to_fen());
+                println!();
+                self.transposition_table.print_cache_stats();
             }
             "stop" => {
                 self.search_thread_pool.stop();

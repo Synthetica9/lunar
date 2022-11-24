@@ -416,15 +416,16 @@ impl ThreadData {
             Exact
         };
 
-        if depth >= 3 {
-            let tte = TranspositionEntry {
-                depth: depth as u8,
-                value,
-                value_type,
-                best_move: Ply::unwrap_null(&best_move),
-            };
-            self.transposition_table.put(game.hash(), tte);
-        }
+        // if depth >= 3 {
+        let tte = TranspositionEntry {
+            depth: depth as u8,
+            value,
+            value_type,
+            best_move: Ply::unwrap_null(&best_move),
+        };
+        self.transposition_table.put(game.hash(), tte);
+        // println!("{value_type:?}");
+        // }
 
         Ok((value, best_move))
     }

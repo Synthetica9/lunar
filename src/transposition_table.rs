@@ -157,7 +157,7 @@ impl TranspositionTable {
         let mut have_replaced = false;
         for other in bucket.merit_entries().iter_mut() {
             let other_entry = TranspositionEntry::from_u64(other.value);
-            if other_entry.depth < value.depth {
+            if self.should_replace(&value, &other_entry) {
                 have_replaced = true;
                 *other = entry;
                 break;
@@ -235,18 +235,45 @@ impl TranspositionTable {
         res
     }
 
+    pub fn print_cache_stats(&self) {
+        let mut empty = 0;
+        let mut lower = 0;
+        let mut upper = 0;
+        let mut exact = 0;
+        for bucket in &self.table {
+            let bucket = unsafe { bucket.get().read() };
+            for slot in bucket.0 {
+                if slot.value == 0 {
+                    empty += 1;
+                } else {
+                    use TranspositionEntryType::*;
+                    let value = TranspositionEntry::from_u64(slot.value);
+                    match value.value_type {
+                        Exact => exact += 1,
+                        LowerBound => lower += 1,
+                        UpperBound => upper += 1,
+                    }
+                }
+            }
+        }
+        println!("Entry types:");
+        println!("Exact: {exact}");
+        println!("Upper: {upper}");
+        println!("Lower: {lower}");
+        println!("Empty: {empty}");
+    }
+
     fn should_replace(&self, cand: &TranspositionEntry, old: &TranspositionEntry) -> bool {
         // if old.hash != self.hash {
         //     return true;
         // }
 
-        if old.depth < cand.depth {
-            return true;
+        use std::cmp::Ordering::*;
+        match Ord::cmp(&cand.depth, &old.depth) {
+            Less => false,
+            Equal => cand.value_type == TranspositionEntryType::Exact,
+            Greater => true,
         }
-
-        // TODO: replace upper/lower bounds with exact values.
-
-        false
     }
 }
 
