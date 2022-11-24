@@ -206,11 +206,7 @@ impl ThreadData {
 
         let from_tt = self.transposition_table.get(game.hash());
         if let Some(tte) = from_tt {
-            if depth <= tte.depth as usize
-                && tte.value <= beta
-                && tte.value >= alpha
-                && !self.history.as_ref().unwrap().may_be_repetition()
-            {
+            if depth <= tte.depth as usize && !self.history.as_ref().unwrap().may_be_repetition() && !is_pv {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
