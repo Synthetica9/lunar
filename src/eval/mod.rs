@@ -152,6 +152,15 @@ fn test_doubled_pawns() {
     assert!(score < Millipawns(0));
 }
 
+pub fn base_eval(game: &Game) -> Millipawns {
+    let mut res = Millipawns(0);
+    for (color, piece, _) in game.board().to_piece_list() {
+        res += piece.base_value() * color.multiplier();
+    }
+
+    res * game.to_move().multiplier()
+}
+
 pub fn evaluation(game: &Game) -> Millipawns {
     use crate::millipawns::*;
     let mut res = Millipawns(0);

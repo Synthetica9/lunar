@@ -419,6 +419,43 @@ impl Board {
         res
     }
 
+    pub fn is_insufficient_material(&self) -> bool {
+        use Piece::*;
+
+        debug_assert!(self.get_piece(&King).popcount() == 2);
+        let sufficient = {
+            let mut res = Bitboard::new();
+            for piece in &[Pawn, Rook, Queen] {
+                res |= self.get_piece(piece);
+            }
+            res.popcount() >= 1
+        };
+
+        if sufficient {
+            return false;
+        }
+
+        let bishops = self.get_piece(&Bishop);
+        let knights = self.get_piece(&Knight);
+        if (knights | bishops).popcount() == 1 {
+            // Only one knight or bishop can't checkmate.
+            return true;
+        }
+
+        // two bishops or two knights remaining.
+        debug_assert!(knights.popcount() == 2 || bishops.popcount() == 2);
+
+        if knights.popcount() == 2 {
+            return false;
+        }
+
+        // Two bishops remaining. Check that they are opposite color
+        debug_assert!(bishops.popcount() == 2);
+
+        use crate::bitboard::LIGHT_SQUARES;
+        return (bishops & LIGHT_SQUARES).popcount() != 1;
+    }
+
     pub fn simple_render(&self) -> String {
         let mut res = String::new();
         for rank in (0..8).rev() {
