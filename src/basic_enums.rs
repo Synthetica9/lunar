@@ -107,7 +107,7 @@ impl CastleDirection {
         };
 
         let dst = Square::new(dst_file, color.home_rank());
-        Ply::new(src, dst, Some(SpecialFlag::Castling))
+        Ply::castling(src, dst)
     }
 }
 

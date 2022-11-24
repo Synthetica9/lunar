@@ -319,7 +319,7 @@ impl Game {
         let eligible_pawns = friendly_pawns & attacking_squares;
 
         for pawn in eligible_pawns.iter_squares() {
-            let ply = Ply::new(pawn, ep, Some(SpecialFlag::EnPassant));
+            let ply = Ply::en_passant(pawn, ep);
             // println!("En passant capture: {:?}", ply);
             plyset.push(ply);
         }

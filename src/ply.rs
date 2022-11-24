@@ -62,7 +62,7 @@ impl SpecialFlag {
 // No, I don't _like_ the name "Ply" either. I would prefer "Move", but
 // "move" is a keyword in Rust.
 impl Ply {
-    pub const fn new(src: Square, dst: Square, flag: Option<SpecialFlag>) -> Ply {
+    const fn new(src: Square, dst: Square, flag: Option<SpecialFlag>) -> Ply {
         let mut val = 0;
         val |= src.as_index() as u16;
         val |= (dst.as_index() as u16) << 6;
@@ -82,9 +82,24 @@ impl Ply {
     }
 
     pub const fn promotion(src: Square, dst: Square, piece: Piece) -> Ply {
-        // TODO: add special constructor for other cases.
         debug_assert!(piece.is_promotable());
         Ply::new(src, dst, Some(SpecialFlag::Promotion(piece)))
+    }
+
+    pub const fn castling(src: Square, dst: Square) -> Ply {
+        Ply::new(src, dst, Some(SpecialFlag::Castling))
+    }
+
+    pub const fn en_passant(src: Square, dst: Square) -> Ply {
+        Ply::new(src, dst, Some(SpecialFlag::EnPassant))
+    }
+
+    pub const fn null() -> Ply {
+        Ply(0)
+    }
+
+    pub const fn is_null(&self) -> bool {
+        self.0 == 0
     }
 
     pub const fn normalize(self) -> Ply {
