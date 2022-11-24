@@ -102,6 +102,19 @@ impl Ply {
         self.0 == 0
     }
 
+    pub const fn wrap_null(&self) -> Option<Ply> {
+        // TODO: return option ref?
+        if self.is_null() {
+            None
+        } else {
+            Some(*self)
+        }
+    }
+
+    pub fn unwrap_null(val: &Option<Ply>) -> Ply {
+        val.unwrap_or(Ply::null())
+    }
+
     pub const fn normalize(self) -> Ply {
         Ply::new(self.dst(), self.src(), self.flag())
     }

@@ -1,5 +1,7 @@
 use std::cell::UnsafeCell;
 
+use static_assertions::*;
+
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
@@ -12,10 +14,43 @@ pub struct TranspositionTable {
 
 unsafe impl Sync for TranspositionTable {}
 
+const CACHE_LINE_SIZE: usize = 64;
+const ENTRY_SIZE: usize = std::mem::size_of::<TranspositionPair>();
+const ITEMS_PER_BUCKET: usize = CACHE_LINE_SIZE / ENTRY_SIZE;
+const LINE_SIZE: usize = std::mem::size_of::<TranspositionLine>();
+const N_MERIT_ENTRIES: usize = ITEMS_PER_BUCKET / 2;
+const N_FIFO_ENTRIES: usize = ITEMS_PER_BUCKET - N_MERIT_ENTRIES;
+
+assert_eq_size!(TranspositionEntry, u64);
+const_assert!(LINE_SIZE <= CACHE_LINE_SIZE);
+
 // TODO: depth + always replace strategy.
-struct TranspositionLine {
+
+#[repr(align(64))]
+struct TranspositionLine([TranspositionPair; ITEMS_PER_BUCKET]);
+
+impl TranspositionLine {
+    pub fn merit_entries(&mut self) -> &mut [TranspositionPair; N_MERIT_ENTRIES] {
+        (&mut self.0[..N_MERIT_ENTRIES]).try_into().unwrap()
+    }
+
+    pub fn fifo_entries(&mut self) -> &mut [TranspositionPair; N_FIFO_ENTRIES] {
+        (&mut self.0[N_MERIT_ENTRIES..]).try_into().unwrap()
+    }
+}
+
+#[derive(Copy, Clone)]
+struct TranspositionPair {
     key: u64,
-    value: TranspositionEntry,
+    value: u64,
+}
+
+impl TranspositionPair {
+    fn hash(&self) -> ZobristHash {
+        ZobristHash {
+            hash: self.key ^ self.value,
+        }
+    }
 }
 
 // TODO: rename to ValueType?
@@ -30,28 +65,20 @@ pub enum TranspositionEntryType {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TranspositionEntry {
     pub depth: u8,
-    pub best_move: Option<Ply>,
+    pub best_move: Ply,
     pub value: Millipawns,
     pub value_type: TranspositionEntryType,
 }
 
 impl TranspositionEntry {
-    fn checksum(&self) -> u64 {
-        (self.depth as u64)
-            ^ ((self.value_type as u64) << 8)
-            ^ (self.best_move.map_or(0, |x| x.as_u16() as u64) << 16)
-            ^ ((self.value.0 as u64) << 32)
+    fn as_u64(self) -> u64 {
+        unsafe { std::mem::transmute(self) }
+    }
+
+    fn from_u64(val: u64) -> TranspositionEntry {
+        unsafe { std::mem::transmute(val) }
     }
 }
-
-const ZERO_ENTRY: TranspositionEntry = TranspositionEntry {
-    depth: 0,
-    value: Millipawns(0),
-    best_move: None,
-    value_type: TranspositionEntryType::Exact,
-};
-
-const ENTRY_SIZE: usize = std::mem::size_of::<TranspositionLine>();
 
 impl TranspositionTable {
     pub fn new(bytes: usize) -> TranspositionTable {
@@ -60,11 +87,8 @@ impl TranspositionTable {
         table.reserve(needed_entries);
         while table.len() < needed_entries {
             table.push(
-                TranspositionLine {
-                    key: 0,
-                    value: ZERO_ENTRY,
-                }
-                .into(),
+                TranspositionLine([TranspositionPair { key: 0, value: 0 }; ITEMS_PER_BUCKET])
+                    .into(),
             );
         }
 
@@ -95,33 +119,67 @@ impl TranspositionTable {
             ptr.read_volatile()
         };
 
-        let checksum = content.value.checksum();
-        let computed_key = checksum ^ hash.as_u64();
+        for entry in content.0 {
+            let checksum = entry.value;
+            let computed_key = checksum ^ hash.as_u64();
 
-        if computed_key != content.key {
-            None
-        } else {
-            Some(content.value)
+            if computed_key == entry.key {
+                return Some(TranspositionEntry::from_u64(entry.value));
+            }
         }
+
+        None
     }
 
     pub fn put(&self, hash: ZobristHash, value: TranspositionEntry) {
-        let curr_occupant = self.get(hash);
+        let entry = TranspositionPair {
+            key: value.as_u64() ^ hash.as_u64(),
+            value: value.as_u64(),
+        };
 
-        let should_replace = curr_occupant.map_or(true, |old| self.should_replace(&value, &old));
+        let slot = self.slot(hash);
+        let ptr = self.table[slot].get();
+        let mut bucket = unsafe { ptr.read_volatile() };
 
-        if should_replace {
-            // TODO: occupancy
-
-            let key = value.checksum() ^ hash.as_u64();
-            let content = TranspositionLine { key, value };
-
-            let slot = self.slot(hash);
-            let ptr: *mut TranspositionLine = self.table[slot].get();
-            unsafe {
-                // Is this needed?
-                ptr.write_volatile(content);
+        for other in bucket.0.iter_mut() {
+            // Evict anything that seems off...
+            if self.slot(other.hash()) != slot {
+                *other = TranspositionPair { key: 0, value: 0 }
             }
+        }
+
+        // Merit-based entries:
+        let mut have_replaced = false;
+        for other in bucket.merit_entries().iter_mut() {
+            let other_entry = TranspositionEntry::from_u64(other.value);
+            if other_entry.depth < value.depth {
+                have_replaced = true;
+                *other = entry;
+                break;
+            }
+        }
+
+        // Otherwise, do one of the FIFO entries
+        if !have_replaced {
+            let fifo = bucket.fifo_entries();
+            fifo.rotate_right(1);
+            fifo[0] = entry;
+        }
+
+        // Lastly, make sure we have only one value for our current hash.
+        let mut found = false;
+        for other in bucket.0.iter_mut() {
+            if other.hash() == hash {
+                if !found {
+                    found = true;
+                } else {
+                    *other = TranspositionPair { key: 0, value: 0 }
+                }
+            }
+        }
+
+        unsafe {
+            ptr.write_volatile(bucket);
         }
     }
 
@@ -132,7 +190,7 @@ impl TranspositionTable {
         loop {
             let hash = game.hash();
             if let Some(tte) = &self.get(hash) {
-                if let Some(ply) = tte.best_move {
+                if let Some(ply) = tte.best_move.wrap_null() {
                     res.push(ply);
                     let is_repetition = hashes_seen.contains(&hash);
                     if !is_repetition {
@@ -155,7 +213,7 @@ impl TranspositionTable {
             let from_tt = self.get(game.hash());
 
             let next = match from_tt {
-                Some(tte) => tte.best_move.filter(|&ply| ply == *entry),
+                Some(tte) => tte.best_move.wrap_null().filter(|&ply| ply == *entry),
                 None => Some(*entry),
             };
 
@@ -241,7 +299,7 @@ mod tests {
         let entry = TranspositionEntry {
             depth: 123,
             value: Millipawns(456),
-            best_move: None,
+            best_move: Ply::null(),
             value_type: TranspositionEntryType::Exact,
         };
 

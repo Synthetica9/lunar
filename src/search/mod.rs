@@ -225,13 +225,13 @@ impl ThreadData {
 
                 // TODO: check that the move is legal.
                 match tte.value_type {
-                    Exact => return Ok((tte.value, tte.best_move)),
+                    Exact => return Ok((tte.value, tte.best_move.wrap_null())),
                     LowerBound => alpha = alpha.max(tte.value),
                     UpperBound => beta = beta.min(tte.value),
                 }
 
                 if alpha >= beta {
-                    return Ok((tte.value, tte.best_move));
+                    return Ok((tte.value, tte.best_move.wrap_null()));
                 }
             }
         }
@@ -240,13 +240,13 @@ impl ThreadData {
             // Internal iterative deepening
             self.alpha_beta_search(alpha, beta, depth / 2, true)?.1
         } else {
-            from_tt.and_then(|x| x.best_move)
+            from_tt.and_then(|x| x.best_move.wrap_null())
         };
 
         let legality_checker = { crate::legality::LegalityChecker::new(&game) };
 
         let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
-        let mut i = -1;
+        let mut i = 0;
         let mut x = LOSS;
 
         let mut any_moves_seen = false;
@@ -342,7 +342,6 @@ impl ThreadData {
             }
 
             any_moves_seen = true;
-            i += 1;
 
             let is_first_move = i == 0;
 
@@ -401,6 +400,8 @@ impl ThreadData {
                 }
                 break;
             }
+
+            i += 1;
         }
 
         let value_type = if alpha <= alpha_orig {
@@ -419,7 +420,7 @@ impl ThreadData {
                 depth: depth as u8,
                 value: x,
                 value_type,
-                best_move,
+                best_move: Ply::unwrap_null(&best_move),
             };
             self.transposition_table.put(game.hash(), tte);
         }
