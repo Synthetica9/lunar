@@ -157,7 +157,7 @@ impl TranspositionTable {
         let mut have_replaced = false;
         for other in bucket.merit_entries().iter_mut() {
             let other_entry = TranspositionEntry::from_u64(other.value);
-            if self.should_replace(&value, &other_entry) {
+            if self.should_replace(&value, &other_entry) || other.value == 0 {
                 have_replaced = true;
                 *other = entry;
                 break;

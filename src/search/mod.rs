@@ -200,15 +200,6 @@ impl ThreadData {
             return Ok((self.draw_value(), None));
         }
 
-        if depth == 0 {
-            return if game.is_in_check() {
-                self.alpha_beta_search(alpha, beta, 1, is_pv)
-            } else {
-                let score = self.quiescence_search(&game, alpha, beta);
-                Ok((score, None))
-            };
-        }
-
         let alpha_orig = alpha;
         let mut alpha = alpha;
         let mut beta = beta;
@@ -236,173 +227,185 @@ impl ThreadData {
             }
         }
 
-        let mut best_move = if is_pv && depth > 5 {
-            // Internal iterative deepening
-            self.alpha_beta_search(alpha, beta, depth / 2, true)?.1
-        } else {
-            from_tt.and_then(|x| x.best_move.wrap_null())
-        };
-
-        let legality_checker = { crate::legality::LegalityChecker::new(&game) };
-
-        let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
-        let mut i = 0;
+        let mut best_move = None;
         let mut value = Millipawns(i32::MIN);
 
-        let mut any_moves_seen = false;
+        if depth == 0 {
+            if game.is_in_check() {
+                (value, best_move) = self.alpha_beta_search(alpha, beta, 1, is_pv)?
+            } else {
+                value = self.quiescence_search(&game, alpha, beta)
+            };
+        } else {
+            best_move = if is_pv && depth > 5 {
+                // Internal iterative deepening
+                self.alpha_beta_search(alpha, beta, depth / 2, true)?.1
+            } else {
+                from_tt.and_then(|x| x.best_move.wrap_null())
+            };
 
-        while let Some(command) = commands.pop() {
-            use SearchCommand::*;
-            let is_deferred = matches!(command, DeferredMove { .. });
-            let ply: Ply = match &command {
-                GetHashMove => {
-                    if let Some(ply) = best_move {
-                        ply
-                    } else {
-                        continue;
-                    }
-                }
-                GenQuiescenceMoves => {
-                    for ply in game.quiescence_pseudo_legal_moves() {
-                        // TODO: hashable plies
-                        let after_hash = game.hash_after_ply(&ply);
-                        let tte = self.transposition_table.get(after_hash);
+            let legality_checker = { crate::legality::LegalityChecker::new(&game) };
 
-                        let see = static_exchange_evaluation(&game, ply);
-                        let value = if let Some(tte) = tte {
-                            // TODO: upper/lower bound?
-                            // TODO: merge these?
-                            CaptureValue::Hash(tte.value)
+            let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
+            let mut i = 0;
+
+            let mut any_moves_seen = false;
+
+            while let Some(command) = commands.pop() {
+                use SearchCommand::*;
+                let is_deferred = matches!(command, DeferredMove { .. });
+                let ply: Ply = match &command {
+                    GetHashMove => {
+                        if let Some(ply) = best_move {
+                            ply
                         } else {
-                            CaptureValue::Static(see)
-                        };
-
-                        let command = {
-                            use std::cmp::Ordering::*;
-                            match see.cmp(&DRAW) {
-                                Greater => WinningCapture { ply, value },
-                                Less => LosingCapture { ply, value },
-                                Equal => EqualCapture { ply, value },
-                            }
-                        };
-
-                        commands.push(command);
-                    }
-                    continue;
-                }
-                GenKillerMoves => {
-                    let move_total = game.half_move_total() as usize;
-                    if let Some(killer_moves) = self.killer_moves.get(move_total) {
-                        for ply in killer_moves.iter().flatten() {
-                            if game.is_pseudo_legal(ply) {
-                                commands.push(KillerMove { ply: *ply });
-                            }
+                            continue;
                         }
                     }
-                    continue;
-                }
-                GenQuietMoves => {
-                    for ply in game.quiet_pseudo_legal_moves() {
-                        let tte = self.transposition_table.get(game.hash_after_ply(&ply));
-                        let value = tte.map_or(LOSS, |tte| tte.value);
-                        let is_check = game.is_check(&ply);
-                        commands.push(QuietMove {
-                            ply,
-                            value,
-                            is_check,
-                        });
-                    }
-                    continue;
-                }
-                MovesExhausted => {
-                    if !any_moves_seen {
-                        return Ok((
-                            if game.is_in_check() {
-                                LOSS
+                    GenQuiescenceMoves => {
+                        for ply in game.quiescence_pseudo_legal_moves() {
+                            // TODO: hashable plies
+                            let after_hash = game.hash_after_ply(&ply);
+                            let tte = self.transposition_table.get(after_hash);
+
+                            let see = static_exchange_evaluation(&game, ply);
+                            let value = if let Some(tte) = tte {
+                                // TODO: upper/lower bound?
+                                // TODO: merge these?
+                                CaptureValue::Hash(tte.value)
                             } else {
-                                self.draw_value()
-                            },
-                            None,
-                        ));
+                                CaptureValue::Static(see)
+                            };
+
+                            let command = {
+                                use std::cmp::Ordering::*;
+                                match see.cmp(&DRAW) {
+                                    Greater => WinningCapture { ply, value },
+                                    Less => LosingCapture { ply, value },
+                                    Equal => EqualCapture { ply, value },
+                                }
+                            };
+
+                            commands.push(command);
+                        }
+                        continue;
                     }
+                    GenKillerMoves => {
+                        let move_total = game.half_move_total() as usize;
+                        if let Some(killer_moves) = self.killer_moves.get(move_total) {
+                            for ply in killer_moves.iter().flatten() {
+                                if game.is_pseudo_legal(ply) {
+                                    commands.push(KillerMove { ply: *ply });
+                                }
+                            }
+                        }
+                        continue;
+                    }
+                    GenQuietMoves => {
+                        for ply in game.quiet_pseudo_legal_moves() {
+                            let tte = self.transposition_table.get(game.hash_after_ply(&ply));
+                            let value = tte.map_or(LOSS, |tte| tte.value);
+                            let is_check = game.is_check(&ply);
+                            commands.push(QuietMove {
+                                ply,
+                                value,
+                                is_check,
+                            });
+                        }
+                        continue;
+                    }
+                    MovesExhausted => {
+                        if !any_moves_seen {
+                            return Ok((
+                                if game.is_in_check() {
+                                    LOSS
+                                } else {
+                                    self.draw_value()
+                                },
+                                None,
+                            ));
+                        }
+                        continue;
+                    }
+                    command => command.ply().unwrap(),
+                };
+
+                debug_assert!(
+                    game.is_pseudo_legal(&ply),
+                    "{command:?} generated illegal move {ply:?} in {game:?} (depth {depth})"
+                );
+
+                // TODO: don't re-search hash and killer moves
+                // Deferred moves have already been checked for legality.
+                if !is_deferred && !legality_checker.is_legal(&ply) {
                     continue;
                 }
-                command => command.ply().unwrap(),
-            };
 
-            debug_assert!(
-                game.is_pseudo_legal(&ply),
-                "{command:?} generated illegal move {ply:?} in {game:?} (depth {depth})"
-            );
+                any_moves_seen = true;
 
-            // TODO: don't re-search hash and killer moves
-            // Deferred moves have already been checked for legality.
-            if !is_deferred && !legality_checker.is_legal(&ply) {
-                continue;
-            }
+                let is_first_move = i == 0;
 
-            any_moves_seen = true;
+                self.history.as_mut().unwrap().push(&ply);
+                let next_game: Game = *self.history.as_ref().unwrap().last();
 
-            let is_first_move = i == 0;
-
-            self.history.as_mut().unwrap().push(&ply);
-            let next_game: Game = *self.history.as_ref().unwrap().last();
-
-            let x = if is_first_move {
-                best_move = Some(ply);
-                -self.alpha_beta_search(-beta, -alpha, depth - 1, is_pv)?.0
-            } else if !is_deferred && self.currently_searching.defer_move(next_game.hash(), depth) {
-                commands.push(DeferredMove {
-                    ply,
-                    index: std::cmp::Reverse(i as usize),
-                });
-                // Arbitrary low value
-                Millipawns(i32::MIN)
-            } else {
-                let next_depth = if i < 5 || depth <= 3 {
-                    depth - 1
+                let x = if is_first_move {
+                    best_move = Some(ply);
+                    -self.alpha_beta_search(-beta, -alpha, depth - 1, is_pv)?.0
+                } else if !is_deferred
+                    && self.currently_searching.defer_move(next_game.hash(), depth)
+                {
+                    commands.push(DeferredMove {
+                        ply,
+                        index: std::cmp::Reverse(i as usize),
+                    });
+                    // Arbitrary low value
+                    Millipawns(i32::MIN)
                 } else {
-                    depth / 3
+                    let next_depth = if i < 5 || depth <= 3 {
+                        depth - 1
+                    } else {
+                        depth / 3
+                    };
+
+                    if !is_deferred {
+                        self.currently_searching
+                            .starting_search(next_game.hash(), next_depth);
+                    }
+
+                    // Null-window search
+                    let mut x = -self
+                        .alpha_beta_search(-alpha - ONE_MP, -alpha, next_depth, false)?
+                        .0;
+
+                    if x > alpha && x < beta {
+                        x = -self.alpha_beta_search(-beta, -alpha, next_depth, false)?.0;
+                    };
+
+                    if !is_deferred {
+                        self.currently_searching
+                            .finished_search(next_game.hash(), next_depth);
+                    }
+
+                    x
                 };
 
-                if !is_deferred {
-                    self.currently_searching
-                        .starting_search(next_game.hash(), next_depth);
+                self.history.as_mut().unwrap().pop();
+
+                value = value.max(x);
+                if value > alpha {
+                    alpha = value;
+                    best_move = Some(ply);
                 }
 
-                // Null-window search
-                let mut x = -self
-                    .alpha_beta_search(-alpha - ONE_MP, -alpha, next_depth, false)?
-                    .0;
-
-                if x > alpha && x < beta {
-                    x = -self.alpha_beta_search(-beta, -alpha, next_depth, false)?.0;
-                };
-
-                if !is_deferred {
-                    self.currently_searching
-                        .finished_search(next_game.hash(), next_depth);
+                if alpha >= beta {
+                    if !ply.is_capture(&game) {
+                        self.insert_killer_move(ply, game.half_move_total() as usize);
+                    }
+                    break;
                 }
 
-                x
-            };
-
-            self.history.as_mut().unwrap().pop();
-
-            value = value.max(x);
-            if value > alpha {
-                alpha = value;
-                best_move = Some(ply);
+                i += 1;
             }
-
-            if alpha >= beta {
-                if !ply.is_capture(&game) {
-                    self.insert_killer_move(ply, game.half_move_total() as usize);
-                }
-                break;
-            }
-
-            i += 1;
         }
 
         let value_type = if value <= alpha_orig {
@@ -416,7 +419,6 @@ impl ThreadData {
             Exact
         };
 
-        // if depth >= 3 {
         let tte = TranspositionEntry {
             depth: depth as u8,
             value,
@@ -424,8 +426,6 @@ impl ThreadData {
             best_move: Ply::unwrap_null(&best_move),
         };
         self.transposition_table.put(game.hash(), tte);
-        // println!("{value_type:?}");
-        // }
 
         Ok((value, best_move))
     }
