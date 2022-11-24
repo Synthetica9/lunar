@@ -247,7 +247,7 @@ impl ThreadData {
 
         let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
         let mut i = 0;
-        let mut x = LOSS;
+        let mut value = Millipawns(i32::MIN);
 
         let mut any_moves_seen = false;
 
@@ -348,7 +348,7 @@ impl ThreadData {
             self.history.as_mut().unwrap().push(&ply);
             let next_game: Game = *self.history.as_ref().unwrap().last();
 
-            x = if is_first_move {
+            let x = if is_first_move {
                 best_move = Some(ply);
                 -self.alpha_beta_search(-beta, -alpha, depth - 1, is_pv)?.0
             } else if !is_deferred && self.currently_searching.defer_move(next_game.hash(), depth) {
@@ -371,7 +371,7 @@ impl ThreadData {
                 }
 
                 // Null-window search
-                x = -self
+                let mut x = -self
                     .alpha_beta_search(-alpha - ONE_MP, -alpha, next_depth, false)?
                     .0;
 
@@ -389,8 +389,9 @@ impl ThreadData {
 
             self.history.as_mut().unwrap().pop();
 
-            if x > alpha {
-                alpha = x;
+            value = value.max(x);
+            if value > alpha {
+                alpha = value;
                 best_move = Some(ply);
             }
 
@@ -404,13 +405,13 @@ impl ThreadData {
             i += 1;
         }
 
-        let value_type = if alpha <= alpha_orig {
+        let value_type = if value <= alpha_orig {
             UpperBound
-        } else if alpha >= beta {
+        } else if value >= beta {
             LowerBound
         } else {
-            if x.is_mate_in_n().is_some() {
-                x -= ONE_MP * x.0.signum();
+            if value.is_mate_in_n().is_some() {
+                value -= ONE_MP * value.0.signum();
             }
             Exact
         };
@@ -418,14 +419,14 @@ impl ThreadData {
         if depth >= 3 {
             let tte = TranspositionEntry {
                 depth: depth as u8,
-                value: x,
+                value,
                 value_type,
                 best_move: Ply::unwrap_null(&best_move),
             };
             self.transposition_table.put(game.hash(), tte);
         }
 
-        Ok((x, best_move))
+        Ok((value, best_move))
     }
 
     fn quiescence_search(
