@@ -77,3 +77,9 @@ impl std::ops::Div<i32> for Millipawns {
         Millipawns(self.0 / rhs)
     }
 }
+
+impl std::iter::Sum<Millipawns> for Millipawns {
+    fn sum<I: Iterator<Item = Millipawns>>(iter: I) -> Self {
+        Millipawns(iter.map(|x| x.0).sum())
+    }
+}

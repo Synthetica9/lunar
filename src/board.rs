@@ -52,6 +52,18 @@ impl Board {
         self.get_color(color).and(self.get_piece(piece))
     }
 
+    pub fn mirror(&self) -> Board {
+        let mut cpy = *self;
+
+        for b in cpy.pieces.iter_mut() {
+            *b = b.flip_vertical()
+        }
+
+        let [white, black] = self.colors;
+        cpy.colors = [black.flip_vertical(), white.flip_vertical()];
+        cpy
+    }
+
     pub const fn king_square(&self, color: &Color) -> Square {
         let king = self.get(color, &Piece::King);
         debug_assert!(!king.is_empty());

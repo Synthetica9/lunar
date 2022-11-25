@@ -31,6 +31,8 @@ fn parse_square_table(yaml: &Yaml) -> Result<(bool, Vec<(i32, bool)>), String> {
             }
 
             let res = xs.iter().map(parse_scalar).collect::<Result<Vec<_>, _>>()?;
+            // It's nicer if we can just view the array from white's perspective in the file.
+            let res = (0..64).map(|i| res[i ^ 56]).collect();
             Ok((true, res))
         }
         x => {
@@ -106,7 +108,7 @@ pub fn gen_tuning_file(file: &mut std::fs::File) -> Result<(), std::io::Error> {
     writeln!(file, "// Tuning values from yaml\n")?;
     writeln!(
         file,
-        "use crate::eval::evaluator::{{EvaluationTerm, Parameters, Parameter, True, False}};"
+        "use crate::eval::parameters::{{EvaluationTerm, Parameters, Parameter, True, False}};"
     )?;
 
     println!("cargo:rerun-if-changed=parameters.yaml");
@@ -154,7 +156,7 @@ pub fn gen_tuning_file(file: &mut std::fs::File) -> Result<(), std::io::Error> {
         let (a, b, c, vals) = line;
         writeln!(
             file,
-            "    fn {name}(self) -> Parameter<'a, {}, {}, {}> {{",
+            "    pub fn {name}(self) -> Parameter<'a, {}, {}, {}> {{",
             a.to_string().to_title_case(),
             b.to_string().to_title_case(),
             c.to_string().to_title_case()

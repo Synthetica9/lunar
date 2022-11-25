@@ -679,6 +679,21 @@ impl Game {
         Ok(())
     }
 
+    pub fn mirror(&self) -> Game {
+        Game {
+            board: self.board.mirror(),
+            to_move: self.to_move.other(),
+            castle_rights: self.castle_rights.mirror(),
+            en_passant: self.en_passant.map(|x| x.flip_vert()),
+            half_move: self.half_move,
+            half_move_total: self.half_move_total,
+
+            // I hope this doesn't come back to bite me in the ass.
+            // HASH IS NOT UPDATED!
+            hash: self.hash,
+        }
+    }
+
     pub fn simple_render(&self) -> String {
         self.board.simple_render()
     }
