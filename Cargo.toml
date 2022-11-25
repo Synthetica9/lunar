@@ -42,6 +42,9 @@ version = "0.8"
 features = ["small_rng"]
 default-features = false
 
+[dev-dependencies]
+csv = "1.1"
+
 [dev-dependencies.criterion]
 version = "0.4"
 features = ["html_reports"]
