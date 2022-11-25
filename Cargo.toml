@@ -31,23 +31,14 @@ crossbeam-channel = "0.5"
 smallvec = "1.10"
 static_assertions = "1.1"
 no-panic = "0.1"
+rand = { version = "0.8", features = ["small_rng"], default-features = false }
 
-[dependencies.rand]
-version = "0.8"
-features = ["small_rng"]
-default-features = false
-
-[build-dependencies.rand]
-version = "0.8"
-features = ["small_rng"]
-default-features = false
+[build-dependencies]
+rand = { version = "0.8", features = ["small_rng"], default-features = false }
 
 [dev-dependencies]
 csv = "1.1"
-
-[dev-dependencies.criterion]
-version = "0.4"
-features = ["html_reports"]
+criterion = { version = "0.4", features = ["html_reports"] }
 
 [[bench]]
 name = "perft_bench"
