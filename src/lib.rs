@@ -20,6 +20,6 @@ pub mod uci;
 pub mod values;
 pub mod zobrist_hash;
 
-pub mod build;
+// pub mod build;
 
 mod generated;

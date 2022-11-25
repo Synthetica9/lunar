@@ -206,7 +206,10 @@ impl ThreadData {
 
         let from_tt = self.transposition_table.get(game.hash());
         if let Some(tte) = from_tt {
-            if depth <= tte.depth as usize && !self.history.as_ref().unwrap().may_be_repetition() && !is_pv {
+            if depth <= tte.depth as usize
+                && !self.history.as_ref().unwrap().may_be_repetition()
+                && !is_pv
+            {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
@@ -822,8 +825,8 @@ mod tests {
     use super::*;
 
     fn new_thread_pool() -> SearchThreadPool {
-        // 64kB transposition table
-        let tt = Arc::new(TranspositionTable::new(1024 * 1024));
+        // 16MB transposition table
+        let tt = Arc::new(TranspositionTable::new(16 * 1024 * 1024));
         SearchThreadPool::new(4, tt)
     }
 
@@ -831,11 +834,40 @@ mod tests {
     fn create_kill_thread_pool() {
         // Previous implementation had a 1/2 chance of succeeding for every
         // iteration. Better to test multiple times.
-        for _ in 0..64 {
+        for _ in 0..16 {
             let mut pool = new_thread_pool();
             pool.kill();
         }
     }
+
+    macro_rules! position_search_test(
+        ($name: ident, $fen: expr, $depth: expr, $expected_eval: expr, $expected_ply: expr) => {
+            #[test]
+            fn $name() {
+                let mut state = crate::uci::UCIState::new();
+                let commands = &[
+                    "uci",
+                    "setoption name Hash value 32",
+                    &format!("position fen {}", $fen),
+                    &format!("go depth {}", $depth),
+                    "wait",
+                    "d"
+                ];
+                for command in commands {
+                    state.interpret(command);
+                }
+                assert!(false);
+            }
+        }
+    );
+
+    position_search_test!(
+        find_simple_mate_in_1,
+        "4k3/R7/8/8/8/8/8/4K2R w K - 0 1",
+        12,
+        0,
+        "Rh8#"
+    );
 
     // #[test]
     // fn find_simple_mate_in_1() {

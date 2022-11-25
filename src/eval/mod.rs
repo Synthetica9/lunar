@@ -5,6 +5,7 @@ use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 
+pub mod evaluator;
 pub mod pesto;
 
 pub fn good_bishop(game: &Game) -> Millipawns {

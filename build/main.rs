@@ -7,11 +7,15 @@ use hashes::gen_hashes_file;
 pub mod magics;
 use magics::gen_magics_file;
 
+pub mod tuning;
+use tuning::gen_tuning_file;
+
 pub fn main() -> std::io::Result<()> {
     println!("cargo:rerun-if-changed=build");
 
     gen_squares()?;
 
+    gen_tuning_file(&mut open("tuning")?)?;
     gen_magics_file(&mut open("magics")?)?;
     gen_hashes_file(&mut open("hashes")?)?;
 
