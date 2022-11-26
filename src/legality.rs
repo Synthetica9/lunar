@@ -167,7 +167,7 @@ impl LegalityChecker {
             // If we're not in check, we only need to check absolutely
             // pinned pieces for illegal moves.
             if self.absolute_pins.get(ply.src()) {
-                use crate::square::squares::A1;
+                use Square::A1;
                 let pinner = self
                     .absolute_pin_pairs
                     .iter()

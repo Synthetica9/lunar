@@ -1,7 +1,6 @@
 use std::fmt::{Debug, Error, Formatter};
 use std::ops::Range;
 use std::string::String;
-
 pub mod files {
     #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
     pub struct File(u8);
@@ -89,8 +88,7 @@ pub mod ranks {
 }
 pub use ranks::Rank;
 
-#[derive(Clone, PartialEq, Copy)]
-pub struct Square(pub u8);
+pub use crate::generated::squares::{Square, SquareIter};
 
 impl Square {
     pub const fn new(file: File, rank: Rank) -> Square {
@@ -103,19 +101,23 @@ impl Square {
 
     pub const fn from_index(index: u8) -> Square {
         debug_assert!(index < 64);
-        Square(index)
+        Square::from_u8(index)
     }
 
     pub const fn as_index(self) -> usize {
-        self.0 as usize
+        self as usize
+    }
+
+    pub const fn as_u8(self) -> u8 {
+        self as u8
     }
 
     pub const fn file(self) -> File {
-        File::new(self.0 % 8)
+        File::new(self.as_u8() % 8)
     }
 
     pub const fn rank(self) -> Rank {
-        Rank::new(self.0 / 8)
+        Rank::new(self.as_u8() / 8)
     }
 
     // https://www.chessprogramming.org/Efficient_Generation_of_Sliding_Piece_Attacks
@@ -137,10 +139,6 @@ impl Square {
         res.push(self.rank().as_char());
 
         res
-    }
-
-    pub const fn iter() -> SquareIter {
-        SquareIter(0..64)
     }
 
     pub fn from_fen_part(s: &str) -> Result<Self, String> {
@@ -205,11 +203,12 @@ impl Square {
     }
 
     pub const fn flip_vert(&self) -> Square {
-        Square(self.0 ^ 56)
+        Square::from_u8(self.as_u8() ^ 56)
     }
 
     pub const fn is_dark(&self) -> bool {
         // B1 is light, A1 is dark.
+        // TODO: Wait this doesn't work this selects columns
         self.as_index() % 2 == 0
     }
 
@@ -217,24 +216,6 @@ impl Square {
         !self.is_dark()
     }
 }
-
-pub struct SquareIter(Range<u8>);
-
-impl Iterator for SquareIter {
-    type Item = Square;
-
-    fn next(&mut self) -> Option<Square> {
-        self.0.next().map(Square)
-    }
-}
-
-impl Debug for Square {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        write!(f, "{}", self.to_fen_part().to_uppercase())
-    }
-}
-
-pub use crate::generated::squares;
 
 #[test]
 fn test_to_from_fen_part() {
@@ -249,7 +230,7 @@ fn test_to_from_fen_part() {
 
 #[test]
 fn test_basic_math() {
-    use squares::*;
+    use Square::*;
 
     assert_eq!(A1.0 + 1, B1.0);
     assert_eq!(A1.0 + 8, A2.0);

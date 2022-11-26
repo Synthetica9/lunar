@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn test_step_moves() {
-        use crate::square::squares::*;
+        use Square::*;
         assert_eq!(step_moves(A1, &[]), EMPTY);
 
         let from_d2 = KNIGHT_MOVES[D2];

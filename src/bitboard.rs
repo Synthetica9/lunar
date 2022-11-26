@@ -1,10 +1,12 @@
 use std::fmt::{Debug, Formatter};
 
+use strum::IntoEnumIterator;
+
 use crate::basic_enums::Color;
 use crate::byteboard::Byteboard;
 use crate::direction::Direction;
 use crate::piece::Piece;
-use crate::square::{files, ranks, squares, Square, SquareIter};
+use crate::square::{files, ranks, Square, SquareIter};
 
 #[derive(Copy, Clone, PartialEq)]
 pub struct Bitboard(pub u64);
@@ -399,10 +401,10 @@ pub const CENTRAL_16: Bitboard = EMPTY
     .not_const();
 
 pub const VALID_CASTLE_DSTS: Bitboard = EMPTY
-    .set(squares::C1)
-    .set(squares::G1)
-    .set(squares::C8)
-    .set(squares::G8);
+    .set(Square::C1)
+    .set(Square::G1)
+    .set(Square::C8)
+    .set(Square::G8);
 
 pub const DARK_SQUARES: Bitboard = Bitboard(0xAA55AA55AA55AA55);
 pub const LIGHT_SQUARES: Bitboard = DARK_SQUARES.not_const();
@@ -506,7 +508,7 @@ impl std::ops::Not for Bitboard {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::square::squares::*;
+    use Square::*;
 
     #[test]
     fn test_constants() {

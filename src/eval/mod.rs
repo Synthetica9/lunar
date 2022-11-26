@@ -7,6 +7,8 @@ use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 
+use crate::eval::parameters::ToYaml;
+
 pub mod parameters;
 
 use parameters::Parameters;
@@ -36,6 +38,11 @@ fn game_phase(board: &Board) -> i32 {
 
 impl<'a> Evaluator<'a> {
     pub fn evaluate(&self, game: &Game) -> Millipawns {
+        self._evaluate_inline(game)
+    }
+
+    #[inline(always)]
+    fn _evaluate_inline(&self, game: &Game) -> Millipawns {
         let terms = [
             Evaluator::mobility,
             Evaluator::doubled_pawns,
@@ -56,11 +63,16 @@ impl<'a> Evaluator<'a> {
     }
 
     fn pesto(&self, game: &Game) -> [Millipawns; 2] {
-        let dynamic: [Millipawns; 2] = self.0.piece_square_table().map_parts(|x| {
-            Piece::iter()
-                .map(|piece| x.get(&piece).dot_product(&game.board().get(&White, &piece)))
-                .sum()
-        });
+        let dynamic: [Millipawns; 2] = {
+            let pst = self.0.piece_square_table();
+
+            println!("{}", pst.to_yaml());
+            pst.map_parts(|x| {
+                Piece::iter()
+                    .map(|piece| x.get(&piece).dot_product(&game.board().get(&White, &piece)))
+                    .sum()
+            })
+        };
 
         let base: [Millipawns; 2] = self.0.base_value().map_parts(|x| {
             Piece::iter()
@@ -113,5 +125,5 @@ pub fn base_eval(game: &Game) -> Millipawns {
 const STATIC_EVALUATOR: Evaluator<'static> = Evaluator(parameters::STATIC_EVALUATOR);
 
 pub fn evaluation(game: &Game) -> Millipawns {
-    STATIC_EVALUATOR.evaluate(game)
+    STATIC_EVALUATOR._evaluate_inline(game)
 }

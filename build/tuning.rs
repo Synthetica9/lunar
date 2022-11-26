@@ -1,7 +1,5 @@
 // Hardcodes tuning table
 
-use inflector::Inflector;
-
 use std::collections::HashSet;
 use std::io::Read;
 use std::{fs::File, io::Write};
@@ -108,7 +106,7 @@ pub fn gen_tuning_file(file: &mut std::fs::File) -> Result<(), std::io::Error> {
     writeln!(file, "// Tuning values from yaml\n")?;
     writeln!(
         file,
-        "use crate::eval::parameters::{{EvaluationTerm, Parameters, Parameter, True, False}};"
+        "use crate::eval::parameters::{{EvaluationTerm, Parameters, Parameter}};"
     )?;
 
     println!("cargo:rerun-if-changed=parameters.yaml");
@@ -156,10 +154,7 @@ pub fn gen_tuning_file(file: &mut std::fs::File) -> Result<(), std::io::Error> {
         let (a, b, c, vals) = line;
         writeln!(
             file,
-            "    pub fn {name}(self) -> Parameter<'a, {}, {}, {}> {{",
-            a.to_string().to_title_case(),
-            b.to_string().to_title_case(),
-            c.to_string().to_title_case()
+            "    pub fn {name}(self) -> Parameter<'a, {a}, {b}, {c}> {{",
         )?;
         writeln!(file, "        Parameter::new({offset}, self)")?;
         writeln!(file, "    }}\n")?;

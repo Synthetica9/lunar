@@ -45,17 +45,28 @@ fn squares() -> Vec<String> {
 }
 
 fn gen_squares() -> std::io::Result<()> {
-    let lines: Vec<_> = squares()
-        .iter()
-        .zip(0..64)
-        .map(|(sq, i)| format!("pub const {sq}: Square = Square::from_index({i});\n"))
-        .collect();
-
     let mut file = open("squares")?;
-
-    file.write_all("use crate::square::Square;\n\n".as_bytes())?;
-    for line in lines {
-        file.write_all(line.as_bytes())?;
+    writeln!(file, "use strum_macros::EnumIter;")?;
+    writeln!(
+        file,
+        "#[derive(Debug, Clone, Copy, Eq, PartialEq, EnumIter)]"
+    )?;
+    writeln!(file, "pub enum Square {{")?;
+    for sq in squares() {
+        writeln!(file, "    {sq},")?;
     }
+    writeln!(file, "}}")?;
+
+    writeln!(file, "impl Square {{")?;
+    writeln!(file, "    pub const fn from_u8(n: u8) -> Square {{")?;
+    writeln!(file, "        match n {{")?;
+    for (i, sq) in squares().iter().enumerate() {
+        writeln!(file, "            {i} => Square::{sq},")?;
+    }
+    writeln!(file, "            _ => panic!()")?;
+    writeln!(file, "        }}")?;
+    writeln!(file, "    }}")?;
+    writeln!(file, "}}")?;
+
     Ok(())
 }

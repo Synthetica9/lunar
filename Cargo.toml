@@ -13,6 +13,8 @@ default = ["asm"]
 # Enables custom assembly. Can be disabled on platforms that support it
 # to test "generic" code. All ASM _should_ be feature-gated.
 asm = []
+# Explicitly uses std::simd. Currently experimental, so disabled by default
+simd = []
 
 [profile.release]
 lto = true
@@ -31,11 +33,11 @@ crossbeam-channel = "0.5"
 smallvec = "1.10"
 static_assertions = "1.1"
 no-panic = "0.1"
+textwrap = "0.16"
 
 [build-dependencies]
 rand = { version = "0.8", features = ["small_rng"], default-features = false }
 yaml-rust = "0.4"
-Inflector = "0.11"
 
 [dev-dependencies]
 csv = "1.1"
