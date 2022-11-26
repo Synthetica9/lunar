@@ -2,14 +2,12 @@
 
 use strum::IntoEnumIterator;
 
-use std::marker::PhantomData;
-
 use crate::generated::tuning::N_PARAMETERS;
 use crate::piece::Piece;
 use crate::square::{files, Square};
 use crate::{bitboard::Bitboard, millipawns::Millipawns};
 
-pub use crate::generated::tuning as parameters;
+pub use crate::generated::tuning as generated;
 
 pub struct EvaluationTerm {
     pub per_phase: bool,
@@ -42,6 +40,15 @@ impl<'a> Parameter<'a, false, false, false> {
     #[inline]
     pub fn value(self) -> Millipawns {
         Millipawns(self.value.0[self.offset])
+    }
+
+    // Not _really_ a dot product due to having the same value for the entire
+    // vector, but it can be seen as a dot product with an implicit broadcast.
+    // In either case, this makes it easier to "upgrade" or "downgrade" parameters
+    // To use a board of values or a single values at will.
+    pub fn dot_product(self, other: &Bitboard) -> Millipawns {
+        let popcount = other.popcount() as i32;
+        self.value() * popcount
     }
 }
 
@@ -213,7 +220,7 @@ impl<'a, const B: bool, const C: bool> ToYaml for Parameter<'a, true, B, C> {
                 res.push(' ');
                 res.push_str(&val);
             };
-            // res.push('\n');
+            res.push('\n');
         }
         res
     }
@@ -230,5 +237,24 @@ impl<'a, const A: bool, const B: bool, const C: bool> ToYaml for Parameter<'a, A
             let transmuted: Parameter<'a, false, B, C> = unsafe { std::mem::transmute(self) };
             transmuted.to_yaml()
         }
+    }
+}
+
+impl<'a> ToYaml for Parameters<'a> {
+    fn to_yaml(self) -> String {
+        let mut res = String::new();
+        for (name, newline, value) in self.yaml_terms() {
+            res.push_str(&name);
+
+            if newline {
+                res.push_str(":\n");
+                res.push_str(&textwrap::indent(&value, "  "));
+            } else {
+                res.push_str(": ");
+                res.push_str(&value);
+            }
+            res.push('\n');
+        }
+        res
     }
 }

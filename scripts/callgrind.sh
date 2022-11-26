@@ -4,7 +4,7 @@
 set -euxo pipefail
 
 
-env CARGO_PROFILE_RELEASE_DEBUG=true cargo +nightly build --release --features simd --bin lunar
+env CARGO_PROFILE_RELEASE_DEBUG=true cargo +nightly build --release --bin lunar
 rm callgrind.out.* || true
 valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes  --cache-sim=yes --branch-sim=yes ./target/release/ucitest
 kcachegrind callgrind.out.* &

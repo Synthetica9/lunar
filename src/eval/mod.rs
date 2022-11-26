@@ -7,13 +7,11 @@ use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 
-use crate::eval::parameters::ToYaml;
-
 pub mod parameters;
 
 use parameters::Parameters;
 
-pub struct Evaluator<'a>(Parameters<'a>);
+pub struct Evaluator<'a>(pub Parameters<'a>);
 
 const fn gamephase_inc(piece: &Piece) -> i32 {
     use Piece::*;
@@ -66,7 +64,6 @@ impl<'a> Evaluator<'a> {
         let dynamic: [Millipawns; 2] = {
             let pst = self.0.piece_square_table();
 
-            println!("{}", pst.to_yaml());
             pst.map_parts(|x| {
                 Piece::iter()
                     .map(|piece| x.get(&piece).dot_product(&game.board().get(&White, &piece)))
@@ -86,22 +83,48 @@ impl<'a> Evaluator<'a> {
     }
 
     fn mobility(&self, game: &Game) -> [Millipawns; 2] {
-        self.0.mobility().map_parts(|x| {
-            use Piece::*;
+        let defense = self.0.defense().get();
+        let mobility = self.0.mobility().get();
+        let offense = self.0.offense().get();
 
-            let occupancy = game.board().get_occupied();
-            [Bishop, Rook, Queen]
-                .iter()
-                .flat_map(|piece| {
-                    let value = x.get(piece).value();
-                    game.board()
-                        .get(&White, piece)
+        let mut mg = Millipawns(0);
+        let mut eg = Millipawns(0);
+
+        for i in 0..2 {
+            let def = defense[i];
+            let mob = mobility[i];
+            let off = offense[i];
+
+            let res = Piece::iter()
+                .map(|piece| {
+                    let pieces = game.board().get(&White, &piece);
+                    let white = game.board().get_color(&White);
+                    let black = game.board().get_color(&Color::Black);
+                    let occupied = black | white;
+
+                    pieces
                         .iter_squares()
-                        .map(|sq| Bitboard::magic_attacks(sq, *piece, occupancy))
-                        .map(move |bb| value * (bb.popcount() as i32))
+                        .map(|sq| {
+                            let attacks = Bitboard::piece_attacks_from_with_occupancy(
+                                &piece, sq, &White, occupied,
+                            );
+                            let def_score = def.get(&piece).dot_product(&(attacks & white));
+                            let mob_score = mob.get(&piece).dot_product(&(attacks & !occupied));
+                            let off_score = off.get(&piece).dot_product(&(attacks & black));
+                            def_score + mob_score + off_score
+                        })
+                        .sum()
                 })
-                .sum()
-        })
+                .sum();
+
+            if i == 0 {
+                mg = res
+            } else {
+                eg = res
+            };
+        }
+
+        [mg, eg]
     }
 
     fn doubled_pawns(&self, game: &Game) -> [Millipawns; 2] {

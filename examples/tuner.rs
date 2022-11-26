@@ -2,7 +2,14 @@
 
 extern crate lunar;
 
-use lunar::{game::Game, millipawns::Millipawns};
+use std::fs::File;
+use std::io::Write;
+
+use lunar::eval::parameters::ToYaml;
+use lunar::eval::parameters::{self, Parameters};
+use lunar::eval::Evaluator;
+use lunar::game::Game;
+use lunar::millipawns::Millipawns;
 
 #[derive(Debug)]
 enum Outcome {
@@ -10,6 +17,9 @@ enum Outcome {
     Draw,
     Win,
 }
+
+pub const EPOCHS: i32 = 1000;
+pub const LEARNING_RATE: f32 = 0.05;
 
 impl Outcome {
     fn to_numeric(&self) -> f32 {
@@ -26,16 +36,45 @@ fn mp_to_win_percentage(mp: Millipawns) -> f32 {
     1.0 / (1.0 + (10.0_f32).powf(-mp.0 as f32 / 4000.0))
 }
 
-// TODO: add evaluator argument
-fn mse(games: &[(Game, Outcome)]) -> f32 {
+fn mse(evaluator: Evaluator, games: &[(Game, Outcome)]) -> f32 {
     let res: f32 = games
         .iter()
         .map(|(game, outcome)| {
-            outcome.to_numeric() - mp_to_win_percentage(lunar::eval::evaluation(game))
+            outcome.to_numeric() - mp_to_win_percentage(evaluator.evaluate(game))
         })
         .map(|x| x * x)
         .sum();
     res / (games.len() as f32)
+}
+
+fn tune() -> Result<(), String> {
+    let mut result = *parameters::STATIC_EVALUATOR.0;
+    let games = parse_csv("sample.csv")?;
+    let mut err: f32 = 0.0;
+    for epoch in 0..EPOCHS {
+        println!("Starting epoch {epoch}");
+        for i in 0..result.len() {
+            if !parameters::generated::MUTABILITY[i] {
+                // Should not mutate.
+                continue;
+            };
+            let before = mse(Evaluator(Parameters(&result)), &games);
+            result[i] += 1;
+            err = mse(Evaluator(Parameters(&result)), &games);
+            result[i] -= 1;
+
+            let diff = before + err;
+            let direction = diff.signum() as i32;
+            result[i] += direction;
+            // println!("{diff}");
+        }
+        println!("Finished epoch {epoch}. {err}");
+
+        let mut file = File::create("parameters.yaml").map_err(|x| x.to_string())?;
+        let yaml = Parameters(&result).to_yaml();
+        write!(file, "{yaml}").map_err(|x| x.to_string())?;
+    }
+    Ok(())
 }
 
 fn parse_csv(filename: &str) -> Result<Vec<(Game, Outcome)>, String> {
@@ -59,10 +98,5 @@ fn parse_csv(filename: &str) -> Result<Vec<(Game, Outcome)>, String> {
 }
 
 fn main() -> Result<(), String> {
-    let games = parse_csv("sample2.csv")?;
-    for (game, outcome) in games.iter() {
-        println!("{}, {:?}", game.to_fen(), outcome)
-    }
-    println!("{}", mse(&games));
-    Ok(())
+    tune()
 }

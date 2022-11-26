@@ -106,7 +106,7 @@ pub fn gen_tuning_file(file: &mut std::fs::File) -> Result<(), std::io::Error> {
     writeln!(file, "// Tuning values from yaml\n")?;
     writeln!(
         file,
-        "use crate::eval::parameters::{{EvaluationTerm, Parameters, Parameter}};"
+        "use crate::eval::parameters::{{EvaluationTerm, Parameters, Parameter, ToYaml}};"
     )?;
 
     println!("cargo:rerun-if-changed=parameters.yaml");
@@ -133,22 +133,25 @@ pub fn gen_tuning_file(file: &mut std::fs::File) -> Result<(), std::io::Error> {
     // Output  data structures: one as a layout guide, one with the data, and
     // one with the "mutability" (can this parameter be tuned? Prefixed with $ if it can't)
 
+    writeln!(file, "impl<'a> Parameters<'a> {{")?;
     writeln!(
         file,
-        "pub const TERMS: [(&str, EvaluationTerm); {}] = [",
+        "    pub fn yaml_terms(&self) -> [(String, bool, String); {}] {{",
         res.len()
     )?;
+    writeln!(file, "        [")?;
     for (name, line) in res.iter() {
         let (a, b, c, _) = line;
 
         writeln!(
             file,
-            "    ({name:?}, EvaluationTerm {{ per_phase: {a}, per_piece: {b}, per_square: {c} }}),"
+            "            ({name:?}.to_string(), {}, self.{name}().to_yaml()),",
+            *a || *b || *c
         )?;
     }
-    writeln!(file, "];\n")?;
+    writeln!(file, "        ]")?;
+    writeln!(file, "    }}\n")?;
 
-    writeln!(file, "impl<'a> Parameters<'a> {{")?;
     let mut offset = 0;
     for (name, line) in res.iter() {
         let (a, b, c, vals) = line;
