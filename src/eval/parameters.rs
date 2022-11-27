@@ -79,9 +79,14 @@ impl<'a> Parameter<'a, false, false, true> {
     }
 
     pub fn dot_product(&self, other: &Bitboard) -> Millipawns {
-        Square::iter()
-            .map(|sq| self.get(&sq) * (other.get(sq) as i32))
-            .sum()
+        let mut res = Millipawns(0);
+        for idx in (0..64) {
+            let sq = Square::from_u8(idx as u8);
+            if other.get(sq) {
+                res += Millipawns(self.value.0[idx]);
+            }
+        }
+        res
     }
 }
 
