@@ -45,6 +45,7 @@ impl<'a> Evaluator<'a> {
             Evaluator::mobility,
             Evaluator::doubled_pawns,
             Evaluator::pesto,
+            Evaluator::pawn_chain,
         ];
 
         let mut res = Millipawns(0);
@@ -133,6 +134,14 @@ impl<'a> Evaluator<'a> {
             let doubled = pawns & pawns.shift(crate::direction::directions::N);
             x.dot_product(&doubled)
         })
+    }
+
+    fn pawn_chain(&self, game: &Game) -> [Millipawns; 2] {
+        let pawns = game.board().get(&White, &Piece::Pawn);
+        use crate::direction::directions::{NE, NW};
+        let chain = (pawns & pawns.shift(NW)) | (pawns & pawns.shift(NE));
+        let res = self.0.pawn_chain().dot_product(&chain);
+        [res, res]
     }
 }
 

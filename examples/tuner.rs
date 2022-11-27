@@ -2,6 +2,11 @@
 
 extern crate lunar;
 
+use rand::rngs::SmallRng as Rng;
+use rand::seq::SliceRandom;
+use rand::RngCore;
+use rand::SeedableRng;
+
 use std::fs::File;
 use std::io::Write;
 
@@ -11,7 +16,7 @@ use lunar::eval::Evaluator;
 use lunar::game::Game;
 use lunar::millipawns::Millipawns;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum Outcome {
     Loss,
     Draw,
@@ -19,7 +24,8 @@ enum Outcome {
 }
 
 pub const EPOCHS: i32 = 1000;
-pub const LEARNING_RATE: f32 = 0.05;
+pub const LEARNING_RATE: f32 = 500000.0;
+pub const MINIBATCH_SIZE: usize = 4096;
 
 impl Outcome {
     fn to_numeric(&self) -> f32 {
@@ -50,24 +56,32 @@ fn mse(evaluator: Evaluator, games: &[(Game, Outcome)]) -> f32 {
 fn tune() -> Result<(), String> {
     let mut result = *parameters::STATIC_EVALUATOR.0;
     let games = parse_csv("sample.csv")?;
-    let mut err: f32 = 0.0;
+    let mut rng = Rng::seed_from_u64(1);
+
     for epoch in 0..EPOCHS {
         println!("Starting epoch {epoch}");
+        // println!("Minibatch {mb}");
+        let batch: Vec<_> = games
+            .choose_multiple(&mut rng, MINIBATCH_SIZE)
+            .copied()
+            .collect();
         for i in 0..result.len() {
             if !parameters::generated::MUTABILITY[i] {
                 // Should not mutate.
                 continue;
             };
-            let before = mse(Evaluator(Parameters(&result)), &games);
+            let before = mse(Evaluator(Parameters(&result)), &batch);
             result[i] += 1;
-            err = mse(Evaluator(Parameters(&result)), &games);
+            let after = mse(Evaluator(Parameters(&result)), &batch);
             result[i] -= 1;
 
-            let diff = before + err;
-            let direction = diff.signum() as i32;
-            result[i] += direction;
-            // println!("{diff}");
+            let diff = (before - after) / after;
+            let step = diff * LEARNING_RATE;
+            // println!("{step}");
+            let step = step.clamp(-100.0, 100.0) as i32;
+            result[i] += step;
         }
+        let err = mse(Evaluator(Parameters(&result)), &games);
         println!("Finished epoch {epoch}. {err}");
 
         let mut file = File::create("parameters.yaml").map_err(|x| x.to_string())?;
@@ -94,6 +108,8 @@ fn parse_csv(filename: &str) -> Result<Vec<(Game, Outcome)>, String> {
             }?;
             Ok((game, outcome))
         })
+        .enumerate()
+        .map(|(i, x)| x.map_err(|err: String| format!("{err} while parsing line {}", i + 1)))
         .collect()
 }
 

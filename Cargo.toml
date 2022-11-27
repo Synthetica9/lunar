@@ -41,7 +41,8 @@ yaml-rust = "0.4"
 
 [dev-dependencies]
 csv = "1.1"
-criterion = { version = "0.4", features = ["html_reports"] }
+# criterion = { version = "0.4", features = ["html_reports"] }
+rand = { version = "0.8", features = ["small_rng", "alloc"], default-features = false }
 
 [[bench]]
 name = "perft_bench"

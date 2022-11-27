@@ -12,6 +12,6 @@ cargo build --release --bin lunar
   -openings file=./test_data/blitz_openings.fen \
   -each tc=1+.08 \
   -games 64000 \
-  -sample freq=.05 decay=.02 resolve=y \
+  -sample decay=.02 resolve=y \
   -concurrency 2 \
   2> /dev/null
