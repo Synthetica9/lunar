@@ -53,8 +53,17 @@ fn mse(evaluator: Evaluator, games: &[(Game, Outcome)]) -> f32 {
     res / (games.len() as f32)
 }
 
+fn dump(result: &[i32; parameters::generated::N_PARAMETERS]) -> Result<(), String> {
+    let mut file = File::create("parameters.yaml").map_err(|x| x.to_string())?;
+    let yaml = Parameters(result).to_yaml();
+    write!(file, "{yaml}").map_err(|x| x.to_string())?;
+    Ok(())
+}
+
 fn tune() -> Result<(), String> {
     let mut result = *parameters::STATIC_EVALUATOR.0;
+    // Small easter egg: format if you immediately kill.
+    dump(&result)?;
     let games = parse_csv("sample.csv")?;
     let mut rng = Rng::seed_from_u64(1);
 
@@ -84,9 +93,7 @@ fn tune() -> Result<(), String> {
         let err = mse(Evaluator(Parameters(&result)), &games);
         println!("Finished epoch {epoch}. {err}");
 
-        let mut file = File::create("parameters.yaml").map_err(|x| x.to_string())?;
-        let yaml = Parameters(&result).to_yaml();
-        write!(file, "{yaml}").map_err(|x| x.to_string())?;
+        dump(&result)?;
     }
     Ok(())
 }

@@ -41,12 +41,7 @@ impl<'a> Evaluator<'a> {
 
     #[inline(always)]
     fn _evaluate_inline(&self, game: &Game) -> Millipawns {
-        let terms = [
-            Evaluator::mobility,
-            Evaluator::doubled_pawns,
-            Evaluator::pesto,
-            Evaluator::pawn_chain,
-        ];
+        let terms = [Evaluator::pesto];
 
         let mut res = Millipawns(0);
         let phase = game_phase(game.board());
@@ -81,67 +76,6 @@ impl<'a> Evaluator<'a> {
         });
 
         [dynamic[0] + base[0], dynamic[1] + base[1]]
-    }
-
-    fn mobility(&self, game: &Game) -> [Millipawns; 2] {
-        let defense = self.0.defense().get();
-        let mobility = self.0.mobility().get();
-        let offense = self.0.offense().get();
-
-        let mut mg = Millipawns(0);
-        let mut eg = Millipawns(0);
-
-        for i in 0..2 {
-            let def = defense[i];
-            let mob = mobility[i];
-            let off = offense[i];
-
-            let res = Piece::iter()
-                .map(|piece| {
-                    let pieces = game.board().get(&White, &piece);
-                    let white = game.board().get_color(&White);
-                    let black = game.board().get_color(&Color::Black);
-                    let occupied = black | white;
-
-                    pieces
-                        .iter_squares()
-                        .map(|sq| {
-                            let attacks = Bitboard::piece_attacks_from_with_occupancy(
-                                &piece, sq, &White, occupied,
-                            );
-                            let def_score = def.get(&piece).dot_product(&(attacks & white));
-                            let mob_score = mob.get(&piece).dot_product(&(attacks & !occupied));
-                            let off_score = off.get(&piece).dot_product(&(attacks & black));
-                            def_score + mob_score + off_score
-                        })
-                        .sum()
-                })
-                .sum();
-
-            if i == 0 {
-                mg = res
-            } else {
-                eg = res
-            };
-        }
-
-        [mg, eg]
-    }
-
-    fn doubled_pawns(&self, game: &Game) -> [Millipawns; 2] {
-        self.0.doubled_pawns().map_parts(|x| {
-            let pawns = game.board().get(&White, &Piece::Pawn);
-            let doubled = pawns & pawns.shift(crate::direction::directions::N);
-            x.dot_product(&doubled)
-        })
-    }
-
-    fn pawn_chain(&self, game: &Game) -> [Millipawns; 2] {
-        let pawns = game.board().get(&White, &Piece::Pawn);
-        use crate::direction::directions::{NE, NW};
-        let chain = (pawns & pawns.shift(NW)) | (pawns & pawns.shift(NE));
-        let res = self.0.pawn_chain().dot_product(&chain);
-        [res, res]
     }
 }
 
