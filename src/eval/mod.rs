@@ -41,7 +41,7 @@ impl<'a> Evaluator<'a> {
 
     #[inline(always)]
     fn _evaluate_inline(&self, game: &Game) -> Millipawns {
-        let terms = [Evaluator::pesto];
+        let terms = [Evaluator::pesto, Evaluator::isolated_pawn];
 
         let mut res = Millipawns(0);
         let phase = game_phase(game.board());
@@ -76,6 +76,43 @@ impl<'a> Evaluator<'a> {
         });
 
         [dynamic[0] + base[0], dynamic[1] + base[1]]
+    }
+
+    fn isolated_pawn(&self, game: &Game) -> [Millipawns; 2] {
+        use crate::direction::directions::*;
+
+        let pawns = game.board().get(&White, &Piece::Pawn);
+        // Shift all pawns to the A file.
+
+        let pawn_files = {
+            let mut res = pawns;
+
+            for _ in 0..8 {
+                res |= res.shift(S);
+            }
+
+            res & Bitboard::row(0)
+        };
+
+        let isolated_files = pawn_files & !(pawn_files.shift(E) | pawn_files.shift(W));
+
+        // Smear back out to all other ranks
+        // TODO: add this as a bitboard function.
+        let smeared = {
+            let mut res = isolated_files;
+
+            for _ in 0..8 {
+                res |= res.shift(N);
+            }
+
+            res
+        };
+
+        let isolated_pawns = smeared & pawns;
+
+        self.0
+            .isolated_pawn()
+            .map_parts(|phase| -phase.dot_product(&isolated_pawns))
     }
 }
 

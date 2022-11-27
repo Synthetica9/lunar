@@ -24,7 +24,7 @@ enum Outcome {
 }
 
 pub const EPOCHS: i32 = 1000;
-pub const LEARNING_RATE: f32 = 500000.0;
+pub const LEARNING_RATE: f32 = 100000.0;
 pub const MINIBATCH_SIZE: usize = 4096;
 
 impl Outcome {
@@ -100,7 +100,7 @@ fn tune() -> Result<(), String> {
 
 fn parse_csv(filename: &str) -> Result<Vec<(Game, Outcome)>, String> {
     let mut reader = csv::Reader::from_path(filename).map_err(|x| x.to_string())?;
-    reader
+    let mut res: Vec<_> = reader
         .records()
         .map(|x| {
             let record = x.map_err(|x| x.to_string())?;
@@ -117,7 +117,9 @@ fn parse_csv(filename: &str) -> Result<Vec<(Game, Outcome)>, String> {
         })
         .enumerate()
         .map(|(i, x)| x.map_err(|err: String| format!("{err} while parsing line {}", i + 1)))
-        .collect()
+        .collect();
+    res.pop();
+    res.into_iter().collect()
 }
 
 fn main() -> Result<(), String> {
