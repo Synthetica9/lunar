@@ -8,6 +8,9 @@ authors = [
   "Patrick Hilhorst"
 ]
 
+[workspace]
+members = ["parameters"]
+
 [features]
 default = ["asm"]
 # Enables custom assembly. Can be disabled on platforms that support it
@@ -33,11 +36,13 @@ crossbeam-channel = "0.5"
 smallvec = "1.10"
 static_assertions = "1.1"
 no-panic = "0.1"
-textwrap = "0.16"
+parameters = { path = "./parameters" }
 
 [build-dependencies]
 rand = { version = "0.8", features = ["small_rng"], default-features = false }
-yaml-rust = "0.4"
+parameters = { path = "./parameters" }
+serde = { version = "1.0" }
+serde_yaml = "0.9"
 
 [dev-dependencies]
 csv = "1.1"

@@ -6,12 +6,11 @@ use crate::board::Board;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
+use crate::square::Square;
 
-pub mod parameters;
+pub use parameters::*;
 
-use parameters::Parameters;
-
-pub struct Evaluator<'a>(pub Parameters<'a>);
+pub struct Evaluator(pub Parameters);
 
 const fn gamephase_inc(piece: &Piece) -> i32 {
     use Piece::*;
@@ -34,7 +33,7 @@ fn game_phase(board: &Board) -> i32 {
     std::cmp::min(res, 24)
 }
 
-impl<'a> Evaluator<'a> {
+impl Evaluator {
     pub fn evaluate(&self, game: &Game) -> Millipawns {
         self._evaluate_inline(game)
     }
@@ -49,36 +48,44 @@ impl<'a> Evaluator<'a> {
             let color = if mirror { Color::Black } else { Color::White };
             let game = if mirror { game.mirror() } else { *game };
             for term in terms {
-                let [mg, eg] = term(self, &game);
+                let x = term(self, &game);
+                let mg = x.mg;
+                let eg = x.eg;
                 res += ((mg * phase + eg * (24 - phase)) / 24) * color.multiplier();
             }
         }
         res * game.to_move().multiplier()
     }
 
-    fn pesto(&self, game: &Game) -> [Millipawns; 2] {
-        let dynamic: [Millipawns; 2] = {
-            let pst = self.0.piece_square_table();
-
-            pst.map_parts(|x| {
-                Piece::iter()
-                    .map(|piece| x.get(&piece).dot_product(&game.board().get(&White, &piece)))
-                    .sum()
-            })
+    fn pesto(&self, game: &Game) -> PhaseParameter<Millipawns> {
+        let mut res = PhaseParameter {
+            eg: Millipawns(0),
+            mg: Millipawns(0),
         };
 
-        let base: [Millipawns; 2] = self.0.base_value().map_parts(|x| {
-            Piece::iter()
-                .map(|piece| {
-                    x.get(&piece).value() * (game.board().get(&White, &piece).popcount() as i32)
-                })
-                .sum()
-        });
+        let pesto = &self.0.piece_square_table;
+        let base = &self.0.base_value;
 
-        [dynamic[0] + base[0], dynamic[1] + base[1]]
+        for i in 0..2 {
+            let (dst, pesto, base) = if i == 0 {
+                (&mut res.mg, &pesto.mg, &base.mg)
+            } else {
+                (&mut res.eg, &pesto.eg, &base.eg)
+            };
+
+            let x = Piece::iter()
+                .map(|piece| {
+                    let pieces = game.board().get(&White, &piece);
+                    pesto.get(&piece).dot_product(&pieces) + base.get(&piece).dot_product(&pieces)
+                })
+                .sum();
+            *dst = x;
+        }
+
+        res
     }
 
-    fn isolated_pawn(&self, game: &Game) -> [Millipawns; 2] {
+    fn isolated_pawn(&self, game: &Game) -> PhaseParameter<Millipawns> {
         use crate::direction::directions::*;
 
         let pawns = game.board().get(&White, &Piece::Pawn);
@@ -98,6 +105,7 @@ impl<'a> Evaluator<'a> {
 
         // Smear back out to all other ranks
         // TODO: add this as a bitboard function.
+        // Can be done with multiplication by the A file.
         let smeared = {
             let mut res = isolated_files;
 
@@ -111,8 +119,8 @@ impl<'a> Evaluator<'a> {
         let isolated_pawns = smeared & pawns;
 
         self.0
-            .isolated_pawn()
-            .map_parts(|phase| -phase.dot_product(&isolated_pawns))
+            .isolated_pawns
+            .map(|phase| -phase.dot_product(&isolated_pawns))
     }
 }
 
@@ -125,8 +133,63 @@ pub fn base_eval(game: &Game) -> Millipawns {
     res * game.to_move().multiplier()
 }
 
-const STATIC_EVALUATOR: Evaluator<'static> = Evaluator(parameters::STATIC_EVALUATOR);
+const STATIC_EVALUATOR: Evaluator = Evaluator(crate::generated::parameters::STATIC_PARAMETERS);
 
 pub fn evaluation(game: &Game) -> Millipawns {
     STATIC_EVALUATOR._evaluate_inline(game)
+}
+
+pub trait DotProduct {
+    type Output;
+
+    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output;
+}
+
+impl DotProduct for BoardParameter {
+    type Output = Millipawns;
+
+    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+        // let mut result = Millipawns(0);
+        // for idx in 0..64 {
+        //     let square = Square::from_u8(idx as u8);
+        //     if bitboard.get(square) {
+        //         result += Millipawns(self.values[idx] as i32);
+        //     }
+        // }
+        // result
+        bitboard
+            .iter_squares()
+            .map(|sq| Millipawns(self.values[sq.as_index()] as i32))
+            .sum()
+    }
+}
+
+impl DotProduct for ScalarParameter {
+    type Output = Millipawns;
+
+    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+        Millipawns(self.0) * (bitboard.popcount() as i32)
+    }
+}
+
+trait ByPiece<'a> {
+    type Output;
+
+    fn get(&'a self, piece: &Piece) -> &'a Self::Output;
+}
+
+impl<'a, T> ByPiece<'a> for PieceParameter<T> {
+    type Output = T;
+
+    fn get(&'a self, piece: &Piece) -> &'a Self::Output {
+        use Piece::*;
+        match piece {
+            Pawn => &self.pawn,
+            Knight => &self.knight,
+            Bishop => &self.bishop,
+            Rook => &self.rook,
+            Queen => &self.queen,
+            King => &self.king,
+        }
+    }
 }

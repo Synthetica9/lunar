@@ -15,7 +15,7 @@ pub fn main() -> std::io::Result<()> {
 
     gen_squares()?;
 
-    gen_tuning_file(&mut open("tuning")?)?;
+    gen_tuning_file(&mut open("parameters")?)?;
     gen_magics_file(&mut open("magics")?)?;
     gen_hashes_file(&mut open("hashes")?)?;
 
