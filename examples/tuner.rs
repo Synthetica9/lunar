@@ -57,6 +57,11 @@ fn tune() -> Result<(), String> {
     let games = parse_csv("sample.csv")?;
     let mut rng = Rng::seed_from_u64(1);
 
+    let yaml = serde_yaml::to_string(&Parameters::from_params(&mut result.iter().copied()))
+        .map_err(|x| x.to_string())?;
+    let mut f = File::create("parameters.yaml").map_err(|x| x.to_string())?;
+    write!(f, "{yaml}").map_err(|x| x.to_string())?;
+
     for epoch in 0..EPOCHS {
         println!("Starting epoch {epoch}");
         // println!("Minibatch {mb}");
