@@ -9,6 +9,8 @@ pub struct Parameters {
     pub piece_square_table: PhaseParameter<PieceParameter<BoardParameter>>,
     pub base_value: PhaseParameter<PieceParameter<ScalarParameter>>,
     pub isolated_pawns: PhaseParameter<BoardParameter>,
+    #[serde(default)]
+    pub protected_pawns: PhaseParameter<BoardParameter>,
 }
 
 impl ExtractParams for Parameters {
@@ -17,6 +19,7 @@ impl ExtractParams for Parameters {
             self.piece_square_table.params(),
             self.base_value.params(),
             self.isolated_pawns.params(),
+            self.protected_pawns.params(),
         ]
         .concat()
     }
@@ -25,10 +28,12 @@ impl ExtractParams for Parameters {
         let piece_square_table = ExtractParams::from_params(iter);
         let base_value = ExtractParams::from_params(iter);
         let isolated_pawns = ExtractParams::from_params(iter);
+        let protected_pawns = ExtractParams::from_params(iter);
         Self {
             piece_square_table,
             base_value,
             isolated_pawns,
+            protected_pawns,
         }
     }
 }

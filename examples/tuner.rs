@@ -23,8 +23,8 @@ enum Outcome {
 }
 
 pub const EPOCHS: i32 = 10000;
-pub const LEARNING_RATE: f32 = 1000000.0;
-pub const MINIBATCH_SIZE: usize = 4096;
+pub const LEARNING_RATE: f32 = 10000000.0;
+pub const MINIBATCH_SIZE: usize = 16384;
 
 impl Outcome {
     fn to_numeric(&self) -> f32 {
@@ -86,6 +86,11 @@ fn tune() -> Result<(), String> {
             // println!("{step}");
             let step = step.clamp(-100.0, 100.0) as i32;
             result[i] += step;
+
+            // if result[i] >= 90_000 {
+            //     // King static eval
+            //     println!("{diff} ({before} - {after})");
+            // }
         }
 
         let err = mse(

@@ -41,7 +41,11 @@ impl Evaluator {
 
     #[inline(always)]
     fn _evaluate_inline(&self, game: &Game) -> Millipawns {
-        let terms = [Evaluator::pesto, Evaluator::isolated_pawn];
+        let terms = [
+            Evaluator::pesto,
+            Evaluator::isolated_pawn,
+            Evaluator::protected_pawn,
+        ];
 
         let mut res = Millipawns(0);
         let phase = game_phase(game.board());
@@ -122,6 +126,16 @@ impl Evaluator {
         self.0
             .isolated_pawns
             .map(|phase| -phase.dot_product(&isolated_pawns))
+    }
+
+    fn protected_pawn(&self, game: &Game) -> PhaseParameter<Millipawns> {
+        use crate::direction::directions::*;
+        let pawns = game.board().get(&White, &Piece::Pawn);
+
+        let protected_pawns = pawns & (pawns.shift(NE) | pawns.shift(NW));
+        self.0
+            .protected_pawns
+            .map(|x| x.dot_product(&protected_pawns))
     }
 }
 
