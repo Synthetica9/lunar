@@ -8,6 +8,7 @@ use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::square::Square;
 
+pub use crate::generated::parameters::STATIC_PARAMETERS;
 pub use parameters::*;
 
 pub struct Evaluator(pub Parameters);

@@ -10,11 +10,10 @@ use rand::SeedableRng;
 use std::fs::File;
 use std::io::Write;
 
-use lunar::eval::parameters::ToYaml;
-use lunar::eval::parameters::{self, Parameters};
 use lunar::eval::Evaluator;
 use lunar::game::Game;
 use lunar::millipawns::Millipawns;
+use parameters::*;
 
 #[derive(Debug, Copy, Clone)]
 enum Outcome {
@@ -23,8 +22,8 @@ enum Outcome {
     Win,
 }
 
-pub const EPOCHS: i32 = 1000;
-pub const LEARNING_RATE: f32 = 100000.0;
+pub const EPOCHS: i32 = 10000;
+pub const LEARNING_RATE: f32 = 1000000.0;
 pub const MINIBATCH_SIZE: usize = 4096;
 
 impl Outcome {
@@ -53,17 +52,8 @@ fn mse(evaluator: Evaluator, games: &[(Game, Outcome)]) -> f32 {
     res / (games.len() as f32)
 }
 
-fn dump(result: &[i32; parameters::generated::N_PARAMETERS]) -> Result<(), String> {
-    let mut file = File::create("parameters.yaml").map_err(|x| x.to_string())?;
-    let yaml = Parameters(result).to_yaml();
-    write!(file, "{yaml}").map_err(|x| x.to_string())?;
-    Ok(())
-}
-
 fn tune() -> Result<(), String> {
-    let mut result = *parameters::STATIC_EVALUATOR.0;
-    // Small easter egg: format if you immediately kill.
-    dump(&result)?;
+    let mut result = lunar::eval::STATIC_PARAMETERS.params();
     let games = parse_csv("sample.csv")?;
     let mut rng = Rng::seed_from_u64(1);
 
@@ -75,13 +65,15 @@ fn tune() -> Result<(), String> {
             .copied()
             .collect();
         for i in 0..result.len() {
-            if !parameters::generated::MUTABILITY[i] {
-                // Should not mutate.
-                continue;
-            };
-            let before = mse(Evaluator(Parameters(&result)), &batch);
+            let before = mse(
+                Evaluator(Parameters::from_params(&mut result.iter().copied())),
+                &batch,
+            );
             result[i] += 1;
-            let after = mse(Evaluator(Parameters(&result)), &batch);
+            let after = mse(
+                Evaluator(Parameters::from_params(&mut result.iter().copied())),
+                &batch,
+            );
             result[i] -= 1;
 
             let diff = (before - after) / after;
@@ -90,10 +82,18 @@ fn tune() -> Result<(), String> {
             let step = step.clamp(-100.0, 100.0) as i32;
             result[i] += step;
         }
-        let err = mse(Evaluator(Parameters(&result)), &games);
+
+        let err = mse(
+            Evaluator(Parameters::from_params(&mut result.iter().copied())),
+            &games,
+        );
+
         println!("Finished epoch {epoch}. {err}");
 
-        dump(&result)?;
+        let yaml = serde_yaml::to_string(&Parameters::from_params(&mut result.iter().copied()))
+            .map_err(|x| x.to_string())?;
+        let mut f = File::create("parameters.yaml").map_err(|x| x.to_string())?;
+        write!(f, "{yaml}").map_err(|x| x.to_string())?;
     }
     Ok(())
 }

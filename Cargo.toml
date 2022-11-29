@@ -48,6 +48,7 @@ serde_yaml = "0.9"
 csv = "1.1"
 # criterion = { version = "0.4", features = ["html_reports"] }
 rand = { version = "0.8", features = ["small_rng", "alloc"], default-features = false }
+serde_yaml = "0.9"
 
 [[bench]]
 name = "perft_bench"

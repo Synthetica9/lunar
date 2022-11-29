@@ -3,7 +3,7 @@ use std::ops::Add;
 use itertools::Itertools;
 use serde::{de, Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default, Debug, Clone, Copy)]
 // #[serde(default)]
 pub struct Parameters {
     pub piece_square_table: PhaseParameter<PieceParameter<BoardParameter>>,
@@ -11,7 +11,29 @@ pub struct Parameters {
     pub isolated_pawns: PhaseParameter<BoardParameter>,
 }
 
-#[derive(Debug)]
+impl ExtractParams for Parameters {
+    fn params(&self) -> Vec<i32> {
+        [
+            self.piece_square_table.params(),
+            self.base_value.params(),
+            self.isolated_pawns.params(),
+        ]
+        .concat()
+    }
+
+    fn from_params<T: Iterator<Item = i32>>(iter: &mut T) -> Self {
+        let piece_square_table = ExtractParams::from_params(iter);
+        let base_value = ExtractParams::from_params(iter);
+        let isolated_pawns = ExtractParams::from_params(iter);
+        Self {
+            piece_square_table,
+            base_value,
+            isolated_pawns,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 #[repr(align(64))]
 pub struct BoardParameter {
     pub values: [i16; 64],
@@ -32,8 +54,10 @@ impl Serialize for BoardParameter {
         let longest = strings.iter().max_by_key(|x| x.len()).unwrap().len();
         let padded: Vec<_> = strings.iter().map(|x| format!("{x:<longest$}")).collect();
         let chunks = padded.chunks(8);
-        let mut lines = chunks.map(|x| x.join(" "));
-        let res = lines.join("\n");
+        let lines = chunks
+            .map(|x| x.join(" ").trim_end().to_string())
+            .collect_vec();
+        let res = lines.iter().rev().join("\n");
         res.serialize(serializer)
     }
 }
@@ -56,10 +80,10 @@ impl<'de> Deserialize<'de> for BoardParameter {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Copy)]
 pub struct ScalarParameter(pub i32);
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Copy)]
 #[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'de>"))]
 pub struct PieceParameter<T> {
     pub pawn: T,
@@ -70,11 +94,11 @@ pub struct PieceParameter<T> {
     pub king: T,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Copy)]
 #[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'de>"))]
 pub struct PhaseParameter<T> {
-    pub eg: T,
     pub mg: T,
+    pub eg: T,
 }
 
 impl<T> PhaseParameter<T> {
@@ -97,5 +121,82 @@ where
             eg: self.eg + rhs.eg,
             mg: self.mg + rhs.mg,
         }
+    }
+}
+
+pub trait ExtractParams {
+    fn params(&self) -> Vec<i32>;
+    fn from_params<T: Iterator<Item = i32>>(iter: &mut T) -> Self;
+}
+
+impl ExtractParams for ScalarParameter {
+    fn params(&self) -> Vec<i32> {
+        vec![self.0]
+    }
+
+    fn from_params<T: Iterator<Item = i32>>(iter: &mut T) -> Self {
+        let value = iter.next().unwrap();
+        Self(value)
+    }
+}
+
+impl ExtractParams for BoardParameter {
+    fn params(&self) -> Vec<i32> {
+        self.values.iter().map(|x| *x as i32).collect()
+    }
+
+    fn from_params<T: Iterator<Item = i32>>(iter: &mut T) -> Self {
+        let vec = iter.take(64).map(|x| x as i16).collect_vec();
+        let values = vec.as_slice().try_into().unwrap();
+        Self { values }
+    }
+}
+
+impl<T> ExtractParams for PieceParameter<T>
+where
+    T: ExtractParams,
+{
+    fn params(&self) -> Vec<i32> {
+        [
+            self.pawn.params(),
+            self.knight.params(),
+            self.bishop.params(),
+            self.rook.params(),
+            self.queen.params(),
+            self.king.params(),
+        ]
+        .concat()
+    }
+
+    fn from_params<It: Iterator<Item = i32>>(iter: &mut It) -> Self {
+        let pawn = ExtractParams::from_params(iter);
+        let knight = ExtractParams::from_params(iter);
+        let bishop = ExtractParams::from_params(iter);
+        let rook = ExtractParams::from_params(iter);
+        let queen = ExtractParams::from_params(iter);
+        let king = ExtractParams::from_params(iter);
+        Self {
+            pawn,
+            knight,
+            bishop,
+            rook,
+            queen,
+            king,
+        }
+    }
+}
+
+impl<T> ExtractParams for PhaseParameter<T>
+where
+    T: ExtractParams,
+{
+    fn params(&self) -> Vec<i32> {
+        [self.mg.params(), self.eg.params()].concat()
+    }
+
+    fn from_params<It: Iterator<Item = i32>>(iter: &mut It) -> Self {
+        let mg = ExtractParams::from_params(iter);
+        let eg = ExtractParams::from_params(iter);
+        Self { mg, eg }
     }
 }
