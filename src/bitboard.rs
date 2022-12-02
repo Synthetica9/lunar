@@ -246,10 +246,59 @@ impl Bitboard {
     pub const fn shift(self, direction: Direction) -> Bitboard {
         let east = direction.clone_const().east;
 
-        let mask = Bitboard::n_cols(-east).not_const();
-        let covered = self.and(mask);
+        let covered = if east != 0 {
+            let mask = Bitboard::n_cols(-east).not_const();
+            self.and(mask)
+        } else {
+            self
+        };
 
         covered.shift_unguarded(direction)
+    }
+
+    #[inline]
+    pub const fn fill(self, direction: Direction) -> Bitboard {
+        let mut val = self;
+
+        val = val.shift(direction.mult_const(4)).or(val);
+        val = val.shift(direction.mult_const(2)).or(val);
+        val = val.shift(direction.mult_const(1)).or(val);
+
+        val
+    }
+
+    #[inline]
+    pub const fn gather(self, direction: Direction) -> Bitboard {
+        use crate::direction::directions::*;
+
+        let final_and = match direction {
+            S => ROW_1,
+            N => ROW_8,
+            W => COL_A,
+            E => COL_H,
+            _ => panic!("Can't gather non-primary direction (N, S, W, E)"),
+        };
+
+        self.fill(direction).and(final_and)
+    }
+
+    pub const fn gather_south(self) -> Bitboard {
+        self.gather(crate::direction::directions::S)
+    }
+
+    pub const fn fill_north_singular(self) -> Bitboard {
+        #[cfg(debug_assertions)]
+        {
+            // for file in File::iter() {
+            //     assert!(file.to_bitboard().popcount() <= 1)
+            // }
+        }
+
+        Bitboard(((self.0 as u128) * (COL_A.0 as u128)) as u64)
+    }
+
+    pub const fn fill_cols(self) -> Bitboard {
+        self.gather_south().fill_north_singular()
     }
 
     pub fn simple_render(self) -> String {
@@ -632,5 +681,20 @@ mod tests {
             flipped,
             Bitboard::from_squares(&[A8, B7, C6, D5, E4, F3, G2, H1])
         );
+    }
+
+    #[test]
+    fn test_smear_cols() {
+        assert_eq!(FULL, Bitboard(COL_A.0 * ROW_1.0));
+        assert_eq!(FULL, ROW_1.fill_north());
+
+        let bb = Bitboard::from_squares(&[A1, B2, C3, D4, E5, F6, G7, H8]);
+        let smeared = Bitboard::fill_cols(bb);
+
+        println!("{}", smeared.simple_render());
+        println!("{}", bb.simple_render());
+        println!("{}", bb.fill_north().simple_render());
+
+        assert_eq!(smeared, FULL);
     }
 }

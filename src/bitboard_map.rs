@@ -55,6 +55,41 @@ impl BitboardMap {
         res
     }
 
+    const fn or(&self, other: &BitboardMap) -> BitboardMap {
+        let mut res = BitboardMap::new();
+
+        let mut i = 64;
+
+        while i > 0 {
+            res.0[i] = self.0[i].or(other.0[i]);
+        }
+
+        res
+    }
+
+    const fn compose(&self, other: &BitboardMap) -> BitboardMap {
+        let mut res = BitboardMap::new();
+
+        let mut i = 64;
+        while i > 0 {
+            i -= 1;
+
+            let mut j = 64;
+            while j > 64 {
+                j -= 1;
+
+                let sq_i = Square::from_index(i as u8);
+                let sq_j = Square::from_index(j as u8);
+
+                if self.get_const(&sq_i).get(sq_j) {
+                    res.0[j] = res.0[j].or(other.0[j])
+                }
+            }
+        }
+
+        res
+    }
+
     const fn pawn_moves(side: Color) -> BitboardMap {
         let direction = side.pawn_move_direction();
 
@@ -117,6 +152,9 @@ const KING_DIRECTIONS: [Direction; 8] = [
     directions::NW,
 ];
 pub const KING_MOVES: BitboardMap = BitboardMap::step_moves(&KING_DIRECTIONS);
+
+pub const IMMEDIATE_NEIGHBORHOOD: BitboardMap = KING_MOVES;
+pub const MEDIUM_NEIGHBORHOOD: BitboardMap = KING_MOVES.compose(&KING_MOVES);
 
 const WHITE_PAWN_ATTACK_DIRECTIONS: [Direction; 2] = [directions::NE, directions::NW];
 pub const WHITE_PAWN_ATTACKS: BitboardMap = BitboardMap::step_moves(&WHITE_PAWN_ATTACK_DIRECTIONS);

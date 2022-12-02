@@ -1,5 +1,5 @@
 // TODO: better debug
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Eq)]
 pub struct Direction {
     pub north: i8,
     pub east: i8,

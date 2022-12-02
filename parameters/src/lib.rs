@@ -4,13 +4,16 @@ use itertools::Itertools;
 use serde::{de, Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, Copy)]
+#[serde(default)]
 // #[serde(default)]
 pub struct Parameters {
     pub piece_square_table: PhaseParameter<PieceParameter<BoardParameter>>,
     pub base_value: PhaseParameter<PieceParameter<ScalarParameter>>,
-    pub isolated_pawns: PhaseParameter<BoardParameter>,
-    #[serde(default)]
-    pub protected_pawns: PhaseParameter<BoardParameter>,
+    pub isolated_pawns: PhaseParameter<Pos<BoardParameter>>,
+    pub protected_pawns: PhaseParameter<Pos<BoardParameter>>,
+    pub connected_rooks: PhaseParameter<BoardParameter>,
+    pub pawn_shield: PhaseParameter<BoardParameter>,
+    pub doubled_pawns: PhaseParameter<Pos<BoardParameter>>,
 }
 
 impl ExtractParams for Parameters {
@@ -20,6 +23,9 @@ impl ExtractParams for Parameters {
             self.base_value.params(),
             self.isolated_pawns.params(),
             self.protected_pawns.params(),
+            self.connected_rooks.params(),
+            self.pawn_shield.params(),
+            self.doubled_pawns.params(),
         ]
         .concat()
     }
@@ -29,11 +35,17 @@ impl ExtractParams for Parameters {
         let base_value = ExtractParams::from_params(iter);
         let isolated_pawns = ExtractParams::from_params(iter);
         let protected_pawns = ExtractParams::from_params(iter);
+        let connected_rooks = ExtractParams::from_params(iter);
+        let pawn_shield = ExtractParams::from_params(iter);
+        let doubled_pawns = ExtractParams::from_params(iter);
         Self {
             piece_square_table,
             base_value,
             isolated_pawns,
             protected_pawns,
+            connected_rooks,
+            pawn_shield,
+            doubled_pawns,
         }
     }
 }
@@ -203,5 +215,23 @@ where
         let mg = ExtractParams::from_params(iter);
         let eg = ExtractParams::from_params(iter);
         Self { mg, eg }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Copy)]
+#[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'de>"))]
+pub struct Pos<T>(pub T);
+
+impl<T> ExtractParams for Pos<T>
+where
+    T: ExtractParams,
+{
+    fn params(&self) -> Vec<i32> {
+        self.0.params().iter().map(|x| (*x).max(0)).collect()
+    }
+
+    fn from_params<It: Iterator<Item = i32>>(iter: &mut It) -> Self {
+        let wrapped = ExtractParams::from_params(&mut iter.map(|x| x.max(0)));
+        Self(wrapped)
     }
 }

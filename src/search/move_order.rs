@@ -119,7 +119,7 @@ pub fn static_exchange_evaluation_winning(game: &Game, ply: Ply) -> bool {
 
 #[test]
 fn test_see() {
-    use crate::square::squares::*;
+    use crate::square::Square::*;
     let game = Game::from_fen("8/K1k5/4p1b1/5q2/4PR2/8/8/8 w - - 0 1").unwrap();
     let ply = Ply::simple(E4, F5);
     assert_eq!(static_exchange_evaluation(&game, ply), Millipawns(8000));

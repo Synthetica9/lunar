@@ -772,7 +772,7 @@ mod tests {
     #[test]
     fn test_from_to_fen() {
         use crate::piece::Piece;
-        use crate::square::squares::*;
+        use crate::square::Square::*;
 
         let game = Game::new();
         assert_eq!(game.to_fen(), STARTING_POSITION);

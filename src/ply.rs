@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn test_make_unmake() {
-        use crate::square::squares::*;
+        use crate::square::Square::*;
         let castle = Ply::new(E1, G1, Some(SpecialFlag::Castling));
         assert!(castle.is_castling());
 
@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn test_transposition() {
-        use crate::square::squares::*;
+        use crate::square::Square::*;
 
         let mut game = Game::new();
 

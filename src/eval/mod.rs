@@ -45,6 +45,9 @@ impl Evaluator {
             Evaluator::pesto,
             Evaluator::isolated_pawn,
             Evaluator::protected_pawn,
+            Evaluator::connected_rook,
+            Evaluator::pawn_shield,
+            Evaluator::doubled_pawn,
         ];
 
         let mut res = Millipawns(0);
@@ -96,32 +99,11 @@ impl Evaluator {
         let pawns = game.board().get(&White, &Piece::Pawn);
         // Shift all pawns to the A file.
 
-        let pawn_files = {
-            let mut res = pawns;
-
-            for _ in 0..8 {
-                res |= res.shift(S);
-            }
-
-            res & Bitboard::row(0)
-        };
+        let pawn_files = pawns.fill_cols();
 
         let isolated_files = pawn_files & !(pawn_files.shift(E) | pawn_files.shift(W));
 
-        // Smear back out to all other ranks
-        // TODO: add this as a bitboard function.
-        // Can be done with multiplication by the A file.
-        let smeared = {
-            let mut res = isolated_files;
-
-            for _ in 0..8 {
-                res |= res.shift(N);
-            }
-
-            res
-        };
-
-        let isolated_pawns = smeared & pawns;
+        let isolated_pawns = isolated_files & pawns;
 
         self.0
             .isolated_pawns
@@ -136,6 +118,45 @@ impl Evaluator {
         self.0
             .protected_pawns
             .map(|x| x.dot_product(&protected_pawns))
+    }
+
+    fn connected_rook(&self, game: &Game) -> PhaseParameter<Millipawns> {
+        let rooks = game.board().get(&White, &Piece::Rook);
+        let occupied = game.board().get_occupied();
+
+        self.0.connected_rooks.map(|x| {
+            rooks
+                .iter_squares()
+                .map(|square| {
+                    let attacks = Bitboard::rook_attacks(square, occupied) & rooks;
+                    x.dot_product(&attacks)
+                })
+                .sum()
+        })
+    }
+
+    fn pawn_shield(&self, game: &Game) -> PhaseParameter<Millipawns> {
+        use crate::bitboard_map::{IMMEDIATE_NEIGHBORHOOD, MEDIUM_NEIGHBORHOOD};
+
+        let pawns = game.board().get(&White, &Piece::Pawn);
+        let king = game.board().king_square(&White);
+
+        let close = IMMEDIATE_NEIGHBORHOOD[king] & pawns;
+        let medium = MEDIUM_NEIGHBORHOOD[king] & pawns;
+
+        // Double counting close pawns because they seem more pertinent.
+        self.0
+            .pawn_shield
+            .map(|x| x.dot_product(&close) + x.dot_product(&medium))
+    }
+
+    fn doubled_pawn(&self, game: &Game) -> PhaseParameter<Millipawns> {
+        use crate::direction::directions::N;
+
+        let pawns = game.board().get(&White, &Piece::Pawn);
+        let doubled = pawns & pawns.shift(N);
+
+        self.0.doubled_pawns.map(|x| -x.dot_product(&doubled))
     }
 }
 
@@ -184,6 +205,17 @@ impl DotProduct for ScalarParameter {
 
     fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
         Millipawns(self.0) * (bitboard.popcount() as i32)
+    }
+}
+
+impl<T> DotProduct for Pos<T>
+where
+    T: DotProduct,
+{
+    type Output = T::Output;
+
+    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+        self.0.dot_product(bitboard)
     }
 }
 

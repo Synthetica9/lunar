@@ -1,6 +1,6 @@
-use std::fmt::{Debug, Error, Formatter};
-use std::ops::Range;
 use std::string::String;
+
+use strum::IntoEnumIterator;
 pub mod files {
     #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
     pub struct File(u8);
@@ -232,6 +232,6 @@ fn test_to_from_fen_part() {
 fn test_basic_math() {
     use Square::*;
 
-    assert_eq!(A1.0 + 1, B1.0);
-    assert_eq!(A1.0 + 8, A2.0);
+    assert_eq!(A1.as_u8() + 1, B1.as_u8());
+    assert_eq!(A1.as_u8() + 8, A2.as_u8());
 }

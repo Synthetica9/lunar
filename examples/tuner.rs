@@ -22,8 +22,8 @@ enum Outcome {
     Win,
 }
 
-pub const EPOCHS: i32 = 10000;
-pub const LEARNING_RATE: f32 = 10000000.0;
+pub const EPOCHS: i32 = 500;
+pub const LEARNING_RATE: f64 = 10000000.0;
 pub const MINIBATCH_SIZE: usize = 16384;
 
 impl Outcome {
@@ -41,26 +41,44 @@ fn mp_to_win_percentage(mp: Millipawns) -> f32 {
     1.0 / (1.0 + (10.0_f32).powf(-mp.0 as f32 / 4000.0))
 }
 
-fn mse(evaluator: Evaluator, games: &[(Game, Outcome)]) -> f32 {
-    let res: f32 = games
+fn mse(evaluator: Evaluator, games: &[(Game, f64)]) -> f64 {
+    let res: f64 = games
         .iter()
-        .map(|(game, outcome)| {
-            outcome.to_numeric() - mp_to_win_percentage(evaluator.evaluate(game))
-        })
+        .map(|(game, cp)| cp - (evaluator.evaluate(game).0 as f64 / 10.0))
         .map(|x| x * x)
         .sum();
-    res / (games.len() as f32)
+    (res / (games.len() as f64)).sqrt()
+}
+
+fn evaluate(batch: &[(Game, f64)], parameters: &[f64]) -> f64 {
+    let eval = Evaluator(Parameters::from_params(
+        &mut parameters.iter().map(|x| *x as i32),
+    ));
+
+    mse(eval, batch)
+}
+
+fn dump(parameters: &[f64]) -> Result<(), String> {
+    let yaml = serde_yaml::to_string(&Parameters::from_params(
+        &mut parameters.iter().map(|x| *x as i32),
+    ))
+    .map_err(|x| x.to_string())?;
+    let mut f = File::create("parameters.yaml").map_err(|x| x.to_string())?;
+    write!(f, "{yaml}").map_err(|x| x.to_string())?;
+
+    Ok(())
 }
 
 fn tune() -> Result<(), String> {
-    let mut result = lunar::eval::STATIC_PARAMETERS.params();
+    let mut result: Vec<f64> = lunar::eval::STATIC_PARAMETERS
+        .params()
+        .iter()
+        .map(|x| *x as f64)
+        .collect();
     let games = parse_csv("sample.csv")?;
     let mut rng = Rng::seed_from_u64(1);
 
-    let yaml = serde_yaml::to_string(&Parameters::from_params(&mut result.iter().copied()))
-        .map_err(|x| x.to_string())?;
-    let mut f = File::create("parameters.yaml").map_err(|x| x.to_string())?;
-    write!(f, "{yaml}").map_err(|x| x.to_string())?;
+    dump(&result)?;
 
     for epoch in 0..EPOCHS {
         println!("Starting epoch {epoch}");
@@ -70,21 +88,15 @@ fn tune() -> Result<(), String> {
             .copied()
             .collect();
         for i in 0..result.len() {
-            let before = mse(
-                Evaluator(Parameters::from_params(&mut result.iter().copied())),
-                &batch,
-            );
-            result[i] += 1;
-            let after = mse(
-                Evaluator(Parameters::from_params(&mut result.iter().copied())),
-                &batch,
-            );
-            result[i] -= 1;
+            let before = evaluate(&batch, &result);
+            result[i] += 1.0;
+            let after = evaluate(&batch, &result);
+            result[i] -= 1.0;
 
             let diff = (before - after) / after;
             let step = diff * LEARNING_RATE;
             // println!("{step}");
-            let step = step.clamp(-100.0, 100.0) as i32;
+            let step = step.clamp(-100.0, 100.0);
             result[i] += step;
 
             // if result[i] >= 90_000 {
@@ -93,37 +105,26 @@ fn tune() -> Result<(), String> {
             // }
         }
 
-        let err = mse(
-            Evaluator(Parameters::from_params(&mut result.iter().copied())),
-            &games,
-        );
+        let err = evaluate(&games, &result);
 
         println!("Finished epoch {epoch}. {err}");
 
-        let yaml = serde_yaml::to_string(&Parameters::from_params(&mut result.iter().copied()))
-            .map_err(|x| x.to_string())?;
-        let mut f = File::create("parameters.yaml").map_err(|x| x.to_string())?;
-        write!(f, "{yaml}").map_err(|x| x.to_string())?;
+        dump(&result)?;
     }
     Ok(())
 }
 
-fn parse_csv(filename: &str) -> Result<Vec<(Game, Outcome)>, String> {
+fn parse_csv(filename: &str) -> Result<Vec<(Game, f64)>, String> {
     let mut reader = csv::Reader::from_path(filename).map_err(|x| x.to_string())?;
     let mut res: Vec<_> = reader
         .records()
         .map(|x| {
             let record = x.map_err(|x| x.to_string())?;
             let fen = record.get(0).ok_or("No fen?")?;
-            let outcome = record.get(2).ok_or("No outcome?")?;
+            let cp = record.get(1).ok_or("No cp?")?;
             let game = Game::from_fen(fen)?;
-            let outcome = match outcome.parse::<i32>().map_err(|x| x.to_string())? {
-                0 => Ok(Outcome::Loss),
-                1 => Ok(Outcome::Draw),
-                2 => Ok(Outcome::Win),
-                _ => Err("Unknown outcome"),
-            }?;
-            Ok((game, outcome))
+            let cp = cp.parse::<f64>().map_err(|x| x.to_string())?;
+            Ok((game, cp))
         })
         .enumerate()
         .map(|(i, x)| x.map_err(|err: String| format!("{err} while parsing line {}", i + 1)))
