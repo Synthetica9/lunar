@@ -662,14 +662,14 @@ mod tests {
     #[test]
     fn test_smear_cols() {
         assert_eq!(FULL, Bitboard(COL_A.0 * ROW_1.0));
-        assert_eq!(FULL, ROW_1.fill_north());
+        assert_eq!(FULL, ROW_1.fill_north_singular());
 
         let bb = Bitboard::from_squares(&[A1, B2, C3, D4, E5, F6, G7, H8]);
         let smeared = Bitboard::fill_cols(bb);
 
         println!("{}", smeared.simple_render());
         println!("{}", bb.simple_render());
-        println!("{}", bb.fill_north().simple_render());
+        println!("{}", bb.fill_north_singular().simple_render());
 
         assert_eq!(smeared, FULL);
     }

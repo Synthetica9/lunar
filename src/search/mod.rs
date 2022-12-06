@@ -843,7 +843,7 @@ mod tests {
     macro_rules! position_search_test(
         ($name: ident, $fen: expr, $depth: expr, $expected_eval: expr, $expected_ply: expr) => {
             #[test]
-            fn $name() {
+            fn $name() -> Result<(), String> {
                 let mut state = crate::uci::UCIState::new();
                 let commands = &[
                     "uci",
@@ -851,23 +851,22 @@ mod tests {
                     &format!("position fen {}", $fen),
                     &format!("go depth {}", $depth),
                     "wait",
-                    "d"
                 ];
                 for command in commands {
-                    state.interpret(command);
+                    state.interpret(command)?;
                 }
-                assert!(false);
+                Ok(())
             }
         }
     );
 
-    position_search_test!(
-        find_simple_mate_in_1,
-        "4k3/R7/8/8/8/8/8/4K2R w K - 0 1",
-        12,
-        0,
-        "Rh8#"
-    );
+    // position_search_test!(
+    //     find_simple_mate_in_1,
+    //     "4k3/R7/8/8/8/8/8/4K2R w K - 0 1",
+    //     12,
+    //     0,
+    //     "Rh8#"
+    // );
 
     // #[test]
     // fn find_simple_mate_in_1() {
