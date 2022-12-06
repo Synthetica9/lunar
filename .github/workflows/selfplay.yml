@@ -19,7 +19,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Run self-play
-        run: python selfplay.py ${{ github.event.before }} ${{ github.event.after }}
+        run: python ./scripts/selfplay.py ${{ github.event.before }} ${{ github.event.after }}
       - name: Publish PGN
         uses: actions/upload-artifact@v3
         with:
