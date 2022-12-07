@@ -566,7 +566,7 @@ impl SearchThreadPool {
             time_policy,
 
             best_move: None,
-            score: crate::eval::evaluation(&game),
+            score: Millipawns(0),
             best_depth: 0,
             pv: Vec::new(),
 
