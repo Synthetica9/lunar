@@ -100,7 +100,7 @@ impl SidedPHTEntry {
         use crate::direction::directions::*;
 
         let files = pawns.fill_cols();
-        let isolated = files & !(files.shift(E) | files.shift(W));
+        let isolated = pawns & !(files.shift(E) | files.shift(W));
         let attacks = pawns.shift(NE) | pawns.shift(NW);
         let protected = pawns & attacks;
         let doubled = pawns & pawns.shift(N);
