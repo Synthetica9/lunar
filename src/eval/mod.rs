@@ -1,7 +1,7 @@
 use strum::IntoEnumIterator;
 
 use crate::basic_enums::Color;
-use crate::bitboard::Bitboard;
+use crate::bitboard::{self, Bitboard};
 use crate::board::Board;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
@@ -43,16 +43,22 @@ impl Evaluator {
         Evaluator::pesto,
         Evaluator::connected_rook,
         Evaluator::pawn_shield,
+        Evaluator::outpost_piece,
     ];
 
     pub const PAWN_TERMS: &[Term] = &[
         Evaluator::isolated_pawn,
         Evaluator::doubled_pawn,
         Evaluator::protected_pawn,
+        Evaluator::passed_pawn,
     ];
 
-    pub fn evaluate(&self, game: &Game) -> Millipawns {
-        let pht_entry = pawn_hash_table::get(game);
+    pub fn evaluate(&self, game: &Game, use_pht: bool) -> Millipawns {
+        let pht_entry = if use_pht {
+            pawn_hash_table::get(game)
+        } else {
+            PHTEntry::new(game, self)
+        };
         let (mut mg, mut eg) = self._evaluate_inline(Self::GENERAL_TERMS, &pht_entry, game);
 
         mg += pht_entry.mg();
@@ -158,6 +164,29 @@ impl Evaluator {
         })
     }
 
+    fn outpost_piece(
+        &self,
+        color: &Color,
+        game: &Game,
+        pht_entry: &PHTEntry,
+    ) -> PhaseParameter<Millipawns> {
+        let outposts = pht_entry.get(color).outposts();
+
+        self.0.outpost_pieces.map(|x| {
+            Piece::iter()
+                .map(|piece| {
+                    x.get(&piece).dot_product(
+                        &game
+                            .board()
+                            .get(color, &piece)
+                            .perspective(color)
+                            .and(outposts),
+                    )
+                })
+                .sum()
+        })
+    }
+
     fn pawn_shield(
         &self,
         color: &Color,
@@ -187,6 +216,17 @@ impl Evaluator {
         let doubled = pht_entry.get(color).doubled();
         self.0.doubled_pawns.map(|x| -x.dot_product(&doubled))
     }
+
+    fn passed_pawn(
+        &self,
+        color: &Color,
+        _game: &Game,
+        pht_entry: &PHTEntry,
+    ) -> PhaseParameter<Millipawns> {
+        let passed = pht_entry.get(color).passed() & !bitboard::ROW_7;
+        let both = self.0.passed_pawns.dot_product(&passed);
+        PhaseParameter { mg: both, eg: both }
+    }
 }
 
 pub fn base_eval(game: &Game) -> Millipawns {
@@ -202,7 +242,7 @@ const STATIC_EVALUATOR: Evaluator = Evaluator(crate::generated::parameters::STAT
 
 #[inline(always)]
 pub fn evaluation(game: &Game) -> Millipawns {
-    STATIC_EVALUATOR.evaluate(game)
+    STATIC_EVALUATOR.evaluate(game, true)
 }
 
 pub trait DotProduct {

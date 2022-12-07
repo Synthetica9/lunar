@@ -22,6 +22,8 @@ pub struct SidedPHTEntry {
     protected: Bitboard,
     // ram: Bitboard,
     doubled: Bitboard,
+    passed: Bitboard,
+    outposts: Bitboard,
 }
 
 #[derive(Copy, Clone)]
@@ -43,7 +45,7 @@ pub struct PHTEntry {
 struct PawnHashTable([PHTEntry; PHT_SIZE]);
 
 impl PHTEntry {
-    pub fn new(game: &Game) -> PHTEntry {
+    pub fn new(game: &Game, evaluator: &eval::Evaluator) -> PHTEntry {
         use Color::*;
         use Piece::*;
 
@@ -68,8 +70,7 @@ impl PHTEntry {
             eg: Millipawns(0),
         };
 
-        let (mg, eg) =
-            eval::STATIC_EVALUATOR._evaluate_inline(eval::Evaluator::PAWN_TERMS, &res, game);
+        let (mg, eg) = evaluator._evaluate_inline(eval::Evaluator::PAWN_TERMS, &res, game);
 
         res.mg = mg;
         res.eg = eg;
@@ -94,7 +95,7 @@ impl PHTEntry {
 }
 
 impl SidedPHTEntry {
-    fn new(pawns: Bitboard, _enemies: Bitboard) -> SidedPHTEntry {
+    fn new(pawns: Bitboard, enemies: Bitboard) -> SidedPHTEntry {
         // Initialize from white's perspective
 
         use crate::direction::directions::*;
@@ -106,6 +107,11 @@ impl SidedPHTEntry {
         let doubled = pawns & pawns.shift(N);
         // let ram = pawns & enemies.shift(S);
         // let holes = !attacks.fill(N);
+        let enemy_attacks = enemies.shift(SE) | enemies.shift(SW);
+        let enemy_holes = !enemy_attacks.fill(S);
+        let outposts = enemy_holes & attacks;
+        let pass_prevention = (enemy_attacks | enemies).fill(S);
+        let passed = pawns & !pass_prevention;
         // let weak = pawns & holes;
 
         SidedPHTEntry {
@@ -117,7 +123,9 @@ impl SidedPHTEntry {
             // weak,
             protected,
             // ram,
+            passed,
             doubled,
+            outposts,
         }
     }
 
@@ -156,6 +164,14 @@ impl SidedPHTEntry {
     // pub(crate) fn ram(&self) -> Bitboard {
     //     self.ram
     // }
+
+    pub(crate) fn passed(&self) -> Bitboard {
+        self.passed
+    }
+
+    pub fn outposts(&self) -> Bitboard {
+        self.outposts
+    }
 }
 
 impl PawnHashTable {
@@ -179,7 +195,7 @@ impl PawnHashTable {
 
     pub fn insert(&mut self, game: &Game) -> &PHTEntry {
         let idx = game.pawn_hash().as_usize() % PHT_SIZE;
-        self.0[idx] = PHTEntry::new(game);
+        self.0[idx] = PHTEntry::new(game, &eval::STATIC_EVALUATOR);
         &self.0[idx]
     }
 }

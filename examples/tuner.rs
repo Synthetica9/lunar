@@ -44,7 +44,7 @@ fn mp_to_win_percentage(mp: Millipawns) -> f32 {
 fn mse(evaluator: Evaluator, games: &[(Game, f64)]) -> f64 {
     let res: f64 = games
         .iter()
-        .map(|(game, cp)| cp - (evaluator.evaluate(game).0 as f64 / 10.0))
+        .map(|(game, cp)| cp - (evaluator.evaluate(game, false).0 as f64 / 10.0))
         .map(|x| x * x)
         .sum();
     (res / (games.len() as f64)).sqrt()

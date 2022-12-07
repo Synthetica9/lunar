@@ -14,6 +14,8 @@ pub struct Parameters {
     pub connected_rooks: PhaseParameter<BoardParameter>,
     pub pawn_shield: PhaseParameter<BoardParameter>,
     pub doubled_pawns: PhaseParameter<Pos<BoardParameter>>,
+    pub passed_pawns: Pos<BoardParameter>,
+    pub outpost_pieces: PhaseParameter<PieceParameter<ScalarParameter>>,
 }
 
 impl ExtractParams for Parameters {
@@ -26,6 +28,8 @@ impl ExtractParams for Parameters {
             self.connected_rooks.params(),
             self.pawn_shield.params(),
             self.doubled_pawns.params(),
+            self.passed_pawns.params(),
+            self.outpost_pieces.params(),
         ]
         .concat()
     }
@@ -38,6 +42,8 @@ impl ExtractParams for Parameters {
         let connected_rooks = ExtractParams::from_params(iter);
         let pawn_shield = ExtractParams::from_params(iter);
         let doubled_pawns = ExtractParams::from_params(iter);
+        let passed_pawns = ExtractParams::from_params(iter);
+        let outpost_pieces = ExtractParams::from_params(iter);
         Self {
             piece_square_table,
             base_value,
@@ -46,6 +52,8 @@ impl ExtractParams for Parameters {
             connected_rooks,
             pawn_shield,
             doubled_pawns,
+            passed_pawns,
+            outpost_pieces,
         }
     }
 }
@@ -235,3 +243,11 @@ where
         Self(wrapped)
     }
 }
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Copy)]
+#[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'de>"))]
+pub struct Files<T>([T; 8]);
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Copy)]
+#[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'de>"))]
+pub struct Ranks<T>([T; 8]);
