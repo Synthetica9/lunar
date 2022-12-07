@@ -184,6 +184,13 @@ impl Bitboard {
         Bitboard(self.0.swap_bytes())
     }
 
+    pub fn perspective(self, color: &Color) -> Bitboard {
+        match color {
+            Color::White => self,
+            Color::Black => self.flip_vertical(),
+        }
+    }
+
     pub fn transpose(self) -> Bitboard {
         // is this correct?
         self.flip_vertical().flip_horizontal()

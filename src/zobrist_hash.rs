@@ -70,6 +70,10 @@ impl ZobristHash {
     pub fn as_u64(&self) -> u64 {
         self.hash
     }
+
+    pub(crate) fn as_usize(&self) -> usize {
+        self.hash as usize
+    }
 }
 
 impl Default for ZobristHash {

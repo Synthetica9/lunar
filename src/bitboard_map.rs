@@ -61,6 +61,7 @@ impl BitboardMap {
         let mut i = 64;
 
         while i > 0 {
+            i -= 1;
             res.0[i] = self.0[i].or(other.0[i]);
         }
 

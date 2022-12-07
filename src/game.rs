@@ -26,6 +26,7 @@ pub struct Game {
     // management? (Along with 3-fold draw bookkeeping.)
     half_move_total: i16,
     hash: ZobristHash,
+    pawn_hash: ZobristHash,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,7 +75,12 @@ impl Game {
         self.hash
     }
 
+    pub fn pawn_hash(&self) -> ZobristHash {
+        self.pawn_hash
+    }
+
     pub fn recalc_hash(&mut self) {
+        // TODO: pawn hash
         self.hash = ZobristHash::from_game(self);
     }
 
@@ -108,6 +114,7 @@ impl Game {
             .map_err(|e| format!("Error parsing full move number: {e}"))?;
 
         let hash = ZobristHash::new();
+        let pawn_hash = ZobristHash::new();
         let mut res = Game {
             board,
             to_move,
@@ -116,6 +123,7 @@ impl Game {
             half_move,
             half_move_total: (full_move - 1) * 2 + (to_move as i16),
             hash,
+            pawn_hash,
         };
 
         res.recalc_hash();
@@ -691,6 +699,7 @@ impl Game {
             // I hope this doesn't come back to bite me in the ass.
             // HASH IS NOT UPDATED!
             hash: self.hash,
+            pawn_hash: self.pawn_hash,
         }
     }
 
@@ -733,11 +742,17 @@ impl ApplyPly for Game {
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
         self.board.toggle_piece(color, piece, square);
         self.hash.toggle_piece(color, piece, square);
+        if piece == Piece::Pawn {
+            self.pawn_hash.toggle_piece(color, piece, square);
+        }
     }
 
     fn toggle_piece_multi(&mut self, color: Color, piece: Piece, squares: &[Square]) {
         self.board.toggle_piece_multi(color, piece, squares);
         self.hash.toggle_piece_multi(color, piece, squares);
+        if piece == Piece::Pawn {
+            self.pawn_hash.toggle_piece_multi(color, piece, squares);
+        }
     }
 
     fn toggle_castle_rights(&mut self, castle_rights: CastleRights) {

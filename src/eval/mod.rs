@@ -1,6 +1,6 @@
 use strum::IntoEnumIterator;
 
-use crate::basic_enums::{Color, Color::White};
+use crate::basic_enums::Color;
 use crate::bitboard::Bitboard;
 use crate::board::Board;
 use crate::game::Game;
@@ -10,6 +10,9 @@ use crate::square::Square;
 
 pub use crate::generated::parameters::STATIC_PARAMETERS;
 pub use parameters::*;
+
+mod pawn_hash_table;
+use pawn_hash_table::PHTEntry;
 
 pub struct Evaluator(pub Parameters);
 
@@ -50,13 +53,14 @@ impl Evaluator {
             Evaluator::doubled_pawn,
         ];
 
+        let pht_entry = pawn_hash_table::get(game);
+
         let mut res = Millipawns(0);
         let phase = game_phase(game.board());
         for mirror in [false, true] {
             let color = if mirror { Color::Black } else { Color::White };
-            let game = if mirror { game.mirror() } else { *game };
             for term in terms {
-                let x = term(self, &game);
+                let x = term(self, &color, game, &pht_entry);
                 let mg = x.mg;
                 let eg = x.eg;
                 res += ((mg * phase + eg * (24 - phase)) / 24) * color.multiplier();
@@ -65,7 +69,7 @@ impl Evaluator {
         res * game.to_move().multiplier()
     }
 
-    fn pesto(&self, game: &Game) -> PhaseParameter<Millipawns> {
+    fn pesto(&self, color: &Color, game: &Game, _: &PHTEntry) -> PhaseParameter<Millipawns> {
         let mut res = PhaseParameter {
             eg: Millipawns(0),
             mg: Millipawns(0),
@@ -83,7 +87,7 @@ impl Evaluator {
 
             let x = Piece::iter()
                 .map(|piece| {
-                    let pieces = game.board().get(&White, &piece);
+                    let pieces = game.board().get(color, &piece).perspective(color);
                     pesto.get(&piece).dot_product(&pieces) + base.get(&piece).dot_product(&pieces)
                 })
                 .sum();
@@ -93,35 +97,39 @@ impl Evaluator {
         res
     }
 
-    fn isolated_pawn(&self, game: &Game) -> PhaseParameter<Millipawns> {
-        use crate::direction::directions::*;
-
-        let pawns = game.board().get(&White, &Piece::Pawn);
-        // Shift all pawns to the A file.
-
-        let pawn_files = pawns.fill_cols();
-
-        let isolated_files = pawn_files & !(pawn_files.shift(E) | pawn_files.shift(W));
-
-        let isolated_pawns = isolated_files & pawns;
+    fn isolated_pawn(
+        &self,
+        color: &Color,
+        _game: &Game,
+        pht_entry: &PHTEntry,
+    ) -> PhaseParameter<Millipawns> {
+        let isolated_pawns = pht_entry.get(color).isolated();
 
         self.0
             .isolated_pawns
             .map(|phase| -phase.dot_product(&isolated_pawns))
     }
 
-    fn protected_pawn(&self, game: &Game) -> PhaseParameter<Millipawns> {
-        use crate::direction::directions::*;
-        let pawns = game.board().get(&White, &Piece::Pawn);
+    fn protected_pawn(
+        &self,
+        color: &Color,
+        game: &Game,
+        pht_entry: &PHTEntry,
+    ) -> PhaseParameter<Millipawns> {
+        let protected_pawns = pht_entry.get(color).protected();
 
-        let protected_pawns = pawns & (pawns.shift(NE) | pawns.shift(NW));
         self.0
             .protected_pawns
             .map(|x| x.dot_product(&protected_pawns))
     }
 
-    fn connected_rook(&self, game: &Game) -> PhaseParameter<Millipawns> {
-        let rooks = game.board().get(&White, &Piece::Rook);
+    fn connected_rook(
+        &self,
+        color: &Color,
+        game: &Game,
+        _pht_entry: &PHTEntry,
+    ) -> PhaseParameter<Millipawns> {
+        let rooks = game.board().get(color, &Piece::Rook);
         let occupied = game.board().get_occupied();
 
         self.0.connected_rooks.map(|x| {
@@ -129,20 +137,25 @@ impl Evaluator {
                 .iter_squares()
                 .map(|square| {
                     let attacks = Bitboard::rook_attacks(square, occupied) & rooks;
-                    x.dot_product(&attacks)
+                    x.dot_product(&attacks.perspective(color))
                 })
                 .sum()
         })
     }
 
-    fn pawn_shield(&self, game: &Game) -> PhaseParameter<Millipawns> {
+    fn pawn_shield(
+        &self,
+        color: &Color,
+        game: &Game,
+        _pht_entry: &PHTEntry,
+    ) -> PhaseParameter<Millipawns> {
         use crate::bitboard_map::{IMMEDIATE_NEIGHBORHOOD, MEDIUM_NEIGHBORHOOD};
 
-        let pawns = game.board().get(&White, &Piece::Pawn);
-        let king = game.board().king_square(&White);
+        let pawns = game.board().get(color, &Piece::Pawn);
+        let king = game.board().king_square(color);
 
-        let close = IMMEDIATE_NEIGHBORHOOD[king] & pawns;
-        let medium = MEDIUM_NEIGHBORHOOD[king] & pawns;
+        let close = (IMMEDIATE_NEIGHBORHOOD[king] & pawns).perspective(color);
+        let medium = (MEDIUM_NEIGHBORHOOD[king] & pawns).perspective(color);
 
         // Double counting close pawns because they seem more pertinent.
         self.0
@@ -150,12 +163,13 @@ impl Evaluator {
             .map(|x| x.dot_product(&close) + x.dot_product(&medium))
     }
 
-    fn doubled_pawn(&self, game: &Game) -> PhaseParameter<Millipawns> {
-        use crate::direction::directions::N;
-
-        let pawns = game.board().get(&White, &Piece::Pawn);
-        let doubled = pawns & pawns.shift(N);
-
+    fn doubled_pawn(
+        &self,
+        color: &Color,
+        _game: &Game,
+        pht_entry: &PHTEntry,
+    ) -> PhaseParameter<Millipawns> {
+        let doubled = pht_entry.get(color).doubled();
         self.0.doubled_pawns.map(|x| -x.dot_product(&doubled))
     }
 }
