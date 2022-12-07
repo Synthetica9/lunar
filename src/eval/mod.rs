@@ -44,7 +44,7 @@ impl Evaluator {
 
     #[inline(always)]
     fn _evaluate_inline(&self, game: &Game) -> Millipawns {
-        let terms = [
+        let terms = &[
             Evaluator::pesto,
             Evaluator::isolated_pawn,
             Evaluator::protected_pawn,
@@ -55,17 +55,19 @@ impl Evaluator {
 
         let pht_entry = pawn_hash_table::get(game);
 
-        let mut res = Millipawns(0);
-        let phase = game_phase(game.board());
-        for mirror in [false, true] {
-            let color = if mirror { Color::Black } else { Color::White };
+        let mut mg = Millipawns(0);
+        let mut eg = Millipawns(0);
+
+        for color in [Color::White, Color::Black] {
             for term in terms {
                 let x = term(self, &color, game, &pht_entry);
-                let mg = x.mg;
-                let eg = x.eg;
-                res += ((mg * phase + eg * (24 - phase)) / 24) * color.multiplier();
+                mg += x.mg * color.multiplier();
+                eg += x.eg * color.multiplier();
             }
         }
+
+        let phase = game_phase(game.board());
+        let res = (mg * phase + eg * (24 - phase)) / 24;
         res * game.to_move().multiplier()
     }
 
