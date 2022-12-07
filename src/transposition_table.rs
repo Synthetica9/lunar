@@ -103,6 +103,12 @@ impl TranspositionTable {
         }
     }
 
+    pub fn clear(&self) {
+        for item in self.table.iter() {
+            unsafe { item.get().write(std::mem::zeroed()) };
+        }
+    }
+
     pub const fn needed_entries(bytes: usize) -> usize {
         bytes / ENTRY_SIZE
     }

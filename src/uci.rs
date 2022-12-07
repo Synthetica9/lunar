@@ -112,6 +112,7 @@ impl UCIState {
             }
             "ucinewgame" => {
                 self.history = History::new(Game::new());
+                self.transposition_table.clear();
             }
             "setoption" => {
                 if parts.next().ok_or("No option name")? != "name" {
