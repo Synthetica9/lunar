@@ -75,7 +75,7 @@ impl Evaluator {
 
         for color in [Color::White, Color::Black] {
             for term in terms {
-                let x = term(self, &color, game, &pht_entry);
+                let x = term(self, &color, game, pht_entry);
                 mg += x.mg * color.multiplier();
                 eg += x.eg * color.multiplier();
             }
@@ -128,7 +128,7 @@ impl Evaluator {
     fn protected_pawn(
         &self,
         color: &Color,
-        game: &Game,
+        _game: &Game,
         pht_entry: &PHTEntry,
     ) -> PhaseParameter<Millipawns> {
         let protected_pawns = pht_entry.get(color).protected();
@@ -268,5 +268,32 @@ impl<'a, T> ByPiece<'a> for PieceParameter<T> {
             Queen => &self.queen,
             King => &self.king,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ply::ApplyPly;
+
+    use super::*;
+
+    #[test]
+    fn evaluation_symmetric() -> Result<(), String> {
+        let fen = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
+        let mut game = Game::from_fen(fen)?;
+
+        let from_white = evaluation(&game);
+        game.flip_side();
+        let from_black = evaluation(&game);
+        game.flip_side();
+        game.mirror();
+
+        let mirrored = evaluation(&game);
+
+        assert_eq!(from_white, -from_black);
+        assert_eq!(from_white, mirrored);
+        println!("{}", from_white.0);
+
+        Ok(())
     }
 }
