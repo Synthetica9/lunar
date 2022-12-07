@@ -1,6 +1,8 @@
 use crate::basic_enums::Color::{self, *};
-use crate::eval::Bitboard;
+use crate::bitboard::Bitboard;
+use crate::eval;
 use crate::game::Game;
+use crate::millipawns::Millipawns;
 use crate::piece::Piece::{self, Pawn};
 use crate::zobrist_hash::ZobristHash;
 
@@ -33,6 +35,9 @@ pub struct PHTEntry {
 
     // STORED FROM BLACK's PERSPECTIVE!
     black: SidedPHTEntry,
+
+    mg: Millipawns,
+    eg: Millipawns,
 }
 
 struct PawnHashTable([PHTEntry; PHT_SIZE]);
@@ -51,14 +56,25 @@ impl PHTEntry {
         // let open_files = !(white.files | black.files);
         // let half_open_files = white.files | black.files & !open_files;
 
-        PHTEntry {
+        let mut res = PHTEntry {
             hash: game.pawn_hash(),
 
             // open_files,
             // half_open_files,
             white,
             black,
-        }
+
+            mg: Millipawns(0),
+            eg: Millipawns(0),
+        };
+
+        let (mg, eg) =
+            eval::STATIC_EVALUATOR._evaluate_inline(eval::Evaluator::PAWN_TERMS, &res, game);
+
+        res.mg = mg;
+        res.eg = eg;
+
+        res
     }
 
     pub fn get(&self, color: &Color) -> &SidedPHTEntry {
@@ -66,6 +82,14 @@ impl PHTEntry {
             Color::White => &self.white,
             Color::Black => &self.black,
         }
+    }
+
+    pub fn mg(&self) -> Millipawns {
+        self.mg
+    }
+
+    pub fn eg(&self) -> Millipawns {
+        self.eg
     }
 }
 

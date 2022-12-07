@@ -37,24 +37,39 @@ fn game_phase(board: &Board) -> i32 {
     std::cmp::min(res, 24)
 }
 
+type Term = fn(&Evaluator, &Color, &Game, &PHTEntry) -> parameters::PhaseParameter<Millipawns>;
 impl Evaluator {
+    pub const GENERAL_TERMS: &[Term] = &[
+        Evaluator::pesto,
+        Evaluator::connected_rook,
+        Evaluator::pawn_shield,
+    ];
+
+    pub const PAWN_TERMS: &[Term] = &[
+        Evaluator::isolated_pawn,
+        Evaluator::doubled_pawn,
+        Evaluator::protected_pawn,
+    ];
+
     pub fn evaluate(&self, game: &Game) -> Millipawns {
-        self._evaluate_inline(game)
+        let pht_entry = pawn_hash_table::get(game);
+        let (mut mg, mut eg) = self._evaluate_inline(Self::GENERAL_TERMS, &pht_entry, game);
+
+        mg += pht_entry.mg();
+        eg += pht_entry.eg();
+
+        let phase = game_phase(game.board());
+        let res = (mg * phase + eg * (24 - phase)) / 24;
+        res * game.to_move().multiplier()
     }
 
     #[inline(always)]
-    fn _evaluate_inline(&self, game: &Game) -> Millipawns {
-        let terms = &[
-            Evaluator::pesto,
-            Evaluator::isolated_pawn,
-            Evaluator::protected_pawn,
-            Evaluator::connected_rook,
-            Evaluator::pawn_shield,
-            Evaluator::doubled_pawn,
-        ];
-
-        let pht_entry = pawn_hash_table::get(game);
-
+    fn _evaluate_inline(
+        &self,
+        terms: &[Term],
+        pht_entry: &PHTEntry,
+        game: &Game,
+    ) -> (Millipawns, Millipawns) {
         let mut mg = Millipawns(0);
         let mut eg = Millipawns(0);
 
@@ -66,9 +81,7 @@ impl Evaluator {
             }
         }
 
-        let phase = game_phase(game.board());
-        let res = (mg * phase + eg * (24 - phase)) / 24;
-        res * game.to_move().multiplier()
+        (mg, eg)
     }
 
     fn pesto(&self, color: &Color, game: &Game, _: &PHTEntry) -> PhaseParameter<Millipawns> {
@@ -187,8 +200,9 @@ pub fn base_eval(game: &Game) -> Millipawns {
 
 const STATIC_EVALUATOR: Evaluator = Evaluator(crate::generated::parameters::STATIC_PARAMETERS);
 
+#[inline(always)]
 pub fn evaluation(game: &Game) -> Millipawns {
-    STATIC_EVALUATOR._evaluate_inline(game)
+    STATIC_EVALUATOR.evaluate(game)
 }
 
 pub trait DotProduct {
