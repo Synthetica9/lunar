@@ -18,7 +18,9 @@ def setup_chess_cli():
     with TemporaryDirectory() as d:
         p = Path(d) / "c-chess-cli"
         subprocess.check_call(
-            ["git", "clone", "https://github.com/lucasart/c-chess-cli"], cwd=d
+            # Use my own fork for elo estimation. TODO: undo when merged.
+            ["git", "clone", "https://github.com/Synthetica9/c-chess-cli"],
+            cwd=d,
         )
         subprocess.check_call(["python", "./make.py"], cwd=p)
         shutil.copy(p / "c-chess-cli", OUT_FILE)

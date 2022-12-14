@@ -11,7 +11,7 @@ def selfplay(old, new):
     old_rev, old_path = old
     new_rev, new_path = new
 
-    cli = Path(__file__).parent / "c-chess-cli.py"
+    cli = Path(__file__).parent / "c_chess_cli.py"
     subprocess.check_call(
         [
             str(cli),
