@@ -8,13 +8,12 @@ use serde::{de, Deserialize, Serialize};
 // #[serde(default)]
 pub struct Parameters {
     pub piece_square_table: PhaseParameter<PieceParameter<BoardParameter>>,
-    pub base_value: PhaseParameter<PieceParameter<ScalarParameter>>,
-    pub isolated_pawns: PhaseParameter<Pos<BoardParameter>>,
-    pub protected_pawns: PhaseParameter<Pos<BoardParameter>>,
+    pub isolated_pawns: PhaseParameter<BoardParameter>,
+    pub protected_pawns: PhaseParameter<BoardParameter>,
     pub connected_rooks: PhaseParameter<BoardParameter>,
     pub pawn_shield: PhaseParameter<BoardParameter>,
-    pub doubled_pawns: PhaseParameter<Pos<BoardParameter>>,
-    pub passed_pawns: Pos<BoardParameter>,
+    pub doubled_pawns: PhaseParameter<BoardParameter>,
+    pub passed_pawns: BoardParameter,
     pub outpost_pieces: PhaseParameter<PieceParameter<ScalarParameter>>,
 }
 
@@ -22,7 +21,6 @@ impl ExtractParams for Parameters {
     fn params(&self) -> Vec<i32> {
         [
             self.piece_square_table.params(),
-            self.base_value.params(),
             self.isolated_pawns.params(),
             self.protected_pawns.params(),
             self.connected_rooks.params(),
@@ -36,7 +34,6 @@ impl ExtractParams for Parameters {
 
     fn from_params<T: Iterator<Item = i32>>(iter: &mut T) -> Self {
         let piece_square_table = ExtractParams::from_params(iter);
-        let base_value = ExtractParams::from_params(iter);
         let isolated_pawns = ExtractParams::from_params(iter);
         let protected_pawns = ExtractParams::from_params(iter);
         let connected_rooks = ExtractParams::from_params(iter);
@@ -46,7 +43,6 @@ impl ExtractParams for Parameters {
         let outpost_pieces = ExtractParams::from_params(iter);
         Self {
             piece_square_table,
-            base_value,
             isolated_pawns,
             protected_pawns,
             connected_rooks,

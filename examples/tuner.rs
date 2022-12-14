@@ -4,10 +4,10 @@ extern crate lunar;
 
 use rand::rngs::SmallRng as Rng;
 use rand::seq::SliceRandom;
-use rand::RngCore;
 use rand::SeedableRng;
 
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::Write;
 
 use lunar::eval::Evaluator;
@@ -15,36 +15,22 @@ use lunar::game::Game;
 use lunar::millipawns::Millipawns;
 use parameters::*;
 
-#[derive(Debug, Copy, Clone)]
-enum Outcome {
-    Loss,
-    Draw,
-    Win,
-}
-
-pub const EPOCHS: i32 = 500;
+pub const EPOCHS: i32 = 200;
 pub const LEARNING_RATE: f64 = 10000000.0;
 pub const MINIBATCH_SIZE: usize = 16384;
 
-impl Outcome {
-    fn to_numeric(&self) -> f32 {
-        use Outcome::*;
-        match self {
-            Loss => 0.0,
-            Draw => 0.5,
-            Win => 1.0,
-        }
-    }
-}
-
-fn mp_to_win_percentage(mp: Millipawns) -> f32 {
-    1.0 / (1.0 + (10.0_f32).powf(-mp.0 as f32 / 4000.0))
+fn cp_to_win_percentage(cp: f64) -> f64 {
+    (1.0 / (1.0 + (10.0_f64).powf(-cp as f64 / 400.0)))
+    //.clamp(0.05, 0.95)
 }
 
 fn mse(evaluator: Evaluator, games: &[(Game, f64)]) -> f64 {
     let res: f64 = games
         .iter()
-        .map(|(game, cp)| cp - (evaluator.evaluate(game, false).0 as f64 / 10.0))
+        .map(|(game, cp)| {
+            cp_to_win_percentage(*cp)
+                - cp_to_win_percentage(evaluator.evaluate(game, false).0 as f64 / 10.0)
+        })
         .map(|x| x * x)
         .sum();
     (res / (games.len() as f64)).sqrt()
@@ -75,15 +61,23 @@ fn tune() -> Result<(), String> {
         .iter()
         .map(|x| *x as f64)
         .collect();
-    let games = parse_csv("sample.csv")?;
+
+    // https://www.wolframalpha.com/input?i=1+%2F+%281+%2B+10+%5E+%28-x+%2F+400%29%29+%3D+0.95
+    let cutoff = 511.5;
+
+    let train: Vec<_> = parse_csv("sample.csv")?
+        .into_iter()
+        .filter(|x| x.1 < cutoff)
+        .collect();
     let mut rng = Rng::seed_from_u64(1);
+    let test = parse_csv("test.csv")?;
 
     dump(&result)?;
 
     for epoch in 0..EPOCHS {
         println!("Starting epoch {epoch}");
         // println!("Minibatch {mb}");
-        let batch: Vec<_> = games
+        let batch: Vec<_> = train
             .choose_multiple(&mut rng, MINIBATCH_SIZE)
             .copied()
             .collect();
@@ -105,9 +99,40 @@ fn tune() -> Result<(), String> {
             // }
         }
 
-        let err = evaluate(&games, &result);
+        println!("Finished epoch {epoch}.");
 
-        println!("Finished epoch {epoch}. {err}");
+        let err = evaluate(&test, &result);
+        println!("{err}");
+
+        {
+            let mut file = File::create("curve.dat").map_err(|x| x.to_string())?;
+
+            let eval = Evaluator(Parameters::from_params(
+                &mut result.iter().map(|x| *x as i32),
+            ));
+
+            // writeln!(file, "stockfish search\tlunar eval\n").map_err(|x| x.to_string())?;
+            for (game, cp) in test.iter() {
+                writeln!(
+                    file,
+                    "{}\t{}",
+                    cp_to_win_percentage(*cp),
+                    cp_to_win_percentage((eval.evaluate(game, false).0 as f64) / 10.0),
+                )
+                .map_err(|x| x.to_string())?;
+            }
+        }
+
+        {
+            let mut file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open("error.dat")
+                .map_err(|x| x.to_string())?;
+
+            writeln!(file, "{err}").map_err(|x| x.to_string())?;
+        }
 
         dump(&result)?;
     }
@@ -126,6 +151,10 @@ fn parse_csv(filename: &str) -> Result<Vec<(Game, f64)>, String> {
             let cp = cp.parse::<f64>().map_err(|x| x.to_string())?;
             Ok((game, cp))
         })
+        // .filter(|x| match x {
+        //     Ok((_game, cp)) => cp_to_win_percentage(cp.abs()) < 0.95,
+        //     Err(_) => true,
+        // })
         .enumerate()
         .map(|(i, x)| x.map_err(|err: String| format!("{err} while parsing line {}", i + 1)))
         .collect();

@@ -2,4 +2,7 @@
 
 callgrind.out.*
 out.pgn
-sample.csv
+*.csv
+*.dat
+out.gif
+frames/*.png
