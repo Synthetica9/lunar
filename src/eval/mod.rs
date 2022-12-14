@@ -37,18 +37,6 @@ fn game_phase(board: &Board) -> i32 {
     std::cmp::min(res, 24)
 }
 
-const STATIC_BASE_VALUE: PieceParameter<Millipawns> = {
-    use Piece::*;
-    PieceParameter {
-        pawn: Pawn.base_value(),
-        knight: Knight.base_value(),
-        bishop: Bishop.base_value(),
-        rook: Rook.base_value(),
-        queen: Queen.base_value(),
-        king: King.base_value(),
-    }
-};
-
 type Term = fn(&Evaluator, &Color, &Game, &PHTEntry) -> parameters::PhaseParameter<Millipawns>;
 impl Evaluator {
     pub const GENERAL_TERMS: &[Term] = &[
@@ -103,31 +91,16 @@ impl Evaluator {
     }
 
     fn pesto(&self, color: &Color, game: &Game, _: &PHTEntry) -> PhaseParameter<Millipawns> {
-        let mut res = PhaseParameter {
-            eg: Millipawns(0),
-            mg: Millipawns(0),
-        };
-
         let pesto = &self.0.piece_square_table;
-
-        for i in 0..2 {
-            let (dst, pesto) = if i == 0 {
-                (&mut res.mg, &pesto.mg)
-            } else {
-                (&mut res.eg, &pesto.eg)
-            };
-
-            let x = Piece::iter()
+        pesto.map(|x| {
+            Piece::iter()
                 .map(|piece| {
                     let pieces = game.board().get(color, &piece).perspective(color);
-                    pesto.get(&piece).dot_product(&pieces)
-                        + *STATIC_BASE_VALUE.get(&piece) * (pieces.popcount() as i32)
+                    x.get(&piece).dot_product(&pieces)
+                        + piece.base_value() * (pieces.popcount() as i32)
                 })
-                .sum();
-            *dst = x;
-        }
-
-        res
+                .sum()
+        })
     }
 
     fn isolated_pawn(
