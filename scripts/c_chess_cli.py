@@ -61,5 +61,6 @@ def c_chess_cli(output=False, **kwargs):
 
 
 if __name__ == "__main__":
+    setup_chess_cli()
     status = subprocess.call([str(OUT_FILE), *sys.argv[1:]])
     sys.exit(status)
