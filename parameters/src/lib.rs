@@ -8,13 +8,14 @@ use serde::{de, Deserialize, Serialize};
 // #[serde(default)]
 pub struct Parameters {
     pub piece_square_table: PhaseParameter<PieceParameter<BoardParameter>>,
-    pub isolated_pawns: PhaseParameter<BoardParameter>,
+    pub isolated_pawns: PhaseParameter<SparseBoardParameter>,
     pub protected_pawns: PhaseParameter<BoardParameter>,
-    pub connected_rooks: PhaseParameter<BoardParameter>,
+    pub connected_rooks: PhaseParameter<SparseBoardParameter>,
     pub pawn_shield: PhaseParameter<BoardParameter>,
-    pub doubled_pawns: PhaseParameter<BoardParameter>,
+    pub doubled_pawns: PhaseParameter<SparseBoardParameter>,
     pub passed_pawns: BoardParameter,
     pub outpost_pieces: PhaseParameter<PieceParameter<ScalarParameter>>,
+    pub outpost_squares: PhaseParameter<SparseBoardParameter>,
 }
 
 impl ExtractParams for Parameters {
@@ -28,6 +29,7 @@ impl ExtractParams for Parameters {
             self.doubled_pawns.params(),
             self.passed_pawns.params(),
             self.outpost_pieces.params(),
+            self.outpost_squares.params(),
         ]
         .concat()
     }
@@ -41,6 +43,7 @@ impl ExtractParams for Parameters {
         let doubled_pawns = ExtractParams::from_params(iter);
         let passed_pawns = ExtractParams::from_params(iter);
         let outpost_pieces = ExtractParams::from_params(iter);
+        let outpost_squares = ExtractParams::from_params(iter);
         Self {
             piece_square_table,
             isolated_pawns,
@@ -50,6 +53,7 @@ impl ExtractParams for Parameters {
             doubled_pawns,
             passed_pawns,
             outpost_pieces,
+            outpost_squares,
         }
     }
 }
@@ -89,7 +93,7 @@ impl<'de> Deserialize<'de> for BoardParameter {
         D: serde::Deserializer<'de>,
     {
         let string = String::deserialize(deserializer)?;
-        let chunks: Vec<_> = string.split("\n").collect();
+        let chunks: Vec<_> = string.split('\n').collect();
         let parsed = chunks
             .iter()
             .rev()
@@ -242,8 +246,71 @@ where
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone, Copy)]
 #[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'de>"))]
-pub struct Files<T>([T; 8]);
+pub struct FileParameter<T>(pub [T; 8]);
+
+impl<T> ExtractParams for FileParameter<T>
+where
+    T: ExtractParams,
+{
+    fn params(&self) -> Vec<i32> {
+        self.0.iter().map(ExtractParams::params).concat()
+    }
+
+    fn from_params<It: Iterator<Item = i32>>(iter: &mut It) -> Self {
+        Self([
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+        ])
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone, Copy)]
 #[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'de>"))]
-pub struct Ranks<T>([T; 8]);
+pub struct RankParameter<T>(pub [T; 8]);
+
+impl<T> ExtractParams for RankParameter<T>
+where
+    T: ExtractParams,
+{
+    fn params(&self) -> Vec<i32> {
+        self.0.iter().map(ExtractParams::params).concat()
+    }
+
+    fn from_params<It: Iterator<Item = i32>>(iter: &mut It) -> Self {
+        Self([
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+            ExtractParams::from_params(iter),
+        ])
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Copy)]
+pub struct SparseBoardParameter {
+    pub files: FileParameter<ScalarParameter>,
+    pub ranks: RankParameter<ScalarParameter>,
+}
+
+impl ExtractParams for SparseBoardParameter {
+    fn params(&self) -> Vec<i32> {
+        [self.files.params(), self.ranks.params()].concat()
+    }
+
+    fn from_params<T: Iterator<Item = i32>>(iter: &mut T) -> Self {
+        Self {
+            files: ExtractParams::from_params(iter),
+            ranks: ExtractParams::from_params(iter),
+        }
+    }
+}

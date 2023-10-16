@@ -1,5 +1,4 @@
 #![cfg_attr(feature = "simd", feature(portable_simd))]
-#![feature(specialization)]
 
 pub mod basic_enums;
 pub mod bitboard;

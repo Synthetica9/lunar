@@ -1,9 +1,10 @@
-use crate::basic_enums::Color::{self, *};
+use crate::basic_enums::Color::{self};
 use crate::bitboard::Bitboard;
 use crate::eval;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
-use crate::piece::Piece::{self, Pawn};
+use crate::piece::Piece::{self};
+use crate::square::files;
 use crate::zobrist_hash::ZobristHash;
 
 use std::cell::RefCell;
@@ -16,7 +17,7 @@ pub struct SidedPHTEntry {
     // pawns: Bitboard,
     // files: Bitboard,
     isolated: Bitboard,
-    // attacks: Bitboard,
+    attacks: Bitboard,
     // holes: Bitboard,
     // weak: Bitboard,
     protected: Bitboard,
@@ -104,7 +105,12 @@ impl SidedPHTEntry {
         let isolated = pawns & !(files.shift(E) | files.shift(W));
         let attacks = pawns.shift(NE) | pawns.shift(NW);
         let protected = pawns & attacks;
-        let doubled = pawns & pawns.shift(N);
+        let doubled = files::ALL
+            .iter()
+            .map(|x| x.as_bitboard())
+            .filter(|x| (*x & pawns).popcount() >= 2)
+            .fold(Bitboard::new(), Bitboard::or)
+            .and(pawns);
         // let ram = pawns & enemies.shift(S);
         // let holes = !attacks.fill(N);
         let enemy_attacks = enemies.shift(SE) | enemies.shift(SW);
@@ -118,7 +124,7 @@ impl SidedPHTEntry {
             // pawns,
             // files,
             isolated,
-            // attacks,
+            attacks,
             // holes,
             // weak,
             protected,
@@ -149,9 +155,9 @@ impl SidedPHTEntry {
     //     self.files
     // }
 
-    // pub(crate) fn attacks(&self) -> Bitboard {
-    //     self.attacks
-    // }
+    pub(crate) fn attacks(&self) -> Bitboard {
+        self.attacks
+    }
 
     // pub(crate) fn holes(&self) -> Bitboard {
     //     self.holes

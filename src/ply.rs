@@ -116,7 +116,7 @@ impl Ply {
     }
 
     pub const fn normalize(self) -> Ply {
-        Ply::new(self.dst(), self.src(), self.flag())
+        Ply::new(self.src(), self.dst(), self.flag())
     }
 
     pub const fn src(&self) -> Square {

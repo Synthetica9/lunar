@@ -2,14 +2,16 @@ use std::cmp::Ordering;
 
 use strum::IntoEnumIterator;
 
-use crate::basic_enums::Color;
-use crate::bitboard::Bitboard;
-use crate::byteboard::Byteboard;
-use crate::castlerights::CastleRights;
-use crate::millipawns::Millipawns;
-use crate::piece::Piece;
-use crate::ply::ApplyPly;
-use crate::square::{File, Rank, Square};
+use crate::{
+    basic_enums::Color,
+    bitboard::Bitboard,
+    byteboard::Byteboard,
+    castlerights::CastleRights,
+    millipawns::Millipawns,
+    piece::Piece,
+    ply::ApplyPly,
+    square::{File, Rank, Square},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Board {

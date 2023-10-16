@@ -2,7 +2,7 @@ use strum_macros::EnumIter;
 
 use crate::direction::{directions, Direction};
 
-use crate::ply::{Ply, SpecialFlag};
+use crate::ply::Ply;
 use crate::square::{files, ranks, Rank, Square};
 
 #[derive(Debug, Clone, PartialEq, Copy, EnumIter)]

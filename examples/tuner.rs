@@ -12,7 +12,6 @@ use std::io::Write;
 
 use lunar::eval::Evaluator;
 use lunar::game::Game;
-use lunar::millipawns::Millipawns;
 use parameters::*;
 
 pub const EPOCHS: i32 = 200;
@@ -20,8 +19,7 @@ pub const LEARNING_RATE: f64 = 10000000.0;
 pub const MINIBATCH_SIZE: usize = 16384;
 
 fn cp_to_win_percentage(cp: f64) -> f64 {
-    (1.0 / (1.0 + (10.0_f64).powf(-cp as f64 / 400.0)))
-    //.clamp(0.05, 0.95)
+    1.0 / (1.0 + (10.0_f64).powf(-cp / 400.0))
 }
 
 fn mse(evaluator: Evaluator, games: &[(Game, f64)]) -> f64 {
@@ -90,7 +88,7 @@ fn tune() -> Result<(), String> {
             let diff = (before - after) / after;
             let step = diff * LEARNING_RATE;
             // println!("{step}");
-            let step = step.clamp(-100.0, 100.0);
+            let step = step.clamp(-10.0, 10.0);
             result[i] += step;
 
             // if result[i] >= 90_000 {

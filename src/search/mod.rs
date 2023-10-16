@@ -464,7 +464,7 @@ impl ThreadData {
 
         let legality_checker = crate::legality::LegalityChecker::new(game);
 
-        for (ply, millipawns) in candidates {
+        for (ply, _millipawns) in candidates {
             if !legality_checker.is_legal(&ply) {
                 continue;
             }
@@ -557,7 +557,7 @@ impl SearchThreadPool {
     pub fn start_search(&mut self, history: &History, time_policy: TimePolicy) {
         self.broadcast(&ThreadCommand::SearchThis(history.clone()))
             .unwrap();
-        let game = *history.last();
+        let _game = *history.last();
 
         self.state = PoolState::Searching {
             history: history.clone(),

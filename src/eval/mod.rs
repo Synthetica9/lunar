@@ -1,3 +1,5 @@
+use std::iter::Sum;
+
 use strum::IntoEnumIterator;
 
 use crate::basic_enums::Color;
@@ -6,7 +8,7 @@ use crate::board::Board;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
-use crate::square::Square;
+use crate::square::{files, ranks, File};
 
 pub use crate::generated::parameters::STATIC_PARAMETERS;
 pub use parameters::*;
@@ -39,18 +41,19 @@ fn game_phase(board: &Board) -> i32 {
 
 type Term = fn(&Evaluator, &Color, &Game, &PHTEntry) -> parameters::PhaseParameter<Millipawns>;
 impl Evaluator {
-    pub const GENERAL_TERMS: &[Term] = &[
+    pub const GENERAL_TERMS: &'static [Term] = &[
         Evaluator::pesto,
         Evaluator::connected_rook,
         Evaluator::pawn_shield,
         Evaluator::outpost_piece,
     ];
 
-    pub const PAWN_TERMS: &[Term] = &[
+    pub const PAWN_TERMS: &'static [Term] = &[
         Evaluator::isolated_pawn,
         Evaluator::doubled_pawn,
         Evaluator::protected_pawn,
         Evaluator::passed_pawn,
+        Evaluator::outpost_squares,
     ];
 
     pub fn evaluate(&self, game: &Game, use_pht: bool) -> Millipawns {
@@ -172,6 +175,17 @@ impl Evaluator {
         })
     }
 
+    fn outpost_squares(
+        &self,
+        color: &Color,
+        _game: &Game,
+        pht_entry: &PHTEntry,
+    ) -> PhaseParameter<Millipawns> {
+        let outposts = pht_entry.get(color).outposts();
+
+        self.0.outpost_squares.map(|x| x.dot_product(&outposts))
+    }
+
     fn pawn_shield(
         &self,
         color: &Color,
@@ -271,6 +285,46 @@ where
 
     fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
         self.0.dot_product(bitboard)
+    }
+}
+
+impl<T> DotProduct for FileParameter<T>
+where
+    T: DotProduct,
+    <T as DotProduct>::Output: Sum,
+{
+    type Output = T::Output;
+
+    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+        files::ALL
+            .iter()
+            .zip(self.0.iter())
+            .map(|(file, val)| val.dot_product(&(file.as_bitboard() & *bitboard)))
+            .sum()
+    }
+}
+
+impl<T> DotProduct for RankParameter<T>
+where
+    T: DotProduct,
+    <T as DotProduct>::Output: Sum,
+{
+    type Output = T::Output;
+
+    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+        ranks::ALL
+            .iter()
+            .zip(self.0.iter())
+            .map(|(rank, val)| val.dot_product(&(rank.as_bitboard() & *bitboard)))
+            .sum()
+    }
+}
+
+impl DotProduct for SparseBoardParameter {
+    type Output = Millipawns;
+
+    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+        self.files.dot_product(bitboard) + self.ranks.dot_product(bitboard)
     }
 }
 

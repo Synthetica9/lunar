@@ -62,14 +62,14 @@ def compile_rev(rev):
 
 def main():
     if len(sys.argv) != 3:
-        print("Usage: selfplay.py <old> <new>")
+        print(f"Usage: {sys.argv[0]} <old> <new>")
         sys.exit(1)
 
     old = rev_parse(sys.argv[1])
     new = rev_parse(sys.argv[2])
     if old == new:
-        print("These are the same commit!")
-        print("Both:", name(old))
+        print("These are the same commit! Both:\n")
+        subprocess.check_call(["git", "--no-pager", "show", old])
         sys.exit(1)
 
     with compile_rev(sys.argv[1]) as old, compile_rev(sys.argv[2]) as new:

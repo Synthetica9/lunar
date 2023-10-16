@@ -27,6 +27,10 @@ def plot_err(data, ax=None):
     (y,) = data
     plt.plot(y, "+")
 
+    (a, b) = ax.get_xlim()
+    b = max(b, 200)
+    ax.set_xlim(a, b)
+
 
 def plot_density(data, ax=None):
     if ax is None:

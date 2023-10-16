@@ -55,7 +55,7 @@ impl BitboardMap {
         res
     }
 
-    const fn or(&self, other: &BitboardMap) -> BitboardMap {
+    pub const fn or(&self, other: &BitboardMap) -> BitboardMap {
         let mut res = BitboardMap::new();
 
         let mut i = 64;

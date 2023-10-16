@@ -18,12 +18,11 @@ unsafe impl Sync for TranspositionTable {}
 const CACHE_LINE_SIZE: usize = 64;
 const ENTRY_SIZE: usize = std::mem::size_of::<TranspositionPair>();
 const ITEMS_PER_BUCKET: usize = CACHE_LINE_SIZE / ENTRY_SIZE;
-const LINE_SIZE: usize = std::mem::size_of::<TranspositionLine>();
 const N_MERIT_ENTRIES: usize = ITEMS_PER_BUCKET / 2;
 const N_FIFO_ENTRIES: usize = ITEMS_PER_BUCKET - N_MERIT_ENTRIES;
 
 assert_eq_size!(TranspositionEntry, u64);
-const_assert!(LINE_SIZE <= CACHE_LINE_SIZE);
+const_assert!(std::mem::size_of::<TranspositionLine>() <= CACHE_LINE_SIZE);
 
 // TODO: depth + always replace strategy.
 
