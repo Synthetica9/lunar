@@ -43,17 +43,17 @@ type Term = fn(&Evaluator, &Color, &Game, &PHTEntry) -> parameters::PhaseParamet
 impl Evaluator {
     pub const GENERAL_TERMS: &'static [Term] = &[
         Evaluator::pesto,
-        Evaluator::connected_rook,
-        Evaluator::pawn_shield,
-        Evaluator::outpost_piece,
+        // Evaluator::connected_rook,
+        // Evaluator::pawn_shield,
+        // Evaluator::outpost_piece,
     ];
 
     pub const PAWN_TERMS: &'static [Term] = &[
-        Evaluator::isolated_pawn,
-        Evaluator::doubled_pawn,
-        Evaluator::protected_pawn,
-        Evaluator::passed_pawn,
-        Evaluator::outpost_squares,
+        // Evaluator::isolated_pawn,
+        // Evaluator::doubled_pawn,
+        // Evaluator::protected_pawn,
+        // Evaluator::passed_pawn,
+        // Evaluator::outpost_squares,
     ];
 
     pub fn evaluate(&self, game: &Game, use_pht: bool) -> Millipawns {
@@ -106,126 +106,126 @@ impl Evaluator {
         })
     }
 
-    fn isolated_pawn(
-        &self,
-        color: &Color,
-        _game: &Game,
-        pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let isolated_pawns = pht_entry.get(color).isolated();
+    // fn isolated_pawn(
+    //     &self,
+    //     color: &Color,
+    //     _game: &Game,
+    //     pht_entry: &PHTEntry,
+    // ) -> PhaseParameter<Millipawns> {
+    //     let isolated_pawns = pht_entry.get(color).isolated();
 
-        self.0
-            .isolated_pawns
-            .map(|phase| -phase.dot_product(&isolated_pawns))
-    }
+    //     self.0
+    //         .isolated_pawns
+    //         .map(|phase| -phase.dot_product(&isolated_pawns))
+    // }
 
-    fn protected_pawn(
-        &self,
-        color: &Color,
-        _game: &Game,
-        pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let protected_pawns = pht_entry.get(color).protected();
+    // fn protected_pawn(
+    //     &self,
+    //     color: &Color,
+    //     _game: &Game,
+    //     pht_entry: &PHTEntry,
+    // ) -> PhaseParameter<Millipawns> {
+    //     let protected_pawns = pht_entry.get(color).protected();
 
-        self.0
-            .protected_pawns
-            .map(|x| x.dot_product(&protected_pawns))
-    }
+    //     self.0
+    //         .protected_pawns
+    //         .map(|x| x.dot_product(&protected_pawns))
+    // }
 
-    fn connected_rook(
-        &self,
-        color: &Color,
-        game: &Game,
-        _pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let rooks = game.board().get(color, &Piece::Rook);
-        let occupied = game.board().get_occupied();
+    // fn connected_rook(
+    //     &self,
+    //     color: &Color,
+    //     game: &Game,
+    //     _pht_entry: &PHTEntry,
+    // ) -> PhaseParameter<Millipawns> {
+    //     let rooks = game.board().get(color, &Piece::Rook);
+    //     let occupied = game.board().get_occupied();
 
-        self.0.connected_rooks.map(|x| {
-            rooks
-                .iter_squares()
-                .map(|square| {
-                    let attacks = Bitboard::rook_attacks(square, occupied) & rooks;
-                    x.dot_product(&attacks.perspective(color))
-                })
-                .sum()
-        })
-    }
+    //     self.0.connected_rooks.map(|x| {
+    //         rooks
+    //             .iter_squares()
+    //             .map(|square| {
+    //                 let attacks = Bitboard::rook_attacks(square, occupied) & rooks;
+    //                 x.dot_product(&attacks.perspective(color))
+    //             })
+    //             .sum()
+    //     })
+    // }
 
-    fn outpost_piece(
-        &self,
-        color: &Color,
-        game: &Game,
-        pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let outposts = pht_entry.get(color).outposts();
+    // fn outpost_piece(
+    //     &self,
+    //     color: &Color,
+    //     game: &Game,
+    //     pht_entry: &PHTEntry,
+    // ) -> PhaseParameter<Millipawns> {
+    //     let outposts = pht_entry.get(color).outposts();
 
-        self.0.outpost_pieces.map(|x| {
-            Piece::iter()
-                .map(|piece| {
-                    x.get(&piece).dot_product(
-                        &game
-                            .board()
-                            .get(color, &piece)
-                            .perspective(color)
-                            .and(outposts),
-                    )
-                })
-                .sum()
-        })
-    }
+    //     self.0.outpost_pieces.map(|x| {
+    //         Piece::iter()
+    //             .map(|piece| {
+    //                 x.get(&piece).dot_product(
+    //                     &game
+    //                         .board()
+    //                         .get(color, &piece)
+    //                         .perspective(color)
+    //                         .and(outposts),
+    //                 )
+    //             })
+    //             .sum()
+    //     })
+    // }
 
-    fn outpost_squares(
-        &self,
-        color: &Color,
-        _game: &Game,
-        pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let outposts = pht_entry.get(color).outposts();
+    // fn outpost_squares(
+    //     &self,
+    //     color: &Color,
+    //     _game: &Game,
+    //     pht_entry: &PHTEntry,
+    // ) -> PhaseParameter<Millipawns> {
+    //     let outposts = pht_entry.get(color).outposts();
 
-        self.0.outpost_squares.map(|x| x.dot_product(&outposts))
-    }
+    //     self.0.outpost_squares.map(|x| x.dot_product(&outposts))
+    // }
 
-    fn pawn_shield(
-        &self,
-        color: &Color,
-        game: &Game,
-        _pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        use crate::bitboard_map::{IMMEDIATE_NEIGHBORHOOD, MEDIUM_NEIGHBORHOOD};
+    // fn pawn_shield(
+    //     &self,
+    //     color: &Color,
+    //     game: &Game,
+    //     _pht_entry: &PHTEntry,
+    // ) -> PhaseParameter<Millipawns> {
+    //     use crate::bitboard_map::{IMMEDIATE_NEIGHBORHOOD, MEDIUM_NEIGHBORHOOD};
 
-        let pawns = game.board().get(color, &Piece::Pawn);
-        let king = game.board().king_square(color);
+    //     let pawns = game.board().get(color, &Piece::Pawn);
+    //     let king = game.board().king_square(color);
 
-        let close = (IMMEDIATE_NEIGHBORHOOD[king] & pawns).perspective(color);
-        let medium = (MEDIUM_NEIGHBORHOOD[king] & pawns).perspective(color);
+    //     let close = (IMMEDIATE_NEIGHBORHOOD[king] & pawns).perspective(color);
+    //     let medium = (MEDIUM_NEIGHBORHOOD[king] & pawns).perspective(color);
 
-        // Double counting close pawns because they seem more pertinent.
-        self.0
-            .pawn_shield
-            .map(|x| x.dot_product(&close) + x.dot_product(&medium))
-    }
+    //     // Double counting close pawns because they seem more pertinent.
+    //     self.0
+    //         .pawn_shield
+    //         .map(|x| x.dot_product(&close) + x.dot_product(&medium))
+    // }
 
-    fn doubled_pawn(
-        &self,
-        color: &Color,
-        _game: &Game,
-        pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let doubled = pht_entry.get(color).doubled();
-        self.0.doubled_pawns.map(|x| -x.dot_product(&doubled))
-    }
+    // fn doubled_pawn(
+    //     &self,
+    //     color: &Color,
+    //     _game: &Game,
+    //     pht_entry: &PHTEntry,
+    // ) -> PhaseParameter<Millipawns> {
+    //     let doubled = pht_entry.get(color).doubled();
+    //     self.0.doubled_pawns.map(|x| -x.dot_product(&doubled))
+    // }
 
-    fn passed_pawn(
-        &self,
-        color: &Color,
-        _game: &Game,
-        pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let passed = pht_entry.get(color).passed() & !bitboard::ROW_7;
-        let both = self.0.passed_pawns.dot_product(&passed);
-        PhaseParameter { mg: both, eg: both }
-    }
+    // fn passed_pawn(
+    //     &self,
+    //     color: &Color,
+    //     _game: &Game,
+    //     pht_entry: &PHTEntry,
+    // ) -> PhaseParameter<Millipawns> {
+    //     let passed = pht_entry.get(color).passed() & !bitboard::ROW_7;
+    //     let both = self.0.passed_pawns.dot_product(&passed);
+    //     PhaseParameter { mg: both, eg: both }
+    // }
 }
 
 pub fn base_eval(game: &Game) -> Millipawns {
