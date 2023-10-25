@@ -17,14 +17,14 @@ pub struct SidedPHTEntry {
     // pawns: Bitboard,
     // files: Bitboard,
     isolated: Bitboard,
-    attacks: Bitboard,
+    // attacks: Bitboard,
     // holes: Bitboard,
     // weak: Bitboard,
     protected: Bitboard,
     // ram: Bitboard,
     doubled: Bitboard,
     passed: Bitboard,
-    outposts: Bitboard,
+    // outposts: Bitboard,
 }
 
 #[derive(Copy, Clone)]
@@ -124,14 +124,14 @@ impl SidedPHTEntry {
             // pawns,
             // files,
             isolated,
-            attacks,
+            // attacks,
             // holes,
             // weak,
             protected,
             // ram,
             passed,
             doubled,
-            outposts,
+            // outposts,
         }
     }
 
@@ -155,9 +155,9 @@ impl SidedPHTEntry {
     //     self.files
     // }
 
-    pub(crate) fn attacks(&self) -> Bitboard {
-        self.attacks
-    }
+    // pub(crate) fn attacks(&self) -> Bitboard {
+    //     self.attacks
+    // }
 
     // pub(crate) fn holes(&self) -> Bitboard {
     //     self.holes
@@ -175,9 +175,9 @@ impl SidedPHTEntry {
         self.passed
     }
 
-    pub fn outposts(&self) -> Bitboard {
-        self.outposts
-    }
+    // pub fn outposts(&self) -> Bitboard {
+    //     self.outposts
+    // }
 }
 
 impl PawnHashTable {
