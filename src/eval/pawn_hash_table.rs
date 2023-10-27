@@ -114,8 +114,8 @@ impl SidedPHTEntry {
         // let ram = pawns & enemies.shift(S);
         // let holes = !attacks.fill(N);
         let enemy_attacks = enemies.shift(SE) | enemies.shift(SW);
-        let enemy_holes = !enemy_attacks.fill(S);
-        let outposts = enemy_holes & attacks;
+        // let enemy_holes = !enemy_attacks.fill(S);
+        // let outposts = enemy_holes & attacks;
         let pass_prevention = (enemy_attacks | enemies).fill(S);
         let passed = pawns & !pass_prevention;
         // let weak = pawns & holes;
