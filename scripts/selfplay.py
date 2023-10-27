@@ -52,33 +52,44 @@ def name(rev):
 
 @contextmanager
 def compile_rev(rev):
+    rev = rev_parse(rev)
     with TemporaryDirectory() as d:
         p = Path(d) / rev
         subprocess.check_call(["git", "worktree", "add", "--detach", str(p), rev])
-        pgo_script = p / "scripts/build_pgo.sh"
-        if pgo_script.exists():
-            subprocess.check_call(["./scripts/build_pgo.sh"], cwd=p)
-        else:
-            subprocess.check_call(
-                ["cargo", "build", "--release", "--bin", "lunar"], cwd=p
-            )
-        yield (rev, p / "target/release/lunar")
-        subprocess.check_call(["git", "worktree", "remove", str(p)])
+        try:
+            pgo_script = p / "scripts/build_pgo.sh"
+            if pgo_script.exists():
+                subprocess.check_call([str(pgo_script)], cwd=p)
+            else:
+                subprocess.check_call(
+                    ["cargo", "build", "--release", "--bin", "lunar"], cwd=p
+                )
+            yield (rev, p / "target/release/lunar")
+        finally:
+            subprocess.check_call(["git", "worktree", "remove", str(p)])
 
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) > 3:
         print(f"Usage: {sys.argv[0]} <old> <new>")
         sys.exit(1)
 
-    old = rev_parse(sys.argv[1])
-    new = rev_parse(sys.argv[2])
-    if old == new:
+    if len(sys.argv) >= 3:
+        new_name = sys.argv[2]
+    else:
+        new_name = "HEAD"
+
+    if len(sys.argv) >= 2:
+        old_name = sys.argv[1]
+    else:
+        old_name = "HEAD~1"
+
+    if rev_parse(old_name) == rev_parse(new_name):
         print("These are the same commit! Both:\n")
-        subprocess.check_call(["git", "--no-pager", "show", old])
+        subprocess.check_call(["git", "--no-pager", "show", old_name])
         sys.exit(1)
 
-    with compile_rev(sys.argv[1]) as old, compile_rev(sys.argv[2]) as new:
+    with compile_rev(old_name) as old, compile_rev(new_name) as new:
         selfplay(old, new)
 
 
