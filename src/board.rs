@@ -461,6 +461,11 @@ impl Board {
         }
 
         false
+
+        // // Need 1 knight if we have a bishop, 3 otherwise
+        // let min_knights = if !bishops.is_empty() { 1 } else { 3 };
+
+        // knights.popcount() >= min_knights
     }
 
     pub fn is_insufficient_to_force_mate(&self) -> bool {
