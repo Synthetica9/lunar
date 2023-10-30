@@ -1,5 +1,4 @@
-#!/usr/bin/env nix-shell
-#!nix-shell -p llvm -i bash
+#!/usr/bin/env bash
 
 set -euxo pipefail
 
