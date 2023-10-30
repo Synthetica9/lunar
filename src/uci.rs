@@ -18,7 +18,7 @@ pub struct UCIState {
     history: History,
     transposition_table: Arc<TranspositionTable>,
     search_thread_pool: SearchThreadPool,
-    log_file: Box<dyn std::io::Write>,
+    log_file: Option<Box<dyn std::io::Write>>,
     debug: bool,
     // repetition_table: RepetitionTable,
 }
@@ -31,13 +31,16 @@ impl UCIState {
             transposition_table: tt.clone(),
             search_thread_pool: SearchThreadPool::new(1, tt),
             // stderr is the default log file
-            log_file: Box::new(std::io::stderr()),
+            log_file: None,
             debug: false,
         }
     }
 
     pub fn log(&mut self, message: &str) {
-        writeln!(self.log_file, "{message}").unwrap();
+        match &mut self.log_file {
+            Some(ref mut file) => writeln!(file, "{message}").unwrap(),
+            None => {}
+        }
         if self.debug {
             println!("info string {message}");
         }
@@ -96,7 +99,7 @@ impl UCIState {
     }
 
     pub fn interpret(&mut self, command: &str) -> Result<(), String> {
-        self.log(&format!("> {command}"));
+        // self.log(&format!("> {command}"));
         let mut parts = command.split_whitespace();
         let command = parts.next().ok_or("No command")?;
         match command {
@@ -112,6 +115,7 @@ impl UCIState {
             }
             "ucinewgame" => {
                 self.history = History::new(Game::new());
+                // TODO: should we explicitly wait for clear?
                 self.transposition_table.clear();
             }
             "setoption" => {
@@ -375,7 +379,7 @@ const AVAILABLE_OPTIONS: &AvailableOptions = &AvailableOptions({
             typ: &Str { default: "" },
             setter: &|value, state| {
                 let file = std::fs::File::create(value).map_err(|x| x.to_string())?;
-                state.log_file = Box::new(file);
+                state.log_file = Some(Box::new(file));
                 state.log("Log file set");
                 Ok(())
             },
