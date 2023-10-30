@@ -433,42 +433,47 @@ impl Board {
         res
     }
 
-    pub fn is_insufficient_material(&self) -> bool {
+    pub fn may_be_able_to_force_mate(&self, color: &Color) -> bool {
         use Piece::*;
 
-        debug_assert!(self.get_piece(&King).popcount() == 2);
-        let sufficient = {
-            let mut res = Bitboard::new();
-            for piece in &[Pawn, Rook, Queen] {
-                res |= self.get_piece(piece);
-            }
-            res.popcount() >= 1
-        };
-
-        if sufficient {
-            return false;
-        }
-
-        let bishops = self.get_piece(&Bishop);
-        let knights = self.get_piece(&Knight);
-        let knights_bishops = (knights | bishops).popcount();
-
-        use crate::bitboard::{DARK_SQUARES, LIGHT_SQUARES};
-
-        if knights.is_empty() {
-            let light_bishops = bishops & LIGHT_SQUARES;
-            if light_bishops.popcount() == knights_bishops || light_bishops.is_empty() {
+        for piece in [Pawn, Rook, Queen] {
+            if !self.get(color, &piece).is_empty() {
                 return true;
             }
         }
-        // TODO: add evaluation term to draw almost-impossible positions.
-        // At this point, we either have a knight or opposite colored bishops.
-        debug_assert!(
-            !knights.is_empty()
-                || (!(bishops & LIGHT_SQUARES).is_empty() && !(bishops & DARK_SQUARES).is_empty()),
-        );
 
-        knights_bishops <= 1
+        if self.has_bishop_pair(color) {
+            return true;
+        }
+
+        // At this points, if we have any bishops, they are on the same color.
+        let knights = self.get(color, &Knight);
+        let bishops = self.get(color, &Bishop);
+
+        if !bishops.is_empty() && !knights.is_empty() {
+            // We have at least one bishop and at least one knight.
+            return true;
+        }
+
+        // Three knights maybe?
+        if knights.popcount() >= 3 {
+            return true;
+        }
+
+        false
+    }
+
+    pub fn is_insufficient_to_force_mate(&self) -> bool {
+        // Basically implements USCF "insufficient losing chances" rules
+
+        use Color::*;
+
+        !self.may_be_able_to_force_mate(&White) && !self.may_be_able_to_force_mate(&Black)
+    }
+
+    pub fn fide_can_claim_draw(&self) -> bool {
+        // implements FIDE draw rules
+        todo!()
     }
 
     pub fn simple_render(&self) -> String {
