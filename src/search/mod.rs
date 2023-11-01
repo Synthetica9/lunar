@@ -812,6 +812,14 @@ impl SearchThreadPool {
         self.state = next_state;
         res
     }
+
+    pub(crate) fn wait_channels_empty(&self) {
+        for (_, s, _) in &self.threads {
+            while !s.is_empty() {
+                // Should we sleep for a few microseconds or something?
+            }
+        }
+    }
 }
 
 impl Drop for SearchThreadPool {

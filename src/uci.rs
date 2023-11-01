@@ -111,6 +111,9 @@ impl UCIState {
                 self.send("uciok");
             }
             "isready" => {
+                // std::thread::sleep(Duration::from_millis(50));
+                self.manage_thread_pool();
+                self.search_thread_pool.wait_channels_empty();
                 self.send("readyok");
             }
             "ucinewgame" => {
