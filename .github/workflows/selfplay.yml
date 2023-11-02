@@ -22,6 +22,8 @@ jobs:
         run: |
           git --no-pager show ${{ github.event.before }}
           git --no-pager show ${{ github.event.after }}
+      - name: Install llvm-tools-preview
+        run: rustup component add llvm-tools-preview
       - name: Run self-play
         run: python ./scripts/selfplay.py ${{ github.event.before }} ${{ github.event.after }}
       - name: Publish PGN
