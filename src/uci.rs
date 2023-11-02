@@ -66,7 +66,7 @@ impl UCIState {
 
         loop {
             use crossbeam_channel::RecvTimeoutError::*;
-            match reader_chan.recv_timeout(Duration::from_millis(50)) {
+            match reader_chan.recv_timeout(Duration::from_millis(10)) {
                 Ok(line) => {
                     let line = line.trim().to_string();
                     match self.interpret(&line) {
