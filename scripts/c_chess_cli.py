@@ -23,7 +23,7 @@ def setup_chess_cli():
             cwd=d,
         )
         subprocess.check_call(["python", "./make.py"], cwd=p)
-        TARGET_DIR.mkdir(exists_ok=True)
+        TARGET_DIR.mkdir(exist_ok=True)
         shutil.copy(p / "c-chess-cli", OUT_FILE)
         print("Done compiling", file=sys.stderr)
 
