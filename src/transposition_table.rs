@@ -238,6 +238,7 @@ impl TranspositionTable {
                 }
             }
         }
+        res.extend(self.principle_variation(&game));
         res
     }
 
