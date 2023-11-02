@@ -22,8 +22,10 @@ jobs:
         run: |
           git --no-pager show ${{ github.event.before }}
           git --no-pager show ${{ github.event.after }}
-      - name: Install cargo-pgo
-        run: cargo install cargo-pgo
+      - name: Install PGO deps
+        run: |
+          cargo install cargo-pgo
+          rustup component add llvm-tools-preview
       - name: Run self-play
         run: python ./scripts/selfplay.py ${{ github.event.before }} ${{ github.event.after }}
       - name: Publish PGN
