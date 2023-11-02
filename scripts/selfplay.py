@@ -44,7 +44,6 @@ def selfplay(old, new):
             *("-concurrency", "2"),
             *("-games", "1000"),
         ],
-        stderr=subprocess.DEVNULL,
     )
 
 
