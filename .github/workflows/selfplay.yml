@@ -18,6 +18,10 @@ jobs:
         # We also need the previous commit to compare to
         with:
           fetch-depth: 0
+      - name: Show git log
+        run: |
+          git --no-pager show ${{ github.event.before }}
+          git --no-pager show ${{ github.event.after }}
       - name: Run self-play
         run: python ./scripts/selfplay.py ${{ github.event.before }} ${{ github.event.after }}
       - name: Publish PGN
