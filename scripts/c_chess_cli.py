@@ -24,6 +24,7 @@ def setup_chess_cli():
         )
         subprocess.check_call(["python", "./make.py"], cwd=p)
         shutil.copy(p / "c-chess-cli", OUT_FILE)
+        print("Done compiling", file=sys.stderr)
 
 
 def to_args(kwargs):
@@ -36,14 +37,14 @@ def to_args(kwargs):
     for engine in engines:
         it.append(("engine", engine))
 
-    for (k, v) in it:
+    for k, v in it:
         yield f"-{k}"
 
         if v is True:
             continue
 
         if isinstance(v, dict):
-            for (a, b) in v.items():
+            for a, b in v.items():
                 if isinstance(b, bool):
                     b = "y" if b else "n"
                 yield f"{a}={b}"
