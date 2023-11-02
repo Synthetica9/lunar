@@ -70,12 +70,14 @@ def compile_rev(rev, options):
         try:
             pgo_script = p / "scripts/build_pgo.sh"
             if not options.no_pgo and pgo_script.exists():
+                bin_name = "lunar_pgo"
                 subprocess.check_call([str(pgo_script)], cwd=p)
             else:
+                bin_name = "lunar"
                 subprocess.check_call(
                     ["cargo", "build", "--release", "--bin", "lunar"], cwd=p
                 )
-            yield (rev, p / "target/release/lunar")
+            yield (rev, p / "target/release" / bin_name)
         finally:
             subprocess.check_call(["git", "worktree", "remove", str(p)])
 
