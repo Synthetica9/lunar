@@ -555,9 +555,17 @@ impl SearchThreadPool {
     }
 
     pub fn start_search(&mut self, history: &History, time_policy: TimePolicy) {
+        let game = *history.last();
+        let legal_moves = game.legal_moves();
+        if legal_moves.len() == 1 {
+            // One legal move. Just emit that legal move and be done with it.
+            let ply = legal_moves[0].long_name();
+            println!("bestmove {ply}");
+            return;
+        }
+
         self.broadcast(&ThreadCommand::SearchThis(history.clone()))
             .unwrap();
-        let _game = *history.last();
 
         self.state = PoolState::Searching {
             history: history.clone(),
