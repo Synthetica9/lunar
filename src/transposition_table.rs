@@ -11,6 +11,7 @@ use crate::zobrist_hash::ZobristHash;
 pub struct TranspositionTable {
     table: Vec<UnsafeCell<TranspositionLine>>,
     occupancy: usize,
+    age: u8,
 }
 
 unsafe impl Sync for TranspositionTable {}
@@ -67,13 +68,17 @@ pub enum TranspositionEntryType {
     UpperBound,
 }
 
-// TODO: aging?
+const AGE_BITS: usize = 6;
+const MAX_AGE: u8 = 1 << AGE_BITS;
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TranspositionEntry {
     pub depth: u8,
-    pub best_move: Ply,
     pub value: Millipawns,
-    pub value_type: TranspositionEntryType,
+    best_move: Ply,
+    // LSB 0, 1: value_type
+    // LSB 2-7: age
+    age_value_type: u8,
 }
 
 impl TranspositionEntry {
@@ -83,6 +88,42 @@ impl TranspositionEntry {
 
     fn from_u64(val: u64) -> TranspositionEntry {
         unsafe { std::mem::transmute(val) }
+    }
+
+    pub fn value_type(&self) -> TranspositionEntryType {
+        use TranspositionEntryType::*;
+        let value_type_u8 = self.age_value_type % 4;
+        match value_type_u8 {
+            0 => Exact,
+            1 => LowerBound,
+            2 => UpperBound,
+            3 => Exact,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn best_move(&self) -> Option<Ply> {
+        self.best_move.wrap_null()
+    }
+
+    pub fn age(&self) -> u8 {
+        self.age_value_type / 4
+    }
+
+    pub fn new(
+        depth: u8,
+        best_move: Option<Ply>,
+        value: Millipawns,
+        value_type: TranspositionEntryType,
+        age: u8,
+    ) -> TranspositionEntry {
+        debug_assert!(age < MAX_AGE);
+        TranspositionEntry {
+            depth,
+            value,
+            best_move: Ply::unwrap_null(&best_move),
+            age_value_type: age << (8 - AGE_BITS) | value_type as u8,
+        }
     }
 }
 
@@ -100,7 +141,17 @@ impl TranspositionTable {
         TranspositionTable {
             table,
             occupancy: 0,
+            age: 0,
         }
+    }
+
+    pub fn inc_age(&mut self) {
+        self.age += 1;
+        self.age %= MAX_AGE;
+    }
+
+    pub fn age(&self) -> u8 {
+        self.age
     }
 
     pub fn clear(&self) {
@@ -255,7 +306,7 @@ impl TranspositionTable {
                 } else {
                     use TranspositionEntryType::*;
                     let value = TranspositionEntry::from_u64(slot.value);
-                    match value.value_type {
+                    match value.value_type() {
                         Exact => exact += 1,
                         LowerBound => lower += 1,
                         UpperBound => upper += 1,
@@ -270,15 +321,15 @@ impl TranspositionTable {
         println!("Empty: {empty}");
     }
 
-    fn should_replace(&self, cand: &TranspositionEntry, old: &TranspositionEntry) -> bool {
+    fn should_replace(&self, candidate: &TranspositionEntry, old: &TranspositionEntry) -> bool {
         // if old.hash != self.hash {
         //     return true;
         // }
 
         use std::cmp::Ordering::*;
-        match Ord::cmp(&cand.depth, &old.depth) {
+        match Ord::cmp(&candidate.depth, &old.depth) {
             Less => false,
-            Equal => cand.value_type == TranspositionEntryType::Exact,
+            Equal => candidate.value_type() == TranspositionEntryType::Exact,
             Greater => true,
         }
     }
@@ -335,12 +386,13 @@ mod tests {
     fn read_write() {
         let tt = TranspositionTable::new(512);
         let game = Game::new();
-        let entry = TranspositionEntry {
-            depth: 123,
-            value: Millipawns(456),
-            best_move: Ply::null(),
-            value_type: TranspositionEntryType::Exact,
-        };
+        let entry = TranspositionEntry::new(
+            123,
+            None,
+            Millipawns(456),
+            TranspositionEntryType::Exact,
+            tt.age(),
+        );
 
         tt.put(game.hash(), entry);
         let entry2 = tt.get(game.hash());
