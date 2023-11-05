@@ -214,14 +214,14 @@ impl ThreadData {
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
                 // TODO: check that the move is legal.
-                match tte.value_type {
-                    Exact => return Ok((tte.value, tte.best_move.wrap_null())),
+                match tte.value_type() {
+                    Exact => return Ok((tte.value, tte.best_move())),
                     LowerBound => alpha = alpha.max(tte.value),
                     UpperBound => beta = beta.min(tte.value),
                 }
 
                 if alpha >= beta {
-                    return Ok((tte.value, tte.best_move.wrap_null()));
+                    return Ok((tte.value, tte.best_move()));
                 }
             }
         }
@@ -240,7 +240,7 @@ impl ThreadData {
                 // Internal iterative deepening
                 self.alpha_beta_search(alpha, beta, depth / 2, true)?.1
             } else {
-                from_tt.and_then(|x| x.best_move.wrap_null())
+                from_tt.and_then(|x| x.best_move())
             };
 
             let legality_checker = { crate::legality::LegalityChecker::new(&game) };
@@ -418,12 +418,13 @@ impl ThreadData {
             Exact
         };
 
-        let tte = TranspositionEntry {
-            depth: depth as u8,
+        let tte = TranspositionEntry::new(
+            depth as u8,
+            best_move,
             value,
             value_type,
-            best_move: Ply::unwrap_null(&best_move),
-        };
+            self.transposition_table.age(),
+        );
         self.transposition_table.put(game.hash(), tte);
 
         Ok((value, best_move))
@@ -563,6 +564,8 @@ impl SearchThreadPool {
             println!("bestmove {ply}");
             return;
         }
+
+        self.transposition_table.inc_age();
 
         self.broadcast(&ThreadCommand::SearchThis(history.clone()))
             .unwrap();
