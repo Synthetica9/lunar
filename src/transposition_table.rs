@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use no_panic::no_panic;
 use static_assertions::*;
@@ -11,7 +12,7 @@ use crate::zobrist_hash::ZobristHash;
 pub struct TranspositionTable {
     table: Vec<UnsafeCell<TranspositionLine>>,
     occupancy: usize,
-    age: u8,
+    age: AtomicU8,
 }
 
 unsafe impl Sync for TranspositionTable {}
@@ -141,17 +142,17 @@ impl TranspositionTable {
         TranspositionTable {
             table,
             occupancy: 0,
-            age: 0,
+            age: 0.into(),
         }
     }
 
-    pub fn inc_age(&mut self) {
-        self.age += 1;
-        self.age %= MAX_AGE;
+    pub fn inc_age(&self) {
+        self.age.fetch_add(1, Ordering::Acquire);
+        self.age.fetch_and(MAX_AGE - 1, Ordering::Release);
     }
 
     pub fn age(&self) -> u8 {
-        self.age
+        self.age.load(Ordering::Acquire)
     }
 
     pub fn clear(&self) {

@@ -565,6 +565,8 @@ impl SearchThreadPool {
             return;
         }
 
+        self.transposition_table.inc_age();
+
         self.broadcast(&ThreadCommand::SearchThis(history.clone()))
             .unwrap();
 
