@@ -131,8 +131,8 @@ impl TranspositionEntry {
 impl TranspositionTable {
     pub fn new(bytes: usize) -> TranspositionTable {
         let needed_entries = TranspositionTable::needed_entries(bytes);
-        let mut table = Vec::with_capacity(needed_entries);
-        while table.len() < needed_entries {
+        let mut table = Vec::with_capacity(needed_entries / ITEMS_PER_BUCKET);
+        while table.len() < needed_entries / ITEMS_PER_BUCKET {
             table.push(
                 TranspositionLine([TranspositionPair { key: 0, value: 0 }; ITEMS_PER_BUCKET])
                     .into(),
