@@ -11,7 +11,7 @@ use crate::zobrist_hash::ZobristHash;
 
 pub struct TranspositionTable {
     table: Vec<UnsafeCell<TranspositionLine>>,
-    pre_table: Vec<UnsafeCell<u8>>,
+    pre_table: Vec<UnsafeCell<PreTableSlice>>,
 
     occupancy: usize,
     age: AtomicU8,
@@ -25,6 +25,9 @@ const ITEMS_PER_BUCKET: usize = CACHE_LINE_SIZE / ENTRY_SIZE;
 const N_MERIT_ENTRIES: usize = ITEMS_PER_BUCKET / 2;
 const N_FIFO_ENTRIES: usize = ITEMS_PER_BUCKET - N_MERIT_ENTRIES;
 
+const MERIT_ENTRIES_VIEW: std::ops::RangeTo<usize> = ..N_MERIT_ENTRIES;
+const FIFO_ENTRIES_VIEW: std::ops::RangeFrom<usize> = N_MERIT_ENTRIES..;
+
 assert_eq_size!(TranspositionEntry, u64);
 const_assert!(std::mem::size_of::<TranspositionLine>() <= CACHE_LINE_SIZE);
 
@@ -33,6 +36,8 @@ const_assert!(std::mem::size_of::<TranspositionLine>() <= CACHE_LINE_SIZE);
 #[repr(align(64))]
 struct TranspositionLine([TranspositionPair; ITEMS_PER_BUCKET]);
 
+struct PreTableSlice([u8; ITEMS_PER_BUCKET]);
+
 impl TranspositionLine {
     // These two are no-panic because the unrwap _could_ produce panicking code,
     // but statically it should be verified that the size is right.
@@ -40,12 +45,24 @@ impl TranspositionLine {
     // TODO: make this work with PGO
     // #[no_panic]
     pub fn merit_entries(&mut self) -> &mut [TranspositionPair; N_MERIT_ENTRIES] {
-        (&mut self.0[..N_MERIT_ENTRIES]).try_into().unwrap()
+        (&mut self.0[MERIT_ENTRIES_VIEW]).try_into().unwrap()
     }
 
     // #[no_panic]
     pub fn fifo_entries(&mut self) -> &mut [TranspositionPair; N_FIFO_ENTRIES] {
-        (&mut self.0[N_MERIT_ENTRIES..]).try_into().unwrap()
+        (&mut self.0[FIFO_ENTRIES_VIEW]).try_into().unwrap()
+    }
+}
+
+impl PreTableSlice {
+    // #[no_panic]
+    pub fn merit_entries(&mut self) -> &mut [u8; N_MERIT_ENTRIES] {
+        (&mut self.0[MERIT_ENTRIES_VIEW]).try_into().unwrap()
+    }
+
+    // #[no_panic]
+    pub fn fifo_entries(&mut self) -> &mut [u8; N_FIFO_ENTRIES] {
+        (&mut self.0[FIFO_ENTRIES_VIEW]).try_into().unwrap()
     }
 }
 
@@ -134,17 +151,14 @@ impl TranspositionTable {
     pub fn new(bytes: usize) -> TranspositionTable {
         let needed_entries = TranspositionTable::needed_entries(bytes);
         let mut table = Vec::with_capacity(needed_entries / ITEMS_PER_BUCKET);
+        let mut pre_table = Vec::with_capacity(needed_entries / ITEMS_PER_BUCKET);
+
         while table.len() < needed_entries / ITEMS_PER_BUCKET {
-            table.push(
-                TranspositionLine([TranspositionPair { key: 0, value: 0 }; ITEMS_PER_BUCKET])
-                    .into(),
-            );
+            table.push(unsafe { std::mem::zeroed() });
+            pre_table.push(unsafe { std::mem::zeroed() });
         }
 
-        let mut pre_table = Vec::with_capacity(needed_entries);
-        while pre_table.len() < needed_entries {
-            pre_table.push(0.into())
-        }
+        assert_eq!(table.len(), pre_table.len());
 
         TranspositionTable {
             table,
@@ -184,6 +198,16 @@ impl TranspositionTable {
     pub fn get(&self, hash: ZobristHash) -> Option<TranspositionEntry> {
         // TODO: check if hash matches current value. If not, replace with zeros.
         let slot = self.slot(hash);
+
+        {
+            let swiss_ptr = self.pre_table[slot].get();
+            let swiss = unsafe { swiss_ptr.read_volatile() };
+            let swiss_index = hash.swiss_index();
+            if swiss.0.iter().all(|x| *x != swiss_index) {
+                return None;
+            }
+        }
+
         let ptr: *mut TranspositionLine = self.table[slot].get();
         let content: TranspositionLine = unsafe {
             // TODO: does this need read_volatile?
@@ -209,8 +233,12 @@ impl TranspositionTable {
         };
 
         let slot = self.slot(hash);
+
         let ptr = self.table[slot].get();
         let mut bucket = unsafe { ptr.read_volatile() };
+
+        let swiss_ptr = self.pre_table[slot].get();
+        let mut swiss_entry = unsafe { swiss_ptr.read_volatile() };
 
         for other in bucket.0.iter_mut() {
             // Evict anything that seems off...
@@ -219,22 +247,21 @@ impl TranspositionTable {
             }
         }
 
-        // Merit-based entries:
-        let mut have_replaced = false;
-        for other in bucket.merit_entries().iter_mut() {
-            let other_entry = TranspositionEntry::from_u64(other.value);
-            if self.should_replace(&value, &other_entry) || other.value == 0 {
-                have_replaced = true;
-                *other = entry;
+        let is_merit = (0..ITEMS_PER_BUCKET).map(|x| x < N_MERIT_ENTRIES);
+        let entry_iter = bucket.0.iter_mut();
+        let swiss_iter = swiss_entry.0.iter_mut();
+
+        for ((swiss, full), is_merit) in swiss_iter.zip(entry_iter).zip(is_merit) {
+            let other_entry = TranspositionEntry::from_u64(full.value);
+            if self.should_replace(&value, &other_entry) || full.value == 0 || !is_merit {
+                *full = entry;
+                *swiss = hash.swiss_index();
+                if !is_merit {
+                    swiss_entry.0[FIFO_ENTRIES_VIEW].rotate_right(1);
+                    bucket.0[FIFO_ENTRIES_VIEW].rotate_right(1);
+                }
                 break;
             }
-        }
-
-        // Otherwise, do one of the FIFO entries
-        if !have_replaced {
-            let fifo = bucket.fifo_entries();
-            fifo.rotate_right(1);
-            fifo[0] = entry;
         }
 
         // Lastly, make sure we have only one value for our current hash.
@@ -251,6 +278,7 @@ impl TranspositionTable {
 
         unsafe {
             ptr.write_volatile(bucket);
+            swiss_ptr.write_volatile(swiss_entry);
         }
     }
 

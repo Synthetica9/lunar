@@ -74,6 +74,11 @@ impl ZobristHash {
     pub(crate) fn as_usize(&self) -> usize {
         self.hash as usize
     }
+
+    pub(crate) const fn swiss_index(&self) -> u8 {
+        // Optional: maybe map 0 to 1?
+        (self.hash >> ((std::mem::size_of::<u64>() - 1) * 8)) as u8
+    }
 }
 
 impl Default for ZobristHash {
