@@ -11,6 +11,8 @@ use crate::zobrist_hash::ZobristHash;
 
 pub struct TranspositionTable {
     table: Vec<UnsafeCell<TranspositionLine>>,
+    pre_table: Vec<UnsafeCell<u8>>,
+
     occupancy: usize,
     age: AtomicU8,
 }
@@ -139,8 +141,14 @@ impl TranspositionTable {
             );
         }
 
+        let mut pre_table = Vec::with_capacity(needed_entries);
+        while pre_table.len() < needed_entries {
+            pre_table.push(0.into())
+        }
+
         TranspositionTable {
             table,
+            pre_table,
             occupancy: 0,
             age: 0.into(),
         }
