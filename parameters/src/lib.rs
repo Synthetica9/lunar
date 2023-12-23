@@ -8,6 +8,7 @@ use serde::{de, Deserialize, Serialize};
 // #[serde(default)]
 pub struct Parameters {
     pub piece_square_table: PhaseParameter<PieceParameter<BoardParameter>>,
+    pub queenside_pawns: PhaseParameter<BoardParameter>,
     // pub connected_rooks: PhaseParameter<SparseBoardParameter>,
     // pub pawn_shield: PhaseParameter<BoardParameter>,
     pub isolated_pawns: PhaseParameter<ScalarParameter>,
@@ -22,6 +23,7 @@ impl ExtractParams for Parameters {
     fn params(&self) -> Vec<i32> {
         [
             self.piece_square_table.params(),
+            self.queenside_pawns.params(),
             self.isolated_pawns.params(),
             self.protected_pawns.params(),
             self.doubled_pawns.params(),
@@ -32,6 +34,7 @@ impl ExtractParams for Parameters {
 
     fn from_params<T: Iterator<Item = i32>>(iter: &mut T) -> Self {
         let piece_square_table = ExtractParams::from_params(iter);
+        let queenside_pawns = ExtractParams::from_params(iter);
         let isolated_pawns = ExtractParams::from_params(iter);
         let protected_pawns = ExtractParams::from_params(iter);
         let doubled_pawns = ExtractParams::from_params(iter);
@@ -42,6 +45,7 @@ impl ExtractParams for Parameters {
         // let outpost_squares = ExtractParams::from_params(iter);
         Self {
             piece_square_table,
+            queenside_pawns,
             isolated_pawns,
             protected_pawns,
             doubled_pawns,

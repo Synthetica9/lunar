@@ -43,6 +43,7 @@ type Term = fn(&Evaluator, &Color, &Game, &PHTEntry) -> parameters::PhaseParamet
 impl Evaluator {
     pub const GENERAL_TERMS: &'static [Term] = &[
         Evaluator::pesto,
+        Evaluator::queenside_pawns,
         // Evaluator::connected_rook,
         // Evaluator::pawn_shield,
         // Evaluator::outpost_piece,
@@ -98,11 +99,38 @@ impl Evaluator {
         pesto.map(|x| {
             Piece::iter()
                 .map(|piece| {
-                    let pieces = game.board().get(color, &piece).perspective(color);
+                    let mut pieces = game.board().get(color, &piece);
+
+                    if piece == Piece::Pawn {
+                        // Only "kingside" pawns
+                        let effective_king_side = game.board().effective_king_side(color);
+                        pieces &= effective_king_side;
+                    }
+
+                    pieces = pieces.perspective(color);
+
                     x.get(&piece).dot_product(&pieces)
                         + piece.base_value() * (pieces.popcount() as i32)
                 })
                 .sum()
+        })
+    }
+
+    fn queenside_pawns(
+        &self,
+        color: &Color,
+        game: &Game,
+        _: &PHTEntry,
+    ) -> PhaseParameter<Millipawns> {
+        let queenside_pesto = &self.0.queenside_pawns;
+
+        queenside_pesto.map(|x| {
+            let queenside = !game.board().effective_king_side(color);
+            let pawns = game.board().get(color, &Piece::Pawn);
+
+            let queenside_pawns = queenside & pawns;
+
+            x.dot_product(&queenside_pawns.perspective(color))
         })
     }
 

@@ -86,6 +86,7 @@ impl Board {
             None,
         ]
     };
+
     pub const fn occupant_piece(&self, square: Square) -> Option<Piece> {
         use crate::piece::Piece::*;
 
@@ -400,6 +401,18 @@ impl Board {
     pub fn squares_attacking_defending(&self, square: Square) -> Bitboard {
         // None means both colors.
         self._squares_attacking_defending(None, square)
+    }
+
+    pub fn effective_king_side(self, color: &Color) -> Bitboard {
+        use crate::bitboard::{KINGSIDE, QUEENSIDE};
+
+        let king = self.get(color, &Piece::King);
+
+        if king.intersects(KINGSIDE) {
+            KINGSIDE
+        } else {
+            QUEENSIDE
+        }
     }
 
     #[inline(always)]
