@@ -324,6 +324,7 @@ impl ThreadData {
                                 None,
                             ));
                         }
+                        debug_assert!(commands.is_empty(), "Moves exhausted but queue not empty!");
                         continue;
                     }
                     command => command.ply().unwrap(),

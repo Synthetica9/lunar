@@ -139,11 +139,11 @@ pub enum CaptureValue {
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug)]
 pub enum SearchCommand {
     // Should be searched _last_
+    MovesExhausted,
     DeferredMove {
         index: Reverse<usize>,
         ply: Ply,
     },
-    MovesExhausted,
     LosingCapture {
         value: CaptureValue,
         ply: Ply,
