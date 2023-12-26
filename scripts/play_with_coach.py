@@ -40,7 +40,6 @@ def do_practice():
             each={"tc": GAME_TC},
             games=N_GAMES,
             sample={"decay": 0.02, "resolve": True, "file": f.name},
-            concurrency=2,
         )
 
         res = [(fen, int(cp)) for (fen, cp, _) in csv.reader(f)]
@@ -97,7 +96,6 @@ def play_examples(example_positions):
             each={"tc": GAME_TC},
             games=len(example_positions),
             sample={"decay": 0.02, "resolve": True, "file": f.name},
-            concurrency=2,
             output=True,
         )
 

@@ -6,5 +6,4 @@
   -repeat \
   -sample decay=.02 resolve=y file=test.csv \
   -games 400 \
-  -concurrency 2 \
-  -openings file=./test_data/blitz_openings.fen order=random
+  -openings file=./test_data/blitz_openings.fen

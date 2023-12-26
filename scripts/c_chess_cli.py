@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
+from multiprocessing import cpu_count
 
 SELF = Path(__file__)
 TARGET_DIR = SELF.parent.parent / "target"
@@ -28,10 +29,14 @@ def setup_chess_cli():
         print("Done compiling", file=sys.stderr)
 
 
-def to_args(kwargs):
-    yield str(OUT_FILE)
+def default_kwargs():
+    return {"concurrency": cpu_count()}
 
-    engines = kwargs.pop("engines")
+
+def to_args(kwargs):
+    # yield str(OUT_FILE)
+
+    engines = kwargs.pop("engines", [])
 
     it = list(kwargs.items())
 
@@ -54,15 +59,18 @@ def to_args(kwargs):
             yield str(v)
 
 
-def c_chess_cli(output=False, **kwargs):
+def c_chess_cli(output=False, defaults=True, **kwargs):
     setup_chess_cli()
 
-    args = list(to_args(kwargs))
+    if defaults:
+        kwargs = {**default_kwargs(), **kwargs}
 
-    subprocess.check_call(args, stderr=subprocess.DEVNULL)
+    call = [str(OUT_FILE), *to_args(kwargs)]
+
+    subprocess.check_call(call, stderr=subprocess.DEVNULL)
 
 
 if __name__ == "__main__":
     setup_chess_cli()
-    status = subprocess.call([str(OUT_FILE), *sys.argv[1:]])
+    status = subprocess.call([str(OUT_FILE), *to_args(default_kwargs()), *sys.argv[1:]])
     sys.exit(status)
