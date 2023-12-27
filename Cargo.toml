@@ -33,7 +33,7 @@ opt-level = 3
 strum = "0.25"
 strum_macros = "0.25"
 crossbeam-channel = "0.5"
-smallvec = "1.10"
+smallvec = { version = "1.11", features = [ "union" ] }
 static_assertions = "1.1"
 no-panic = "0.1"
 parameters = { path = "./parameters" }
