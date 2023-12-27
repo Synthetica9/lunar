@@ -9,7 +9,6 @@ use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::Ply;
 
-#[inline(always)]
 fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns {
     // @first specifies whether to immediately quit after finding a plausible advantage.
     let board = game.board();

@@ -266,10 +266,6 @@ pub trait ApplyPly {
         }
     }
 
-    // Always inline because
-    // a. this is a hot path
-    // b. the calling function will be very small
-    #[inline(always)]
     fn _apply_ply(&mut self, game: &Game, ply: &Ply) {
         // ToDo: should probably return an error type
         use Piece::*;

@@ -172,7 +172,6 @@ impl Game {
     }
 
     // Pseudo-legal moves
-    #[inline(always)]
     fn _step_moves_for(
         &self,
         plyset: &mut PlySet,
@@ -342,7 +341,6 @@ impl Game {
         }
     }
 
-    #[inline(always)]
     fn _magic_moves(&self, plyset: &mut PlySet, piece: Piece, capture_policy: CapturePolicy) {
         let friends = self.board.get_color(&self.to_move);
         let enemies = self.board.get_color(&self.to_move.other());
@@ -738,7 +736,6 @@ impl Default for Game {
 }
 
 impl ApplyPly for Game {
-    #[inline]
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
         self.board.toggle_piece(color, piece, square);
         self.hash.toggle_piece(color, piece, square);

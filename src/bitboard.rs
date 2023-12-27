@@ -71,7 +71,6 @@ impl Bitboard {
         }
     }
 
-    #[inline]
     pub fn iter_squares(self) -> BitboardSquareIter {
         // TODO: should probably be named iter (current iter should be iter_values or smth.)
         BitboardSquareIter(self)
@@ -239,7 +238,6 @@ impl Bitboard {
         covered.shift_unguarded(direction)
     }
 
-    #[inline]
     pub const fn fill(self, direction: Direction) -> Bitboard {
         let mut val = self;
 
@@ -250,7 +248,6 @@ impl Bitboard {
         val
     }
 
-    #[inline]
     pub const fn gather(self, direction: Direction) -> Bitboard {
         use crate::direction::directions::*;
 
