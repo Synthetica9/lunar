@@ -36,13 +36,17 @@ impl UCIState {
         }
     }
 
+    pub fn info(&self, message: &str) {
+        println!("info string {message}")
+    }
+
     pub fn log(&mut self, message: &str) {
         match &mut self.log_file {
             Some(ref mut file) => writeln!(file, "{message}").unwrap(),
             None => {}
         }
         if self.debug {
-            println!("info string {message}");
+            self.info(message);
         }
     }
 
@@ -62,7 +66,7 @@ impl UCIState {
         self.log(&format!("Starting {NAME} v{VERSION}"));
 
         #[cfg(debug_assertions)]
-        self.log("Warning. This is a debug build. 10x slower than release build.");
+        self.info("Warning. This is a debug build. 10x slower than release build.");
 
         loop {
             use crossbeam_channel::RecvTimeoutError::*;
@@ -71,7 +75,7 @@ impl UCIState {
                     let line = line.trim().to_string();
                     match self.interpret(&line) {
                         Ok(()) => {}
-                        Err(msg) => self.log(&msg),
+                        Err(msg) => self.info(&msg),
                     };
                 }
                 // No data available, this is fine.
@@ -146,7 +150,7 @@ impl UCIState {
 
                 let value = value.trim();
 
-                self.log(&format!("Setting option {name} to {value}"));
+                self.info(&format!("Setting option {name} to {value}"));
                 self.set_option(name, value)?;
             }
             "position" => {
