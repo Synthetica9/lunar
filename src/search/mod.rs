@@ -691,6 +691,11 @@ impl SearchThreadPool {
             ..
         } = &self.state
         {
+            if *best_depth >= 100 {
+                // If we are this deep, we probably just found a forced end. Let's just return.
+                return true;
+            };
+
             use TimePolicy::*;
             match time_policy {
                 Depth(depth) => best_depth >= depth,
