@@ -415,7 +415,6 @@ impl Board {
         }
     }
 
-    #[inline(always)]
     fn _squares_attacking_defending(&self, color: Option<&Color>, square: Square) -> Bitboard {
         // Color is the color doing the attacking.
         let occupied = self.get_occupied();

@@ -6,6 +6,7 @@ use crate::bitboard_map;
 use crate::bitboard_map::BitboardMap;
 use crate::board::Board;
 use crate::castlerights::CastleRights;
+use crate::legality::LegalityChecker;
 
 use crate::piece::Piece;
 use crate::ply::{ApplyPly, Ply, SpecialFlag, UndoPly, _combination_moves};
@@ -424,11 +425,7 @@ impl Game {
     }
 
     pub fn is_legal(&self, ply: &Ply) -> bool {
-        // TODO: we know which piece is moving. Therefore, we can check
-        // only that piece.
-        // therefore, use filter-legal
-        let legal_moves = self.legal_moves();
-        legal_moves.contains(ply)
+        self.is_pseudo_legal(ply) && LegalityChecker::new(self).is_legal(ply, self)
     }
 
     pub fn is_pseudo_legal(&self, ply: &Ply) -> bool {
@@ -437,7 +434,6 @@ impl Game {
     }
 
     pub fn legal_moves(&self) -> Vec<Ply> {
-        use crate::legality::LegalityChecker;
         let legality_checker = LegalityChecker::new(self);
         self.pseudo_legal_moves()
             .iter()
@@ -447,7 +443,6 @@ impl Game {
     }
 
     pub fn quiescence_moves(&self) -> Vec<Ply> {
-        use crate::legality::LegalityChecker;
         let legality_checker = LegalityChecker::new(self);
         self.quiescence_pseudo_legal_moves()
             .iter()
@@ -524,22 +519,46 @@ impl Game {
     pub fn is_check(&self, ply: &Ply) -> bool {
         debug_assert!(self.is_pseudo_legal(ply));
 
+        use Piece::*;
+
+        // Common data for both:
+        let occupied = self.board.get_occupied();
+        let occupied_after = occupied ^ Bitboard::from_squares(&[ply.src(), ply.dst()]);
+        let other_color = self.to_move.other();
+        let other_king_square = self.board.king_square(&other_color);
+
+        // Direct checks:
         let final_piece = if let Some(SpecialFlag::Promotion(p)) = ply.flag() {
             p
         } else {
             ply.moved_piece(self)
         };
-        let occupied = self.board.get_occupied();
-        let occupied_after = occupied & !Bitboard::from_squares(&[ply.src(), ply.dst()]);
-        let other_king_square = self.board.king_square(&self.to_move.other());
 
         let attacks = Bitboard::piece_attacks_from_with_occupancy(
             &final_piece,
             ply.dst(),
-            &self.to_move(),
+            &self.to_move,
             occupied_after,
         );
-        let res = attacks.get(other_king_square);
+
+        let mut res = attacks.get(other_king_square);
+
+        // Discovered checks:
+        if !res {
+            let friendly_pieces = self.board.get_color(&self.to_move);
+            let queens = self.board.get_piece(&Queen);
+            for piece in [Bishop, Rook] {
+                let attacks = Bitboard::piece_attacks_from_with_occupancy(
+                    &piece,
+                    other_king_square,
+                    &self.to_move,
+                    occupied_after,
+                );
+                let relevant_friendly_pieces =
+                    friendly_pieces & (self.board.get_piece(&piece) | queens);
+                res |= !(attacks & relevant_friendly_pieces).is_empty();
+            }
+        }
 
         #[cfg(debug_assertions)]
         {
@@ -550,7 +569,7 @@ impl Game {
                 res,
                 cpy.is_in_check(),
                 "Inconsistent check... {ply:?}\n{fen}\n{}",
-                attacks.simple_render()
+                occupied_after.simple_render()
             );
         }
 
@@ -800,6 +819,8 @@ impl ApplyPly for Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use Square::*;
+
     #[test]
     fn test_from_to_fen() {
         use crate::piece::Piece;
@@ -1078,6 +1099,18 @@ mod tests {
         5,
         82709
     );
+
+    #[test]
+    fn test_blocked_check() {
+        let game = Game::from_fen("3k4/8/8/8/3P4/8/8/3QK3 w - - 0 4").unwrap();
+        assert!(!game.is_check(&Ply::simple(D4, D5)));
+    }
+
+    #[test]
+    fn test_discovered_check() {
+        let game = Game::from_fen("3k4/8/8/8/8/3B4/8/3QK3 w - - 4 7").unwrap();
+        assert!(game.is_check(&Ply::simple(D3, F1)));
+    }
 
     illegal_move_test!(
         test_illegal_castle_through_check,
