@@ -4,6 +4,7 @@
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
+use std::thread::Thread;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -33,6 +34,7 @@ enum ThreadCommand {
     SearchThis(History),
 }
 
+#[derive(Copy, Clone, Debug)]
 enum ThreadStatus {
     StatusUpdate {
         nodes_searched: usize,
@@ -43,6 +45,8 @@ enum ThreadStatus {
         best_move: Option<Ply>,
         depth: usize,
     },
+    Idle,
+    Quitting,
 }
 
 #[derive(Clone)]
@@ -51,7 +55,11 @@ enum PoolState {
     Searching {
         history: History,
         time_policy: TimePolicy,
-        start_time: Instant,
+
+        // These two are semi-independent in case of ponder:
+        start_time: Instant,               // How long we've been searching
+        clock_start_time: Option<Instant>, // The moment our clock actually started running
+
         is_pondering: bool,
 
         score: Millipawns,
@@ -62,6 +70,8 @@ enum PoolState {
         nodes_searched: usize,
         quiescence_nodes_searched: usize,
     },
+    Stopping,
+    Quitting,
 }
 
 pub struct SearchThreadPool {
@@ -69,6 +79,7 @@ pub struct SearchThreadPool {
         JoinHandle<()>,
         channel::Sender<ThreadCommand>,
         channel::Receiver<ThreadStatus>,
+        bool,
     )>,
     transposition_table: Arc<TranspositionTable>,
     ponder: bool,
@@ -98,34 +109,55 @@ impl ThreadData {
     fn run(&mut self) {
         loop {
             let command = match self.searching {
-                true => self.search(),
-                false => self.command_channel.recv().unwrap(),
+                true => Some(self.search()),
+                false => self
+                    .command_channel
+                    .recv_timeout(Duration::from_millis(1000))
+                    .ok(),
             };
 
             use ThreadCommand::*;
-            match command {
-                Quit => return,
-                StopSearch => {
-                    self.searching = false;
-                }
-                SearchThis(new_history) => {
-                    self.history = new_history;
-                    self.searching = true;
-                }
-            };
+            if let Some(command) = command {
+                match command {
+                    Quit => {
+                        self.status_channel
+                            .send(ThreadStatus::Quitting)
+                            .expect("Error sending quit message");
+                        return;
+                    }
+                    StopSearch => {
+                        // Send last node counts
+                        self.send_status_update();
+                        self.searching = false;
+                        // Send idle message:
+                        self.send_status_update();
+                    }
+                    SearchThis(new_history) => {
+                        self.history = new_history;
+                        self.searching = true;
+                    }
+                };
+            } else {
+                self.send_status_update();
+            }
         }
     }
 
     fn send_status_update(&mut self) {
-        self.status_channel
-            .send(ThreadStatus::StatusUpdate {
+        let msg = if self.searching {
+            let msg = ThreadStatus::StatusUpdate {
                 nodes_searched: self.nodes_searched,
                 quiescence_nodes_searched: self.quiescence_nodes_searched,
-            })
-            .unwrap();
-
-        self.nodes_searched = 0;
-        self.quiescence_nodes_searched = 0;
+            };
+            self.nodes_searched = 0;
+            self.quiescence_nodes_searched = 0;
+            msg
+        } else {
+            ThreadStatus::Idle
+        };
+        self.status_channel
+            .send(msg)
+            .expect("Error sending status update");
     }
 
     fn communicate(&mut self) -> Result<(), ThreadCommand> {
@@ -535,7 +567,7 @@ impl SearchThreadPool {
                 };
                 runner.run();
             });
-            threads.push((thread, command_s, status_r));
+            threads.push((thread, command_s, status_r, false));
         }
 
         SearchThreadPool {
@@ -551,20 +583,15 @@ impl SearchThreadPool {
         // https://stackoverflow.com/a/68978386
         self.broadcast(&ThreadCommand::Quit).unwrap();
         while !self.threads.is_empty() {
-            let (cur_thread, _, _) = self.threads.remove(0);
+            let (cur_thread, _, _, _) = self.threads.remove(0);
             cur_thread.join().expect("Unable to kill thread");
         }
     }
 
-    pub fn start_search(&mut self, history: &History, time_policy: TimePolicy) {
+    pub fn start_search(&mut self, history: &History, time_policy: TimePolicy, is_pondering: bool) {
+        let now = Instant::now();
+        let clock_start_time = (!is_pondering).then_some(now);
         let game = history.game();
-        let legal_moves = game.legal_moves();
-        if legal_moves.len() == 1 {
-            // One legal move. Just emit that legal move and be done with it.
-            let ply = legal_moves[0].long_name();
-            println!("bestmove {ply}");
-            return;
-        }
 
         self.transposition_table.inc_age();
 
@@ -573,8 +600,10 @@ impl SearchThreadPool {
 
         self.state = PoolState::Searching {
             history: history.clone(),
-            start_time: Instant::now(),
-            is_pondering: false,
+            start_time: now,
+            clock_start_time,
+
+            is_pondering,
             time_policy,
 
             best_move: None,
@@ -587,9 +616,54 @@ impl SearchThreadPool {
         };
     }
 
+    pub fn ponderhit(&mut self) -> bool {
+        if let PoolState::Searching {
+            ref mut clock_start_time,
+            ref mut is_pondering,
+            ..
+        } = self.state
+        {
+            if !*is_pondering {
+                return false;
+            }
+
+            *clock_start_time = Some(Instant::now());
+            *is_pondering = false;
+
+            return true;
+        }
+        return false;
+    }
+
     pub fn stop(&mut self) {
         self.broadcast(&ThreadCommand::StopSearch).unwrap();
-        self.state = PoolState::Idle;
+        self.state = PoolState::Stopping;
+    }
+
+    pub fn stopped(&self) -> bool {
+        self.threads.iter().all(|(_, _, _, searching)| !searching)
+    }
+
+    pub fn wait_ready(&mut self) {
+        use PoolState::*;
+        self.wait_channels_empty();
+
+        match self.state {
+            Stopping => {
+                // We want to wait until we have received a message from each thread that they are
+                // actually idle.
+                while !self.stopped() {
+                    self.communicate()
+                }
+                self.state = PoolState::Idle;
+            }
+            Quitting => {
+                self.kill();
+            }
+            _ => {
+                // Nothing to do!
+            }
+        }
     }
 
     fn update_pv(&mut self) {
@@ -614,8 +688,23 @@ impl SearchThreadPool {
     pub fn communicate(&mut self) {
         self.update_pv();
 
-        for (_, _, status_r) in &self.threads {
+        for (_, _, status_r, searching) in self.threads.iter_mut() {
             while let Ok(status) = status_r.try_recv() {
+                match status {
+                    ThreadStatus::StatusUpdate { .. } => {
+                        *searching = true;
+                    }
+
+                    ThreadStatus::Idle => {
+                        *searching = false;
+                    }
+
+                    ThreadStatus::Quitting => {
+                        self.state = PoolState::Quitting;
+                    }
+
+                    _ => {}
+                }
                 if let PoolState::Searching {
                     ref mut best_depth,
                     ref mut score,
@@ -645,6 +734,7 @@ impl SearchThreadPool {
                                 *old_best_move = best_move;
                                 *old_best_depth = depth;
                             }
+                            // *searching = false;
                         }
 
                         ThreadStatus::StatusUpdate {
@@ -653,7 +743,10 @@ impl SearchThreadPool {
                         } => {
                             *old_nodes_searched += nodes_searched + quiescence_nodes_searched;
                             *old_quiescence_nodes_searched += quiescence_nodes_searched;
+                            *searching = true;
                         }
+
+                        _ => {}
                     }
                 }
             }
@@ -661,7 +754,7 @@ impl SearchThreadPool {
     }
 
     fn broadcast(&self, command: &ThreadCommand) -> Result<(), channel::SendError<ThreadCommand>> {
-        for (_, s, _) in self.threads.iter() {
+        for (_, s, _, _) in self.threads.iter() {
             s.send(command.clone())?;
         }
         Ok(())
@@ -691,11 +784,6 @@ impl SearchThreadPool {
             ..
         } = &self.state
         {
-            if *best_depth >= 100 {
-                // If we are this deep, we probably just found a forced end. Let's just return.
-                return true;
-            };
-
             use TimePolicy::*;
             match time_policy {
                 Depth(depth) => best_depth >= depth,
@@ -715,9 +803,16 @@ impl SearchThreadPool {
                     // TODO: more accurate time management
                     // (things like waiting longer when the opponent has less time,
                     //  when the evaluation swings wildly, pv keeps changing, etc.)
-                    use crate::basic_enums::Color::*;
 
                     let game = history.game();
+                    use crate::basic_enums::Color::*;
+
+                    if *best_depth >= 100 || game.legal_moves().len() == 1 {
+                        // If we are this deep, we probably just found a forced end. Let's just return.
+                        // Alternatively, if we are in a forced move we can still ponder. But directly
+                        // as soon as time starts to be a factor, we want to return.
+                        return true;
+                    };
 
                     let elapsed = start_time.elapsed();
                     let (time, inc) = match game.to_move() {
@@ -778,18 +873,16 @@ impl SearchThreadPool {
         }
     }
 
-    pub fn maybe_end_search(&mut self) -> Option<String> {
-        // For borrow checker reasons
-        let policy_finished = self.time_policy_finished();
-        let mut next_state = self.state.clone();
-
-        let mut do_stop = false;
+    pub fn maybe_end_search(&mut self, force: bool) -> Option<String> {
         let res = match &self.state {
-            PoolState::Idle => None,
             PoolState::Searching {
-                best_move, history, ..
+                best_move,
+                history,
+                pv,
+                is_pondering,
+                ..
             } => {
-                if policy_finished {
+                if force || (!is_pondering && self.time_policy_finished()) {
                     let best_move = match best_move {
                         Some(m) => *m,
                         None => {
@@ -798,40 +891,28 @@ impl SearchThreadPool {
                             game.legal_moves()[0]
                         }
                     };
-                    if self.ponder {
-                        let mut cpy = history.clone();
-                        cpy.push(&best_move);
-                        self.start_search(&cpy, TimePolicy::Infinite);
-                        if let PoolState::Searching {
-                            ref mut is_pondering,
-                            ..
-                        } = next_state
-                        {
-                            *is_pondering = true;
-                        } else {
-                            unreachable!()
-                        }
+
+                    let ponder = if let Some(ponder_move) =
+                        pv.get(0).filter(|ply| best_move == **ply).and(pv.get(1))
+                    {
+                        format!("ponder {}", ponder_move.long_name())
                     } else {
-                        do_stop = true;
-                        next_state = PoolState::Idle;
-                    }
-                    Some(format!("bestmove {}", best_move.long_name()))
+                        "".to_string()
+                    };
+                    self.stop();
+                    Some(format!("bestmove {} {ponder}", best_move.long_name()))
                 } else {
                     None
                 }
             }
+            _ => None,
         };
 
-        if do_stop {
-            self.stop();
-        }
-
-        self.state = next_state;
         res
     }
 
     pub(crate) fn wait_channels_empty(&self) {
-        for (_, s, _) in &self.threads {
+        for (_, s, _, _) in &self.threads {
             while !s.is_empty() {
                 // Should we sleep for a few microseconds or something?
             }

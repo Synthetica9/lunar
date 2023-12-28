@@ -95,15 +95,15 @@ impl UCIState {
         self.search_thread_pool.communicate();
         if self.search_thread_pool.is_searching() {
             self.send(&self.search_thread_pool.info_string());
-            self.log(&self.pv_string());
-            if let Some(result) = self.search_thread_pool.maybe_end_search() {
+            // self.log(&self.pv_string());
+            if let Some(result) = self.search_thread_pool.maybe_end_search(false) {
                 self.send(&result);
             }
         }
     }
 
     pub fn interpret(&mut self, command: &str) -> Result<(), String> {
-        // self.log(&format!("> {command}"));
+        self.log(&format!("> {command}"));
         let mut parts = command.split_whitespace();
         let command = parts.next().ok_or("No command")?;
         match command {
@@ -117,7 +117,7 @@ impl UCIState {
             "isready" => {
                 // std::thread::sleep(Duration::from_millis(50));
                 self.manage_thread_pool();
-                self.search_thread_pool.wait_channels_empty();
+                self.search_thread_pool.wait_ready();
                 self.send("readyok");
             }
             "ucinewgame" => {
@@ -194,8 +194,12 @@ impl UCIState {
             "go" => {
                 use TimePolicy::*;
                 let mut time_policy = TimePolicy::Infinite;
+                let mut is_pondering = false;
                 while let Some(part) = parts.next() {
                     match part {
+                        "ponder" => {
+                            is_pondering = true;
+                        }
                         "depth" => {
                             let depth = parts
                                 .next()
@@ -252,9 +256,16 @@ impl UCIState {
                         }
                     };
                 }
-                println!("Time policy: {time_policy:?}");
+                self.info(format!("Time policy: {time_policy:?}").as_str());
                 self.search_thread_pool
-                    .start_search(&self.history, time_policy);
+                    .start_search(&self.history, time_policy, is_pondering);
+            }
+            "ponderhit" => {
+                let success = self.search_thread_pool.ponderhit();
+
+                if !success {
+                    self.info("Ponderhit sent but no ponder in progress?")
+                }
             }
             "d" => {
                 let game = self.history.game();
@@ -268,6 +279,9 @@ impl UCIState {
                 self.transposition_table.print_cache_stats();
             }
             "stop" => {
+                if let Some(msg) = self.search_thread_pool.maybe_end_search(true) {
+                    self.send(&msg);
+                };
                 self.search_thread_pool.stop();
             }
             "quit" => {
