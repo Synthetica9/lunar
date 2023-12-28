@@ -246,51 +246,52 @@ impl TranspositionTable {
         }
     }
 
-    pub fn principle_variation(&self, game: &Game) -> Vec<Ply> {
-        let mut game = game.clone();
-        let mut hashes_seen = Vec::new();
-        let mut res = Vec::new();
-        loop {
-            let hash = game.hash();
-            if let Some(tte) = &self.get(hash) {
-                if let Some(ply) = tte.best_move.wrap_null() {
-                    res.push(ply);
-                    let is_repetition = hashes_seen.contains(&hash);
-                    if !is_repetition {
-                        game.apply_ply(&ply);
-                        hashes_seen.push(hash);
-                        continue;
-                    }
-                }
-            }
-            return res;
-        }
-    }
-
     pub fn update_pv(&self, game: &Game, old_pv: &[Ply]) -> Vec<Ply> {
         let mut game = game.clone();
         let mut res = Vec::new();
-        let _old_pv_relevant = true;
+        let mut hashes_seen = Vec::new();
+
+        let mut push = |ply, game: &mut Game| {
+            let is_legal = game.is_legal(&ply);
+            let next_hash = game.hash_after_ply(&ply);
+            let is_repetition = hashes_seen.contains(&next_hash);
+
+            if is_legal && !is_repetition {
+                res.push(ply);
+                game.apply_ply(&ply);
+                hashes_seen.push(next_hash);
+                true
+            } else {
+                false
+            }
+        };
 
         for entry in old_pv.iter() {
-            let from_tt = self.get(game.hash());
-
-            let next = match from_tt {
-                Some(tte) => tte.best_move.wrap_null().filter(|&ply| ply == *entry),
+            let next = match self.get(game.hash()).and_then(|x| x.best_move.wrap_null()) {
+                Some(ply_from_tt) => {
+                    if ply_from_tt == *entry {
+                        Some(*entry)
+                    } else {
+                        None
+                    }
+                }
                 None => Some(*entry),
             };
 
-            match next {
-                Some(ply) => {
-                    res.push(ply);
-                    game.apply_ply(&ply);
-                }
-                None => {
-                    break;
-                }
+            if !next.is_some_and(|ply| push(ply, &mut game)) {
+                break;
             }
         }
-        res.extend(self.principle_variation(&game));
+
+        loop {
+            if !self
+                .get(game.hash())
+                .and_then(|tte| tte.best_move.wrap_null())
+                .is_some_and(|ply| push(ply, &mut game))
+            {
+                break;
+            }
+        }
         res
     }
 
