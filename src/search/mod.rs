@@ -78,7 +78,8 @@ pub struct SearchThreadPool {
 
 // TODO: does this struct need to exist?
 struct ThreadData {
-    history: Option<History>,
+    searching: bool,
+    history: History,
 
     command_channel: channel::Receiver<ThreadCommand>,
     status_channel: channel::Sender<ThreadStatus>,
@@ -96,19 +97,20 @@ struct ThreadData {
 impl ThreadData {
     fn run(&mut self) {
         loop {
-            let command = match self.history {
-                Some(_) => self.search(),
-                None => self.command_channel.recv().unwrap(),
+            let command = match self.searching {
+                true => self.search(),
+                false => self.command_channel.recv().unwrap(),
             };
 
             use ThreadCommand::*;
             match command {
                 Quit => return,
                 StopSearch => {
-                    self.history = None;
+                    self.searching = false;
                 }
                 SearchThis(new_history) => {
-                    self.history = Some(new_history);
+                    self.history = new_history;
+                    self.searching = true;
                 }
             };
         }
@@ -168,7 +170,11 @@ impl ThreadData {
         // base_eval is cheap, and we divide it by 500. This gives us 2mp/pawn,
         // 6mp/knight, etc. This in concert makes it so we'd rather make our
         // opponent take the draw than lose material, but still keep both in mind.
-        DRAW + ONE_MP + crate::eval::base_eval(self.history.as_ref().unwrap().last()) / 500
+        DRAW + ONE_MP + crate::eval::base_eval(self.game()) / 500
+    }
+
+    fn game(&self) -> &'_ Game {
+        self.history.game()
     }
 
     fn alpha_beta_search(
@@ -182,8 +188,6 @@ impl ThreadData {
         use crate::transposition_table::TranspositionEntryType::*;
         use move_order::*;
 
-        let game = *self.history.as_ref().unwrap().last();
-
         // Must be only incremented here because it is also used to initiate
         // communication.
         self.nodes_searched += 1;
@@ -193,9 +197,9 @@ impl ThreadData {
             self.communicate()?;
         }
 
-        if game.half_move() >= 100
-            || self.history.as_ref().unwrap().repetition_count_at_least_3()
-            || game.board().is_insufficient_to_force_mate()
+        if self.game().half_move() >= 100
+            || self.history.repetition_count_at_least_3()
+            || self.game().board().is_insufficient_to_force_mate()
         {
             return Ok((self.draw_value(), None));
         }
@@ -204,12 +208,9 @@ impl ThreadData {
         let mut alpha = alpha;
         let mut beta = beta;
 
-        let from_tt = self.transposition_table.get(game.hash());
+        let from_tt = self.transposition_table.get(self.game().hash());
         if let Some(tte) = from_tt {
-            if depth <= tte.depth as usize
-                && !self.history.as_ref().unwrap().may_be_repetition()
-                && !is_pv
-            {
+            if depth <= tte.depth as usize && !self.history.may_be_repetition() && !is_pv {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
@@ -230,10 +231,10 @@ impl ThreadData {
         let mut value = Millipawns(i32::MIN);
 
         if depth == 0 {
-            if game.is_in_check() {
+            if self.game().is_in_check() {
                 (value, best_move) = self.alpha_beta_search(alpha, beta, 1, is_pv)?
             } else {
-                value = self.quiescence_search(&game, alpha, beta)
+                value = self.quiescence_search(alpha, beta)
             };
         } else {
             best_move = if is_pv && depth > 5 {
@@ -243,7 +244,7 @@ impl ThreadData {
                 from_tt.and_then(|x| x.best_move())
             };
 
-            let legality_checker = { crate::legality::LegalityChecker::new(&game) };
+            let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
 
             let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
             let mut i = 0;
@@ -262,12 +263,12 @@ impl ThreadData {
                         }
                     }
                     GenQuiescenceMoves => {
-                        for ply in game.quiescence_pseudo_legal_moves() {
+                        for ply in self.game().quiescence_pseudo_legal_moves() {
                             // TODO: hashable plies
-                            let after_hash = game.hash_after_ply(&ply);
+                            let after_hash = self.game().hash_after_ply(&ply);
                             let tte = self.transposition_table.get(after_hash);
 
-                            let see = static_exchange_evaluation(&game, ply);
+                            let see = static_exchange_evaluation(self.game(), ply);
                             let value = if let Some(tte) = tte {
                                 // TODO: upper/lower bound?
                                 // TODO: merge these?
@@ -290,10 +291,10 @@ impl ThreadData {
                         continue;
                     }
                     GenKillerMoves => {
-                        let move_total = game.half_move_total() as usize;
+                        let move_total = self.game().half_move_total() as usize;
                         if let Some(killer_moves) = self.killer_moves.get(move_total) {
                             for ply in killer_moves.iter().flatten() {
-                                if game.is_pseudo_legal(ply) {
+                                if self.game().is_pseudo_legal(ply) {
                                     commands.push(KillerMove { ply: *ply });
                                 }
                             }
@@ -301,10 +302,12 @@ impl ThreadData {
                         continue;
                     }
                     GenQuietMoves => {
-                        for ply in game.quiet_pseudo_legal_moves() {
-                            let tte = self.transposition_table.get(game.hash_after_ply(&ply));
+                        for ply in self.game().quiet_pseudo_legal_moves() {
+                            let tte = self
+                                .transposition_table
+                                .get(self.game().hash_after_ply(&ply));
                             let value = tte.map_or(LOSS, |tte| tte.value);
-                            let is_check = game.is_check(&ply);
+                            let is_check = self.game().is_check(&ply);
                             commands.push(QuietMove {
                                 ply,
                                 value,
@@ -316,7 +319,7 @@ impl ThreadData {
                     MovesExhausted => {
                         if !any_moves_seen {
                             return Ok((
-                                if game.is_in_check() {
+                                if self.game().is_in_check() {
                                     LOSS
                                 } else {
                                     self.draw_value()
@@ -331,13 +334,14 @@ impl ThreadData {
                 };
 
                 debug_assert!(
-                    game.is_pseudo_legal(&ply),
-                    "{command:?} generated illegal move {ply:?} in {game:?} (depth {depth})"
+                    self.game().is_pseudo_legal(&ply),
+                    "{command:?} generated illegal move {ply:?} in {:?} (depth {depth})",
+                    self.game(),
                 );
 
                 // TODO: don't re-search hash and killer moves
                 // Deferred moves have already been checked for legality.
-                if !is_deferred && !legality_checker.is_legal(&ply) {
+                if !is_deferred && !legality_checker.is_legal(&ply, self.game()) {
                     continue;
                 }
 
@@ -345,14 +349,15 @@ impl ThreadData {
 
                 let is_first_move = i == 0;
 
-                self.history.as_mut().unwrap().push(&ply);
-                let next_game: Game = *self.history.as_ref().unwrap().last();
+                self.history.push(&ply);
 
                 let x = if is_first_move {
                     best_move = Some(ply);
                     -self.alpha_beta_search(-beta, -alpha, depth - 1, is_pv)?.0
                 } else if !is_deferred
-                    && self.currently_searching.defer_move(next_game.hash(), depth)
+                    && self
+                        .currently_searching
+                        .defer_move(self.game().hash(), depth)
                 {
                     commands.push(DeferredMove {
                         ply,
@@ -369,7 +374,7 @@ impl ThreadData {
 
                     if !is_deferred {
                         self.currently_searching
-                            .starting_search(next_game.hash(), next_depth);
+                            .starting_search(self.game().hash(), next_depth);
                     }
 
                     // Null-window search
@@ -383,13 +388,13 @@ impl ThreadData {
 
                     if !is_deferred {
                         self.currently_searching
-                            .finished_search(next_game.hash(), next_depth);
+                            .finished_search(self.game().hash(), next_depth);
                     }
 
                     x
                 };
 
-                self.history.as_mut().unwrap().pop();
+                self.history.pop();
 
                 value = value.max(x);
                 if value > alpha {
@@ -398,8 +403,8 @@ impl ThreadData {
                 }
 
                 if alpha >= beta {
-                    if !ply.is_capture(&game) {
-                        self.insert_killer_move(ply, game.half_move_total() as usize);
+                    if !ply.is_capture(self.game()) {
+                        self.insert_killer_move(ply, self.game().half_move_total() as usize);
                     }
                     break;
                 }
@@ -426,20 +431,15 @@ impl ThreadData {
             value_type,
             self.transposition_table.age(),
         );
-        self.transposition_table.put(game.hash(), tte);
+        self.transposition_table.put(self.game().hash(), tte);
 
         Ok((value, best_move))
     }
 
-    fn quiescence_search(
-        &mut self,
-        game: &Game,
-        alpha: Millipawns,
-        beta: Millipawns,
-    ) -> Millipawns {
+    fn quiescence_search(&mut self, alpha: Millipawns, beta: Millipawns) -> Millipawns {
         self.quiescence_nodes_searched += 1;
 
-        let stand_pat = crate::eval::evaluation(game);
+        let stand_pat = crate::eval::evaluation(self.game());
 
         if stand_pat >= beta {
             return beta;
@@ -454,27 +454,26 @@ impl ThreadData {
             use smallvec::SmallVec;
             use std::cmp::Reverse;
 
-            let res = game.quiescence_pseudo_legal_moves();
+            let res = self.game().quiescence_pseudo_legal_moves();
             let mut res: SmallVec<[_; 32]> = res
                 .iter()
-                .map(|x| (*x, move_order::static_exchange_evaluation(game, *x)))
+                .map(|x| (*x, move_order::static_exchange_evaluation(self.game(), *x)))
                 .filter(|x| x.1 >= crate::millipawns::DRAW)
                 .collect();
             res.sort_unstable_by_key(|x| Reverse(x.1));
             res
         };
 
-        let legality_checker = crate::legality::LegalityChecker::new(game);
+        let legality_checker = crate::legality::LegalityChecker::new(self.game());
 
         for (ply, _millipawns) in candidates {
-            if !legality_checker.is_legal(&ply) {
+            if !legality_checker.is_legal(&ply, self.game()) {
                 continue;
             }
 
-            let mut cpy = *game;
-            cpy.apply_ply(&ply);
-
-            let score = -self.quiescence_search(&cpy, -beta, -alpha);
+            self.history.push(&ply);
+            let score = -self.quiescence_search(-beta, -alpha);
+            self.history.pop();
 
             if score >= beta {
                 return beta;
@@ -521,7 +520,8 @@ impl SearchThreadPool {
 
             let thread = thread::spawn(move || {
                 let mut runner = ThreadData {
-                    history: None::<History>,
+                    searching: false,
+                    history: History::new(&Game::new()),
 
                     command_channel: command_r,
                     status_channel: status_s,
@@ -557,7 +557,7 @@ impl SearchThreadPool {
     }
 
     pub fn start_search(&mut self, history: &History, time_policy: TimePolicy) {
-        let game = *history.last();
+        let game = history.game();
         let legal_moves = game.legal_moves();
         if legal_moves.len() == 1 {
             // One legal move. Just emit that legal move and be done with it.
@@ -606,8 +606,8 @@ impl SearchThreadPool {
                 pv.clone()
             };
 
-            let game = *history.last();
-            *pv = self.transposition_table.update_pv(&game, &old);
+            let game = history.game();
+            *pv = self.transposition_table.update_pv(game, &old);
         }
     }
 
@@ -717,7 +717,7 @@ impl SearchThreadPool {
                     //  when the evaluation swings wildly, pv keeps changing, etc.)
                     use crate::basic_enums::Color::*;
 
-                    let game = history.last();
+                    let game = history.game();
 
                     let elapsed = start_time.elapsed();
                     let (time, inc) = match game.to_move() {
@@ -794,7 +794,7 @@ impl SearchThreadPool {
                         Some(m) => *m,
                         None => {
                             eprintln!("No best move found... this is bad!");
-                            let game = history.last();
+                            let game = history.game();
                             game.legal_moves()[0]
                         }
                     };

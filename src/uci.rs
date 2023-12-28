@@ -27,7 +27,7 @@ impl UCIState {
     pub fn new() -> UCIState {
         let tt = Arc::new(TranspositionTable::new(1024 * 1024 * 16));
         UCIState {
-            history: History::new(Game::new()),
+            history: History::new(&Game::new()),
             transposition_table: tt.clone(),
             search_thread_pool: SearchThreadPool::new(1, tt),
             // stderr is the default log file
@@ -53,7 +53,7 @@ impl UCIState {
 
     pub fn pv_string(&self) -> String {
         let pv = self.search_thread_pool.pv();
-        crate::transposition_table::pv_string(self.history.last(), &pv)
+        crate::transposition_table::pv_string(self.history.game(), &pv)
     }
 
     pub fn run(&mut self) {
@@ -117,7 +117,7 @@ impl UCIState {
                 self.send("readyok");
             }
             "ucinewgame" => {
-                self.history = History::new(Game::new());
+                self.history = History::new(&Game::new());
                 // TODO: should we explicitly wait for clear?
                 self.transposition_table.clear();
             }
@@ -181,9 +181,9 @@ impl UCIState {
                     }
                     next = parts.next();
                 }
-                self.history = History::new(Game::from_fen(&fen)?);
+                self.history = History::new(&Game::from_fen(&fen)?);
                 for m in moves {
-                    let ply = self.history.last().parse_uci_long_name(&m)?;
+                    let ply = self.history.game().parse_uci_long_name(&m)?;
                     self.history.push(&ply);
                 }
             }
@@ -253,7 +253,7 @@ impl UCIState {
                     .start_search(&self.history, time_policy);
             }
             "d" => {
-                let game = self.history.last();
+                let game = self.history.game();
                 for ply in game.legal_moves() {
                     println!("{}", ply.long_name());
                 }

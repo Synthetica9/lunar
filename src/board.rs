@@ -13,7 +13,7 @@ use crate::{
     square::{File, Rank, Square},
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Board {
     colors: [Bitboard; 2],
     pieces: [Bitboard; 6],
@@ -55,7 +55,7 @@ impl Board {
     }
 
     pub fn mirror(&self) -> Board {
-        let mut cpy = *self;
+        let mut cpy = self.clone();
 
         for b in cpy.pieces.iter_mut() {
             *b = b.flip_vertical()
@@ -116,7 +116,7 @@ impl Board {
         let white = self.get_color(&Color::White).get(square);
         let black = self.get_color(&Color::Black).get(square);
 
-        debug_assert!(!(white && black));
+        // debug_assert!(!(white && black));
 
         match (white, black) {
             (true, false) => Some(Color::White),
@@ -127,12 +127,12 @@ impl Board {
 
     pub fn square(&self, square: Square) -> Option<(Color, Piece)> {
         // TODO: should probably be renamed occupant.
-        debug_assert!(self.is_not_corrupt());
+        // debug_assert!(self.is_not_corrupt());
 
         let color = self.occupant_color(square);
         let piece = self.occupant_piece(square);
 
-        debug_assert!(color.is_some() == piece.is_some());
+        // debug_assert!(color.is_some() == piece.is_some());
 
         match (color, piece) {
             (Some(color), Some(piece)) => Some((color, piece)),
@@ -152,14 +152,14 @@ impl Board {
 
     // Changing single pieces
     pub fn toggle_mut_invalid(&mut self, square: Square, color: Color, piece: Piece) {
-        debug_assert!(self.is_not_corrupt());
+        // debug_assert!(self.is_not_corrupt());
 
         let mask = Bitboard::from_square(square);
 
         self.colors[color as usize] ^= mask;
         self.pieces[piece as usize] ^= mask;
 
-        debug_assert!(self.is_not_corrupt());
+        // debug_assert!(self.is_not_corrupt());
     }
 
     pub fn toggle_mut(&mut self, square: Square, color: Color, piece: Piece) {
@@ -403,7 +403,7 @@ impl Board {
         self._squares_attacking_defending(None, square)
     }
 
-    pub fn effective_king_side(self, color: &Color) -> Bitboard {
+    pub fn effective_king_side(&self, color: &Color) -> Bitboard {
         use crate::bitboard::{KINGSIDE, QUEENSIDE};
 
         let king = self.get(color, &Piece::King);

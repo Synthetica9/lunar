@@ -8,13 +8,13 @@ use crate::board::Board;
 use crate::castlerights::CastleRights;
 
 use crate::piece::Piece;
-use crate::ply::{ApplyPly, Ply, SpecialFlag, _combination_moves};
+use crate::ply::{ApplyPly, Ply, SpecialFlag, UndoPly, _combination_moves};
 use crate::plyset::PlySet;
 use crate::square::Square;
 use crate::zobrist_hash::ZobristHash;
 
 // TODO: merge with board?
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Game {
     board: Board,
     to_move: Color,
@@ -146,8 +146,10 @@ impl Game {
         )
     }
 
-    pub fn apply_ply(&mut self, ply: &Ply) {
+    pub fn apply_ply(&mut self, ply: &Ply) -> crate::ply::UndoPly {
         debug_assert!(self.board.is_valid());
+
+        let half_move_clock_before = self.half_move;
 
         if ply.resets_halfmove_clock(self) {
             self.half_move = 0;
@@ -157,12 +159,27 @@ impl Game {
 
         self.half_move_total += 1;
 
-        let cln = *self;
+        let info = crate::ply::GameInfoForPly::new(self, ply);
 
         // self.hash.apply_ply(&cln, ply);
-        self._apply_ply(&cln, ply);
+        self._apply_ply_with_info(&info, ply, false);
 
         debug_assert!(self.board.is_valid(), "board got hecked. {ply:?}");
+
+        UndoPly {
+            info,
+            ply: *ply,
+            half_move_clock_before,
+        }
+    }
+
+    pub fn undo_ply(&mut self, undo_info: &UndoPly) {
+        debug_assert!(self.board.is_not_corrupt());
+        self.half_move_total -= 1;
+        self.half_move = undo_info.half_move_clock_before;
+
+        self._apply_ply_with_info(&undo_info.info, &undo_info.ply, true);
+        debug_assert!(self.board.is_not_corrupt());
     }
 
     pub fn hash_after_ply(&self, ply: &Ply) -> ZobristHash {
@@ -325,6 +342,7 @@ impl Game {
 
         let eligible_pawns = friendly_pawns & attacking_squares;
 
+        plyset.reserve(eligible_pawns.popcount() as usize);
         for pawn in eligible_pawns.iter_squares() {
             let ply = Ply::en_passant(pawn, ep);
             // println!("En passant capture: {:?}", ply);
@@ -355,6 +373,7 @@ impl Game {
 
         for src in self.board.get(&self.to_move, &piece).iter_squares() {
             let dsts = Bitboard::magic_attacks(src, piece, occupied) & postmask;
+            plyset.reserve(dsts.popcount() as usize);
             for dst in dsts.iter_squares() {
                 plyset.push(Ply::simple(src, dst));
             }
@@ -422,7 +441,7 @@ impl Game {
         let legality_checker = LegalityChecker::new(self);
         self.pseudo_legal_moves()
             .iter()
-            .filter(|ply| legality_checker.is_legal(ply))
+            .filter(|ply| legality_checker.is_legal(ply, self))
             .copied()
             .collect()
     }
@@ -432,7 +451,7 @@ impl Game {
         let legality_checker = LegalityChecker::new(self);
         self.quiescence_pseudo_legal_moves()
             .iter()
-            .filter(|ply| legality_checker.is_legal(ply))
+            .filter(|ply| legality_checker.is_legal(ply, self))
             .copied()
             .collect()
     }
@@ -524,7 +543,7 @@ impl Game {
 
         #[cfg(debug_assertions)]
         {
-            let mut cpy = *self;
+            let mut cpy = self.clone();
             cpy.apply_ply(ply);
             let fen = self.to_fen();
             assert_eq!(
@@ -551,7 +570,7 @@ impl Game {
     }
 
     pub fn is_mate(&self, ply: &Ply) -> bool {
-        let mut cpy = *self;
+        let mut cpy = self.clone();
         cpy.apply_ply(ply);
         cpy.is_in_mate()
     }
@@ -711,7 +730,7 @@ impl Game {
         }
         let mut count = 0;
         for ply in self.legal_moves() {
-            let mut game = *self;
+            let mut game = self.clone();
             game.apply_ply(&ply);
             if print {
                 print!("{}: ", ply.long_name());
@@ -762,7 +781,7 @@ impl ApplyPly for Game {
         // debug_assert!(en_passant.rank().is_en_passant_rank())
         self.en_passant = match self.en_passant {
             Some(current) => {
-                debug_assert!(current == en_passant);
+                debug_assert_eq!(current, en_passant);
                 None
             }
             None => Some(en_passant),
@@ -843,7 +862,7 @@ mod tests {
                     None => panic!("Invalid ply: {}", $ply),
                 };
 
-                game.apply_ply(&ply);
+                let undo_info = game.apply_ply(&ply);
 
                 println!("Applied ply: {}", $ply);
                 println!("Ending fen: {}", game.to_fen());
@@ -858,6 +877,12 @@ mod tests {
 
                 assert_eq!(game.to_fen(), $expected_fen);
 
+                game.undo_ply(&undo_info);
+
+                let fen_after_undo = game.to_fen();
+                println!("FEN after undo: {}", fen_after_undo);
+                print!("{}", game.simple_render());
+                assert_eq!(fen_after_undo, $fen);
             }
         }
     );

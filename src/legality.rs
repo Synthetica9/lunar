@@ -7,7 +7,6 @@ use crate::ply::Ply;
 use crate::square::Square;
 
 pub struct LegalityChecker {
-    game: Game,
     king_square: Square,
     king_attackers: Bitboard,
     absolute_pins: Bitboard,
@@ -41,7 +40,6 @@ impl LegalityChecker {
         };
 
         LegalityChecker {
-            game: *game,
             king_square,
             king_attackers,
             check_count,
@@ -51,8 +49,9 @@ impl LegalityChecker {
         }
     }
 
-    fn leaves_king_in_check(&self, ply: &Ply) -> bool {
-        let mut cpy = self.game;
+    fn leaves_king_in_check(&self, ply: &Ply, game: &Game) -> bool {
+        // Explicit check that is only used in asserts and for en passant.
+        let mut cpy = game.clone();
         cpy.apply_ply(ply);
 
         let to_move = cpy.to_move();
@@ -63,8 +62,12 @@ impl LegalityChecker {
         !attackers.is_empty()
     }
 
-    pub fn is_legal(&self, ply: &Ply) -> bool {
-        debug_assert!(self.game.is_pseudo_legal(ply));
+    pub fn is_legal(&self, ply: &Ply, game: &Game) -> bool {
+        debug_assert!(
+            game.is_pseudo_legal(ply),
+            "{} had illegal move: {ply:?}",
+            game.to_fen()
+        );
 
         // Fen is used in multiple debug statements. We don't want to calculate
         // it with every move even in debug mode, but don't want to calculate it
@@ -72,7 +75,7 @@ impl LegalityChecker {
 
         let fen = {
             #[cfg(debug_assertions)]
-            let res = self.game.to_fen();
+            let res = game.to_fen();
 
             #[cfg(not(debug_assertions))]
             let res = 0;
@@ -87,7 +90,7 @@ impl LegalityChecker {
 
             let dst_attacked = self.attackers_without_king.get(ply.dst());
             debug_assert!(
-                ply.is_castling() || (dst_attacked == self.leaves_king_in_check(ply)),
+                ply.is_castling() || (dst_attacked == self.leaves_king_in_check(ply, game)),
                 "Attacked destination not equivalent to leaving in check! {ply:?}\n{fen}"
             );
 
@@ -111,7 +114,7 @@ impl LegalityChecker {
 
                 let home_rank = self.king_square.rank();
                 let intermediate_square = Square::new(intermediate_file, home_rank);
-                self.is_legal(&Ply::simple(self.king_square, intermediate_square))
+                self.is_legal(&Ply::simple(self.king_square, intermediate_square), game)
             } else {
                 true
             }
@@ -123,15 +126,15 @@ impl LegalityChecker {
             // See for example:
             // 8/8/3p4/1Pp4r/1K3p2/6k1/4P1P1/1R6 w - c6 0 3
             // TODO: use correct heuristics here.
-            !self.leaves_king_in_check(ply)
+            !self.leaves_king_in_check(ply, game)
         } else if self.check_count == 1 {
             // We're not moving the king. Also, we're in (single) check.
-            debug_assert!(ply.moved_piece(&self.game) != Piece::King);
+            debug_assert!(ply.moved_piece(game) != Piece::King);
 
             let moves_absolute_pin = self.absolute_pins.get(ply.src());
             if moves_absolute_pin {
                 debug_assert!(
-                    self.leaves_king_in_check(ply),
+                    self.leaves_king_in_check(ply, game),
                     "moved out of absolute pin in check, but it was resolved? {ply:?}\n{fen}"
                 );
                 return false;
@@ -155,14 +158,14 @@ impl LegalityChecker {
             let is_mitigation = is_capture_of_checking_piece || is_interposing;
 
             debug_assert!(
-                is_mitigation != self.leaves_king_in_check(ply),
+                is_mitigation != self.leaves_king_in_check(ply, game),
                 "Mitigation check failed! {ply:?}\n{fen}"
             );
             is_mitigation
         } else {
             // We're not in check and not moving the king.
             debug_assert!(self.king_attackers.popcount() == 0);
-            debug_assert!(ply.moved_piece(&self.game) != Piece::King);
+            // debug_assert!(ply.moved_piece(self.game) != Piece::King);
 
             // If we're not in check, we only need to check absolutely
             // pinned pieces for illegal moves.

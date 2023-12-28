@@ -441,6 +441,8 @@ pub const LIGHT_SQUARES: Bitboard = DARK_SQUARES.not_const();
 pub const QUEENSIDE: Bitboard = EMPTY.or(COL_A).or(COL_B).or(COL_C).or(COL_D);
 pub const KINGSIDE: Bitboard = QUEENSIDE.not_const();
 
+pub const HOME_RANKS: Bitboard = EMPTY.or(ROW_1).or(ROW_8);
+
 impl Debug for Bitboard {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> std::fmt::Result {
         if self.is_empty() {

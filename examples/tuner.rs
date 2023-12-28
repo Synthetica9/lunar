@@ -77,7 +77,7 @@ fn tune() -> Result<(), String> {
         // println!("Minibatch {mb}");
         let batch: Vec<_> = train
             .choose_multiple(&mut rng, MINIBATCH_SIZE)
-            .copied()
+            .cloned()
             .collect();
         for i in 0..result.len() {
             let before = evaluate(&batch, &result);

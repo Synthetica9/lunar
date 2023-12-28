@@ -4,6 +4,7 @@ use crate::basic_enums::Color;
 use crate::millipawns::Millipawns;
 
 #[derive(Debug, Clone, PartialEq, Copy, EnumIter, Eq, PartialOrd, Ord)]
+// Pawn and king are special in that they can't be promoted to, should we swap them to the back?
 pub enum Piece {
     Pawn,
     Knight,

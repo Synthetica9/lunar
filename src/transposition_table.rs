@@ -247,7 +247,7 @@ impl TranspositionTable {
     }
 
     pub fn principle_variation(&self, game: &Game) -> Vec<Ply> {
-        let mut game = *game;
+        let mut game = game.clone();
         let mut hashes_seen = Vec::new();
         let mut res = Vec::new();
         loop {
@@ -268,7 +268,7 @@ impl TranspositionTable {
     }
 
     pub fn update_pv(&self, game: &Game, old_pv: &[Ply]) -> Vec<Ply> {
-        let mut game = *game;
+        let mut game = game.clone();
         let mut res = Vec::new();
         let _old_pv_relevant = true;
 
@@ -342,7 +342,7 @@ pub fn pv_string(game: &Game, pv: &[Ply]) -> String {
 
     let mut res = String::new();
     let mut is_first = true;
-    let mut game = *game;
+    let mut game = game.clone();
 
     for ply in pv {
         if is_first || game.to_move() == White {

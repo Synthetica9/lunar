@@ -227,7 +227,25 @@ pub fn _combination_moves(
     // srcs is typically where pieces/pawns are
     // dsts is empty/enemy squares
     // can_promote determines whether we can promote.
-    // quiescence_moves determines whether we can promote to a non-queen piece.
+
+    let calc_reserve = |mask: Bitboard| {
+        srcs.iter_squares()
+            .map(|src| (move_table[src] & *dsts & mask).popcount() as usize)
+            .sum::<usize>()
+    };
+
+    let mut to_reserve = calc_reserve(crate::bitboard::FULL);
+    let mut can_promote = can_promote;
+
+    if can_promote {
+        let promotion_reserve = calc_reserve(crate::bitboard::HOME_RANKS) * 3;
+        to_reserve += promotion_reserve;
+        can_promote = promotion_reserve != 0;
+    }
+
+    let len_after = plyset.len() + to_reserve;
+
+    plyset.reserve(to_reserve);
 
     for src in srcs.iter_squares() {
         let potential = move_table[src];
@@ -244,6 +262,14 @@ pub fn _combination_moves(
             }
         }
     }
+
+    debug_assert!(
+        plyset.len() == len_after,
+        "{} != {}, miscalculated plyset reservation (should be exact!) can_promote: {}",
+        plyset.len(),
+        len_after,
+        can_promote,
+    );
 }
 
 impl PartialEq for Ply {
@@ -252,9 +278,45 @@ impl PartialEq for Ply {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct GameInfoForPly {
+    to_move: Color,
+    our_piece: Piece,
+    captured_piece: Option<Piece>,
+    en_passant: Option<Square>,
+    castle_rights: CastleRights,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct UndoPly {
+    pub info: GameInfoForPly,
+    pub ply: Ply,
+    pub half_move_clock_before: i16,
+}
+
+impl GameInfoForPly {
+    pub fn new(game: &Game, ply: &Ply) -> GameInfoForPly {
+        debug_assert!(game.is_pseudo_legal(ply));
+
+        let to_move = game.to_move();
+        let our_piece = ply.moved_piece(game);
+        let captured_piece = ply._captured_piece(game);
+        let en_passant = game.en_passant();
+        let castle_rights = game.castle_rights();
+
+        GameInfoForPly {
+            to_move,
+            our_piece,
+            captured_piece,
+            en_passant,
+            castle_rights,
+        }
+    }
+}
+
 // Basically implement move application. A trait because we need this both for
 // the game state and directly on hashes.
-pub trait ApplyPly {
+pub(crate) trait ApplyPly {
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square);
     fn toggle_castle_rights(&mut self, castle_rights: CastleRights);
     fn toggle_en_passant(&mut self, en_passant: Square);
@@ -267,37 +329,33 @@ pub trait ApplyPly {
     }
 
     fn _apply_ply(&mut self, game: &Game, ply: &Ply) {
+        let info = GameInfoForPly::new(game, ply);
+        self._apply_ply_with_info(&info, ply, false)
+    }
+
+    fn _apply_ply_with_info(&mut self, info: &GameInfoForPly, ply: &Ply, invert: bool) {
         // ToDo: should probably return an error type
         use Piece::*;
-
-        // We can't check for full legality due to dependency loop.
-        debug_assert!(game.is_pseudo_legal(ply));
 
         let src = ply.src();
         let dst = ply.dst();
 
         let flag = ply.flag();
 
-        let to_move = game.to_move();
-        let board = game.board();
-
-        let our_piece = ply.moved_piece(game);
-        let captured_piece = ply._captured_piece(game);
-
         // Remove opponent piece from the destination square.
         if let Some(SpecialFlag::EnPassant) = flag {
             let capture_square = Square::new(dst.file(), src.rank());
-            self.toggle_piece(to_move.other(), Piece::Pawn, capture_square);
-        } else if let Some(victim) = captured_piece {
-            self.toggle_piece(to_move.other(), victim, dst);
+            self.toggle_piece(info.to_move.other(), Piece::Pawn, capture_square);
+        } else if let Some(victim) = info.captured_piece {
+            self.toggle_piece(info.to_move.other(), victim, dst);
         }
 
         if let Some(SpecialFlag::Promotion(promoted_to)) = flag {
-            self.toggle_piece(to_move, Piece::Pawn, src);
-            self.toggle_piece(to_move, promoted_to, dst);
+            self.toggle_piece(info.to_move, Piece::Pawn, src);
+            self.toggle_piece(info.to_move, promoted_to, dst);
         } else {
-            self.toggle_piece(to_move, our_piece, src);
-            self.toggle_piece(to_move, our_piece, dst);
+            self.toggle_piece(info.to_move, info.our_piece, src);
+            self.toggle_piece(info.to_move, info.our_piece, dst);
             // self.toggle_piece_multi(to_move, our_piece, &[src, dst]);
         }
 
@@ -315,37 +373,48 @@ pub trait ApplyPly {
             let rook_dst = Square::new(rook_dst_file, rank);
 
             // self.toggle_piece_multi(to_move, Rook, &[rook_src, rook_dst]);
-            self.toggle_piece(to_move, Rook, rook_src);
-            self.toggle_piece(to_move, Rook, rook_dst);
+            self.toggle_piece(info.to_move, Rook, rook_src);
+            self.toggle_piece(info.to_move, Rook, rook_dst);
         }
 
         // update en passant rights
         // First, disable current en passant rights.
-        if let Some(en_passant) = game.en_passant() {
-            self.toggle_en_passant(en_passant);
+        if !invert {
+            if let Some(en_passant) = info.en_passant {
+                self.toggle_en_passant(en_passant);
+            }
         }
 
         // Then, enable new en passant rights.
         // En passant is only possible after a double pawn move.
         {
-            let is_pawn_move = our_piece == Pawn;
+            let is_pawn_move = info.our_piece == Pawn;
             let is_double_move = (dst.rank().as_u8() as i8 - src.rank().as_u8() as i8).abs() == 2;
             if is_pawn_move && is_double_move {
-                let en_passant = Square::new(dst.file(), to_move.en_passant_rank());
+                let en_passant = Square::new(dst.file(), info.to_move.en_passant_rank());
+                self.toggle_en_passant(en_passant);
+            }
+        }
+
+        if invert {
+            if let Some(en_passant) = info.en_passant {
                 self.toggle_en_passant(en_passant);
             }
         }
 
         // update castling rights
         {
-            let castle_rights = game.castle_rights();
             {
-                let home_rank = to_move.home_rank();
-                let oo = castle_rights.get(to_move, CastleDirection::Kingside);
-                let ooo = castle_rights.get(to_move, CastleDirection::Queenside);
+                let home_rank = info.to_move.home_rank();
+                let oo = info
+                    .castle_rights
+                    .get(info.to_move, CastleDirection::Kingside);
+                let ooo = info
+                    .castle_rights
+                    .get(info.to_move, CastleDirection::Queenside);
 
                 if (oo || ooo) && src.rank() == home_rank {
-                    let (disable_oo, disable_ooo) = match our_piece {
+                    let (disable_oo, disable_ooo) = match info.our_piece {
                         King => {
                             // Disable all castling rights for the moving side.
                             (true, true)
@@ -360,13 +429,13 @@ pub trait ApplyPly {
 
                     if oo && disable_oo {
                         self.toggle_castle_rights(CastleRights::single(
-                            to_move,
+                            info.to_move,
                             CastleDirection::Kingside,
                         ));
                     }
                     if ooo && disable_ooo {
                         self.toggle_castle_rights(CastleRights::single(
-                            to_move,
+                            info.to_move,
                             CastleDirection::Queenside,
                         ));
                     }
@@ -376,20 +445,24 @@ pub trait ApplyPly {
             // It is also possible to make your opponent lose castling rights
             // by capturing their rook.
 
-            if captured_piece == Some(Rook) && dst.rank() == to_move.other().home_rank() {
-                let oo = castle_rights.get(to_move.other(), CastleDirection::Kingside);
-                let ooo = castle_rights.get(to_move.other(), CastleDirection::Queenside);
+            if info.captured_piece == Some(Rook) && dst.rank() == info.to_move.other().home_rank() {
+                let oo = info
+                    .castle_rights
+                    .get(info.to_move.other(), CastleDirection::Kingside);
+                let ooo = info
+                    .castle_rights
+                    .get(info.to_move.other(), CastleDirection::Queenside);
 
                 if oo && dst.file() == files::H {
                     self.toggle_castle_rights(CastleRights::single(
-                        to_move.other(),
+                        info.to_move.other(),
                         CastleDirection::Kingside,
                     ));
                 }
 
                 if ooo && dst.file() == files::A {
                     self.toggle_castle_rights(CastleRights::single(
-                        to_move.other(),
+                        info.to_move.other(),
                         CastleDirection::Queenside,
                     ));
                 }
@@ -397,8 +470,6 @@ pub trait ApplyPly {
         }
 
         self.flip_side();
-
-        debug_assert!(board.is_valid());
     }
 }
 
