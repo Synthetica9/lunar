@@ -27,7 +27,7 @@ pub const COMMS_INTERVAL: usize = 1 << 10;
 pub const ONE_MP: Millipawns = Millipawns(1);
 pub const N_KILLER_MOVES: usize = 2;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum ThreadCommand {
     Quit,
     StopSearch,
@@ -120,9 +120,9 @@ impl ThreadData {
             if let Some(command) = command {
                 match command {
                     Quit => {
-                        self.status_channel
-                            .send(ThreadStatus::Quitting)
-                            .expect("Error sending quit message");
+                        // Explicitly ignore result, we are tearing down so the status_channel
+                        // may be gone already.
+                        let _ = self.status_channel.send(ThreadStatus::Quitting);
                         return;
                     }
                     StopSearch => {
