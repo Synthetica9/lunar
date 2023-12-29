@@ -29,11 +29,25 @@ impl History {
         &self.game
     }
 
+    pub fn len(&self) -> usize {
+        let res = self.undo_history.len();
+        debug_assert_eq!(res, self.hash_history.len());
+        res
+    }
+
     pub fn push(&mut self, ply: &Ply) {
         self.hash_history.push(self.game.hash());
         let undo = self.game.apply_ply(ply);
         *self.hash_count_mut(self.game.hash()) += 1;
         self.undo_history.push(undo);
+    }
+
+    pub fn hard_push(&mut self, ply: &Ply) {
+        self.push(ply);
+        if self.game.half_move() == 0 {
+            self.hash_history = Vec::new();
+            self.undo_history = Vec::new();
+        }
     }
 
     pub fn pop(&mut self) {

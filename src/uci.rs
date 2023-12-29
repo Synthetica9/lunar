@@ -179,17 +179,19 @@ impl UCIState {
                                 moves.push(part.to_string());
                             }
                         }
-                        _ => {
-                            self.log(&format!("Unknown position command: {part}"));
-                        }
+                        _ => Err(format!("Unknown position command: {part}"))?,
                     }
                     next = parts.next();
                 }
                 self.history = History::new(&Game::from_fen(&fen)?);
                 for m in moves {
                     let ply = self.history.game().parse_uci_long_name(&m)?;
-                    self.history.push(&ply);
+                    self.history.hard_push(&ply);
                 }
+
+                let fen = self.history.game().to_fen();
+                self.info(&format!("Setting position {fen}"));
+                self.info(&format!("History len: {}", self.history.len()));
             }
             "go" => {
                 use TimePolicy::*;
