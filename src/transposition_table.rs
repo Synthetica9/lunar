@@ -5,6 +5,7 @@ use no_panic::no_panic;
 use static_assertions::*;
 
 use crate::game::Game;
+use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
 use crate::zobrist_hash::ZobristHash;
@@ -246,28 +247,28 @@ impl TranspositionTable {
         }
     }
 
-    pub fn update_pv(&self, game: &Game, old_pv: &[Ply]) -> Vec<Ply> {
-        let mut game = game.clone();
+    pub fn update_pv(&self, history: &History, old_pv: &[Ply]) -> Vec<Ply> {
+        let mut history = history.clone();
         let mut res = Vec::new();
-        let mut hashes_seen = Vec::new();
 
-        let mut push = |ply, game: &mut Game| {
+        let mut push = |ply, history: &mut History| {
+            let game = history.game();
             let is_legal = game.is_legal(&ply);
-            let next_hash = game.hash_after_ply(&ply);
-            let is_repetition = hashes_seen.contains(&next_hash);
 
-            if is_legal && !is_repetition {
+            if is_legal {
                 res.push(ply);
-                game.apply_ply(&ply);
-                hashes_seen.push(next_hash);
-                true
+                history.push(&ply);
+                !history.repetition_count_at_least_3()
             } else {
                 false
             }
         };
 
         for entry in old_pv.iter() {
-            let next = match self.get(game.hash()).and_then(|x| x.best_move.wrap_null()) {
+            let next = match self
+                .get(history.game().hash())
+                .and_then(|x| x.best_move.wrap_null())
+            {
                 Some(ply_from_tt) => {
                     if ply_from_tt == *entry {
                         Some(*entry)
@@ -278,16 +279,16 @@ impl TranspositionTable {
                 None => Some(*entry),
             };
 
-            if !next.is_some_and(|ply| push(ply, &mut game)) {
+            if !next.is_some_and(|ply| push(ply, &mut history)) {
                 break;
             }
         }
 
         loop {
             if !self
-                .get(game.hash())
+                .get(history.game().hash())
                 .and_then(|tte| tte.best_move.wrap_null())
-                .is_some_and(|ply| push(ply, &mut game))
+                .is_some_and(|ply| push(ply, &mut history))
             {
                 break;
             }

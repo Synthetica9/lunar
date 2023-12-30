@@ -679,12 +679,11 @@ impl SearchThreadPool {
             ref mut pv,
             ref mut pv_instability,
             ref mut nodes_since_pv_update,
+            is_pondering,
             ..
         } = &mut self.state
         {
-            let mut game = history.game().clone();
-            let mut new = Vec::new();
-            let mut old = pv.clone();
+            let old = pv.clone();
 
             // if let Some(ply) = best_move.and_then(|x| x.wrap_null()) {
             //     game.apply_ply(&ply);
@@ -696,11 +695,11 @@ impl SearchThreadPool {
             //     }
             // }
 
-            new.append(&mut self.transposition_table.update_pv(&game, &old));
+            let new = self.transposition_table.update_pv(&history, &old);
 
             let base = 1000;
-            *pv_instability *= (0.9999 as f64).powi((*nodes_since_pv_update / base) as i32);
-            println!("{}", *nodes_since_pv_update);
+            // *pv_instability *= (0.9999 as f64).powi((*nodes_since_pv_update / base) as i32);
+            *pv_instability *= 0.9999;
             *nodes_since_pv_update %= base;
 
             let i = std::iter::zip(new.iter(), old.iter())
@@ -711,7 +710,10 @@ impl SearchThreadPool {
 
             *pv_instability += self.base_instability * (0.5 as f64).powi(i as i32);
 
-            println!("info string {pv_instability}");
+            if !*is_pondering && !history.is_finishing_sequence(&new) {
+                println!("info string base:        {}", self.base_instability);
+                println!("info string instability: {pv_instability}");
+            }
 
             *pv = new;
         }
@@ -848,6 +850,10 @@ impl SearchThreadPool {
                     let game = history.game();
                     use crate::basic_enums::Color::*;
 
+                    if best_move.is_none() {
+                        return false;
+                    }
+
                     // If we are this deep, we probably just found a forced end. Let's just return.
                     // Alternatively, if we are in a forced move we can still ponder. But directly
                     // as soon as time starts to be a factor, we want to return.
@@ -860,13 +866,19 @@ impl SearchThreadPool {
                         Black => (*btime, *binc),
                     };
 
-                    // If we are running up against the real limits of time, we should return
-                    // regardles`s to avoid losing on time.
-                    if clock_start_time
-                        .is_some_and(|t| time - t.elapsed() <= Duration::from_millis(100))
-                        && best_move.is_some()
-                    {
-                        return true;
+                    if let Some(clock_start) = clock_start_time {
+                        let elapsed = clock_start.elapsed();
+
+                        // If we are running up against the real limits of time, we should return
+                        // regardles`s to avoid losing on time.
+                        if time - elapsed <= Duration::from_millis(100) {
+                            return true;
+                        }
+
+                        // If we spent a large percentage of our time, also return.
+                        if time <= elapsed * 3 {
+                            return true;
+                        }
                     }
 
                     let elapsed = start_time.elapsed();
@@ -874,7 +886,8 @@ impl SearchThreadPool {
                     let moves_to_go = movestogo.unwrap_or(20).clamp(2, 20) as u32;
 
                     let time_per_move = (time + inc * (moves_to_go - 1)) / moves_to_go;
-                    let adjusted_millis = time_per_move.as_millis() as f64 * *pv_instability;
+                    let per_move_millis = time_per_move.as_millis() as f64;
+                    let adjusted_millis = per_move_millis * pv_instability.clamp(0.1, 5.0);
                     let time_per_move = Duration::from_millis(adjusted_millis as u64);
 
                     elapsed >= time_per_move
