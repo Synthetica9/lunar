@@ -450,11 +450,12 @@ impl ThreadData {
         } else if value >= beta {
             LowerBound
         } else {
-            if value.is_mate_in_n().is_some() {
-                value -= ONE_MP * value.0.signum();
-            }
             Exact
         };
+
+        if value.is_mate_in_n().is_some() {
+            value -= ONE_MP * value.0.signum();
+        }
 
         let tte = TranspositionEntry::new(
             depth as u8,
