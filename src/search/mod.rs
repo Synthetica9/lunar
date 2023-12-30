@@ -4,7 +4,6 @@
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
-use std::thread::Thread;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -66,6 +65,8 @@ enum PoolState {
         best_move: Option<Ply>,
         best_depth: usize,
         pv: Vec<Ply>,
+        pv_instability: f64,
+        nodes_since_pv_update: usize,
 
         nodes_searched: usize,
         quiescence_nodes_searched: usize,
@@ -83,6 +84,7 @@ pub struct SearchThreadPool {
     )>,
     transposition_table: Arc<TranspositionTable>,
     ponder: bool,
+    pub base_instability: f64,
 
     state: PoolState,
 }
@@ -575,6 +577,8 @@ impl SearchThreadPool {
             threads,
             transposition_table,
 
+            base_instability: 1.0,
+
             ponder: false,
             state: PoolState::Idle,
         }
@@ -592,7 +596,6 @@ impl SearchThreadPool {
     pub fn start_search(&mut self, history: &History, time_policy: TimePolicy, is_pondering: bool) {
         let now = Instant::now();
         let clock_start_time = (!is_pondering).then_some(now);
-        let game = history.game();
 
         self.transposition_table.inc_age();
 
@@ -611,6 +614,8 @@ impl SearchThreadPool {
             score: Millipawns(0),
             best_depth: 0,
             pv: Vec::new(),
+            pv_instability: self.base_instability,
+            nodes_since_pv_update: 0,
 
             nodes_searched: 0,
             quiescence_nodes_searched: 0,
@@ -672,17 +677,43 @@ impl SearchThreadPool {
             history,
             best_move,
             ref mut pv,
+            ref mut pv_instability,
+            ref mut nodes_since_pv_update,
             ..
         } = &mut self.state
         {
-            let old = if best_move.is_some() && (pv.is_empty() || pv[0] != best_move.unwrap()) {
-                vec![best_move.unwrap()]
-            } else {
-                pv.clone()
-            };
+            let mut game = history.game().clone();
+            let mut new = Vec::new();
+            let mut old = pv.clone();
 
-            let game = history.game();
-            *pv = self.transposition_table.update_pv(game, &old);
+            // if let Some(ply) = best_move.and_then(|x| x.wrap_null()) {
+            //     game.apply_ply(&ply);
+            //     if old.get(0).is_some_and(|x| *x == ply) {
+            //         old.remove(0);
+            //         new.push(ply)
+            //     } else {
+            //         old = Vec::new();
+            //     }
+            // }
+
+            new.append(&mut self.transposition_table.update_pv(&game, &old));
+
+            let base = 1000;
+            *pv_instability *= (0.9999 as f64).powi((*nodes_since_pv_update / base) as i32);
+            println!("{}", *nodes_since_pv_update);
+            *nodes_since_pv_update %= base;
+
+            let i = std::iter::zip(new.iter(), old.iter())
+                .map(|(x, y)| x != y)
+                .chain([true])
+                .position(|x| x)
+                .unwrap();
+
+            *pv_instability += self.base_instability * (0.5 as f64).powi(i as i32);
+
+            println!("info string {pv_instability}");
+
+            *pv = new;
         }
     }
 
@@ -712,6 +743,7 @@ impl SearchThreadPool {
                     ref mut best_move,
                     ref mut nodes_searched,
                     ref mut quiescence_nodes_searched,
+                    ref mut nodes_since_pv_update,
                     ..
                 } = &mut self.state
                 {
@@ -743,6 +775,7 @@ impl SearchThreadPool {
                             quiescence_nodes_searched,
                         } => {
                             *old_nodes_searched += nodes_searched + quiescence_nodes_searched;
+                            *nodes_since_pv_update += nodes_searched;
                             *old_quiescence_nodes_searched += quiescence_nodes_searched;
                             *searching = true;
                         }
@@ -779,12 +812,19 @@ impl SearchThreadPool {
     pub fn time_policy_finished(&self) -> bool {
         if let PoolState::Searching {
             start_time,
+            clock_start_time,
             time_policy,
             best_depth,
             history,
+            is_pondering,
+            pv_instability,
+            best_move,
             ..
         } = &self.state
         {
+            if *is_pondering {
+                return false;
+            }
             use TimePolicy::*;
             match time_policy {
                 Depth(depth) => best_depth >= depth,
@@ -808,25 +848,36 @@ impl SearchThreadPool {
                     let game = history.game();
                     use crate::basic_enums::Color::*;
 
+                    // If we are this deep, we probably just found a forced end. Let's just return.
+                    // Alternatively, if we are in a forced move we can still ponder. But directly
+                    // as soon as time starts to be a factor, we want to return.
                     if *best_depth >= 100 || game.legal_moves().len() == 1 {
-                        // If we are this deep, we probably just found a forced end. Let's just return.
-                        // Alternatively, if we are in a forced move we can still ponder. But directly
-                        // as soon as time starts to be a factor, we want to return.
                         return true;
                     };
 
-                    let elapsed = start_time.elapsed();
                     let (time, inc) = match game.to_move() {
                         White => (*wtime, *winc),
                         Black => (*btime, *binc),
                     };
 
-                    let inc = inc.unwrap_or(Duration::from_millis(0));
+                    // If we are running up against the real limits of time, we should return
+                    // regardles`s to avoid losing on time.
+                    if clock_start_time
+                        .is_some_and(|t| time - t.elapsed() <= Duration::from_millis(100))
+                        && best_move.is_some()
+                    {
+                        return true;
+                    }
 
-                    let moves_to_go = movestogo.unwrap_or(20) as u32;
+                    let elapsed = start_time.elapsed();
+
+                    let moves_to_go = movestogo.unwrap_or(20).clamp(2, 20) as u32;
+
                     let time_per_move = (time + inc * (moves_to_go - 1)) / moves_to_go;
-                    let available = Ord::min(time_per_move, time - Duration::from_millis(100));
-                    elapsed >= available
+                    let adjusted_millis = time_per_move.as_millis() as f64 * *pv_instability;
+                    let time_per_move = Duration::from_millis(adjusted_millis as u64);
+
+                    elapsed >= time_per_move
                 }
             }
         } else {
@@ -881,15 +932,31 @@ impl SearchThreadPool {
                 history,
                 pv,
                 is_pondering,
+                time_policy,
+                pv_instability,
                 ..
             } => {
-                if force || (!is_pondering && self.time_policy_finished()) {
+                if force || self.time_policy_finished() {
                     let best_move = match best_move {
                         Some(m) => *m,
                         None => {
-                            eprintln!("No best move found... this is bad!");
-                            let game = history.game();
-                            game.legal_moves()[0]
+                            let legal_moves = history.game().legal_moves();
+                            if legal_moves.len() == 1 {
+                                // This may not been sent yet.
+                                legal_moves[0]
+                            } else if let Some(from_pv) =
+                                pv.get(0).filter(|x| legal_moves.contains(x))
+                            {
+                                *from_pv
+                            } else if *is_pondering {
+                                // This is ok, we just send any move I guess?
+                                legal_moves[0]
+                            } else {
+                                println!("info string No best move found... this is bad!");
+                                println!("info string {:?}", time_policy);
+                                println!("info string {}", history.game().to_fen());
+                                panic!()
+                            }
                         }
                     };
 
@@ -900,7 +967,24 @@ impl SearchThreadPool {
                     } else {
                         "".to_string()
                     };
+
+                    if !force {
+                        // Our target PV instability upon ending a search is 1. Try to
+                        // approach this value.
+                        if *pv_instability < 1.0 {
+                            self.base_instability *= 1.3
+                        } else {
+                            self.base_instability *= 0.8
+                        }
+                    }
+
+                    eprintln!(
+                        "info string Setting base instability to {}",
+                        self.base_instability
+                    );
+
                     self.stop();
+
                     Some(format!("bestmove {} {ponder}", best_move.long_name()))
                 } else {
                     None

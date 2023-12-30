@@ -17,7 +17,7 @@ impl Millipawns {
     }
 
     pub fn is_mate_in_n(self) -> Option<i32> {
-        let diff = (self.0 - WIN.0).abs();
+        let diff = WIN.0 - self.0.abs();
         if diff <= 256 {
             Some(diff * (self.0).signum())
         } else {

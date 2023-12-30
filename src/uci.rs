@@ -122,6 +122,7 @@ impl UCIState {
             }
             "ucinewgame" => {
                 self.history = History::new(&Game::new());
+                self.search_thread_pool.base_instability = 1.0;
                 // TODO: should we explicitly wait for clear?
                 self.transposition_table.clear();
             }
@@ -246,8 +247,8 @@ impl UCIState {
                                 match part {
                                     "wtime" => *wtime = Duration::from_millis(val),
                                     "btime" => *btime = Duration::from_millis(val),
-                                    "winc" => *winc = Some(Duration::from_millis(val)),
-                                    "binc" => *binc = Some(Duration::from_millis(val)),
+                                    "winc" => *winc = Duration::from_millis(val),
+                                    "binc" => *binc = Duration::from_millis(val),
                                     "movestogo" => *movestogo = Some(val),
                                     _ => unreachable!(),
                                 }
@@ -426,8 +427,8 @@ pub enum TimePolicy {
     FreeTime {
         wtime: std::time::Duration,
         btime: std::time::Duration,
-        winc: Option<std::time::Duration>,
-        binc: Option<std::time::Duration>,
+        winc: std::time::Duration,
+        binc: std::time::Duration,
         movestogo: Option<u64>,
     },
 }
@@ -435,8 +436,8 @@ pub enum TimePolicy {
 const NEW_FREE_TIME: TimePolicy = TimePolicy::FreeTime {
     wtime: Duration::from_millis(0),
     btime: Duration::from_millis(0),
-    winc: None,
-    binc: None,
+    winc: Duration::from_millis(0),
+    binc: Duration::from_millis(0),
     movestogo: None,
 };
 
