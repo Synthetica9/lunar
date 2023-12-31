@@ -29,6 +29,8 @@ pub const COMMS_INTERVAL: usize = 1 << 10;
 pub const ONE_MP: Millipawns = Millipawns(1);
 pub const N_KILLER_MOVES: usize = 2;
 
+pub const PREDICTED_BRANCHING_FACTOR: f64 = 2.1;
+
 #[derive(Clone, Debug)]
 enum ThreadCommand {
     Quit,
@@ -70,7 +72,9 @@ enum PoolState {
         pv: Vec<Ply>,
         pv_instability: f64,
         last_pv_update: Instant,
-        nodes_since_pv_update: usize,
+
+        last_depth_increase: usize,
+        depth_increase_nodes: usize,
 
         nodes_searched: usize,
         quiescence_nodes_searched: usize,
@@ -630,7 +634,9 @@ impl SearchThreadPool {
             pv: Vec::new(),
             pv_instability: self.base_instability,
             last_pv_update: now,
-            nodes_since_pv_update: 0,
+
+            last_depth_increase: 0,
+            depth_increase_nodes: 0,
 
             nodes_searched: 0,
             quiescence_nodes_searched: 0,
@@ -771,42 +777,37 @@ impl SearchThreadPool {
                 ref mut best_move,
                 ref mut nodes_searched,
                 ref mut quiescence_nodes_searched,
-                ref mut nodes_since_pv_update,
+                ref mut depth_increase_nodes,
+                ref mut last_depth_increase,
                 ..
             } = &mut self.state
             {
                 // TODO: very very inelegant, but seems to be the only way to do this.
-                let old_score = score;
-                let old_best_move = best_move;
-                let old_best_depth = best_depth;
-                let old_nodes_searched = nodes_searched;
-                let old_quiescence_nodes_searched = quiescence_nodes_searched;
-
                 match status {
                     ThreadStatus::SearchFinished {
-                        score,
-                        best_move,
+                        score: new_score,
+                        best_move: new_best_move,
                         depth,
                     } => {
-                        if *old_best_depth < depth || *old_best_depth == depth && score > *old_score
-                        {
-                            if *old_best_depth < depth {
-                                res = true
+                        if *best_depth < depth || *best_depth == depth && new_score > *score {
+                            if *best_depth < depth {
+                                res = true;
+                                *depth_increase_nodes = *nodes_searched - *depth_increase_nodes;
+                                *last_depth_increase = *nodes_searched;
                             }
-                            *old_score = score;
-                            *old_best_move = best_move;
-                            *old_best_depth = depth;
+                            *score = new_score;
+                            *best_move = new_best_move;
+                            *best_depth = depth;
                         }
                         // *searching = false;
                     }
 
                     ThreadStatus::StatusUpdate {
-                        nodes_searched,
-                        quiescence_nodes_searched,
+                        nodes_searched: extra_nodes_searched,
+                        quiescence_nodes_searched: extra_qnodes_searched,
                     } => {
-                        *old_nodes_searched += nodes_searched + quiescence_nodes_searched;
-                        *nodes_since_pv_update += nodes_searched;
-                        *old_quiescence_nodes_searched += quiescence_nodes_searched;
+                        *nodes_searched += extra_nodes_searched + extra_qnodes_searched;
+                        *quiescence_nodes_searched += extra_qnodes_searched;
                         thread.is_searching = true;
                     }
 
@@ -849,6 +850,9 @@ impl SearchThreadPool {
             is_pondering,
             pv_instability,
             best_move,
+            last_depth_increase,
+            depth_increase_nodes,
+            nodes_searched,
             ..
         } = &self.state
         {
@@ -895,21 +899,32 @@ impl SearchThreadPool {
                     };
 
                     if let Some(clock_start) = clock_start_time {
-                        let elapsed = clock_start.elapsed();
+                        let time_spent = clock_start.elapsed();
 
                         // If we are running up against the real limits of time, we should return
                         // regardles`s to avoid losing on time.
-                        if time - elapsed <= Duration::from_millis(100) {
+                        if time - time_spent <= Duration::from_millis(100) {
                             return true;
                         }
 
                         // If we spent a large percentage of our time, also return.
-                        if time <= elapsed * 3 {
+                        if time <= time_spent * 3 {
                             return true;
                         }
                     }
 
-                    let elapsed = start_time.elapsed();
+                    let expected_next_depth = {
+                        let nps = *nodes_searched as f64 / start_time.elapsed().as_secs_f64();
+                        let expected_nodes_to_go = *last_depth_increase as f64
+                            + *depth_increase_nodes as f64 * PREDICTED_BRANCHING_FACTOR
+                            - *nodes_searched as f64;
+
+                        let to_go = Duration::from_secs_f64(expected_nodes_to_go.max(0.0) / nps);
+                        // println!("info string to go: {to_go:?}");
+                        Instant::now() + to_go
+                    };
+
+                    let elapsed_then = expected_next_depth.duration_since(*start_time);
 
                     let moves_to_go = movestogo.unwrap_or(20).clamp(2, 20) as u32;
 
@@ -918,7 +933,7 @@ impl SearchThreadPool {
                     let adjusted_millis = per_move_millis * pv_instability.clamp(0.1, 5.0);
                     let time_per_move = Duration::from_millis(adjusted_millis as u64);
 
-                    elapsed >= time_per_move
+                    elapsed_then >= time_per_move
                 }
             }
         } else {
@@ -1017,11 +1032,6 @@ impl SearchThreadPool {
                             self.base_instability *= 0.8
                         }
                     }
-
-                    eprintln!(
-                        "info string Setting base instability to {}",
-                        self.base_instability
-                    );
 
                     self.stop();
 
