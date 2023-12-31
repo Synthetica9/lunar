@@ -1,7 +1,6 @@
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use no_panic::no_panic;
 use static_assertions::*;
 
 use crate::game::Game;
