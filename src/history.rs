@@ -92,6 +92,14 @@ impl History {
         }
     }
 
+    pub fn game_is_finished(&self) -> bool {
+        let game = &self.game;
+        self.repetition_count_at_least_3()
+            || game.is_in_mate()
+            || game.half_move() >= 100
+            || game.board().is_insufficient_to_force_mate()
+    }
+
     pub fn is_finishing_sequence(&self, moves: &[Ply]) -> bool {
         let mut cpy = self.clone();
         for ply in moves {
@@ -100,7 +108,6 @@ impl History {
             }
             cpy.hard_push(ply);
         }
-        let game = &cpy.game;
-        cpy.repetition_count_at_least_3() || game.is_in_mate() || game.half_move() >= 100
+        cpy.game_is_finished()
     }
 }

@@ -1,6 +1,6 @@
 use std::io::Write;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::game::Game;
 use crate::history::History;
@@ -21,6 +21,7 @@ pub struct UCIState {
     log_file: Option<Box<dyn std::io::Write>>,
     debug: bool,
     // repetition_table: RepetitionTable,
+    last_info_string: Instant,
 }
 
 impl UCIState {
@@ -33,6 +34,8 @@ impl UCIState {
             // stderr is the default log file
             log_file: None,
             debug: false,
+
+            last_info_string: Instant::now(),
         }
     }
 
@@ -69,21 +72,12 @@ impl UCIState {
         self.info("Warning. This is a debug build. 10x slower than release build.");
 
         loop {
-            use crossbeam_channel::RecvTimeoutError::*;
-            match reader_chan.recv_timeout(Duration::from_millis(10)) {
-                Ok(line) => {
-                    let line = line.trim().to_string();
-                    match self.interpret(&line) {
-                        Ok(()) => {}
-                        Err(msg) => self.info(&msg),
-                    };
-                }
-                // No data available, this is fine.
-                Err(Timeout) => {}
-                // The channel is closed, this is not fine.
-                Err(Disconnected) => {
-                    panic!("Reader thread disconnected");
-                }
+            if let Ok(line) = reader_chan.try_recv() {
+                let line = line.trim().to_string();
+                match self.interpret(&line) {
+                    Ok(()) => {}
+                    Err(msg) => self.info(&msg),
+                };
             }
 
             // output information about currently running search
@@ -92,11 +86,15 @@ impl UCIState {
     }
 
     fn manage_thread_pool(&mut self) {
-        self.search_thread_pool.communicate();
+        let force_print = self.search_thread_pool.communicate();
         if self.search_thread_pool.is_searching() {
-            self.send(&self.search_thread_pool.info_string());
+            if force_print || self.last_info_string.elapsed() >= Duration::from_millis(100) {
+                self.send(&self.search_thread_pool.info_string());
+                self.last_info_string = Instant::now();
+            }
             // self.log(&self.pv_string());
             if let Some(result) = self.search_thread_pool.maybe_end_search(false) {
+                self.send(&self.search_thread_pool.info_string());
                 self.send(&result);
             }
         }

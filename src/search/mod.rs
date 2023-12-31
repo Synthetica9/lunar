@@ -1,12 +1,15 @@
 // Simplified ABDADA.
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 use std::time::Instant;
 
+use channel::Receiver;
+use channel::RecvTimeoutError;
 // TODO: use stock rust channels?
 use crossbeam_channel as channel;
 
@@ -66,6 +69,7 @@ enum PoolState {
         best_depth: usize,
         pv: Vec<Ply>,
         pv_instability: f64,
+        last_pv_update: Instant,
         nodes_since_pv_update: usize,
 
         nodes_searched: usize,
@@ -75,13 +79,15 @@ enum PoolState {
     Quitting,
 }
 
+pub struct ThreadHandle {
+    join_handle: JoinHandle<()>,
+    status_channel: channel::Receiver<ThreadStatus>,
+    command_channel: channel::Sender<ThreadCommand>,
+    is_searching: bool,
+}
+
 pub struct SearchThreadPool {
-    threads: Vec<(
-        JoinHandle<()>,
-        channel::Sender<ThreadCommand>,
-        channel::Receiver<ThreadStatus>,
-        bool,
-    )>,
+    threads: Vec<ThreadHandle>,
     transposition_table: Arc<TranspositionTable>,
     ponder: bool,
     pub base_instability: f64,
@@ -174,12 +180,13 @@ impl ThreadData {
 
     pub fn search(&mut self) -> ThreadCommand {
         use crate::millipawns::*;
-        for depth in 1..255 {
+        for depth in 1..=255 {
             // TODO: narrow alpha and beta? (aspiration windows)
             // Tried this, available in aspiration-windows branch, but it
             // seems to significantly weaken self-play.
             match self.alpha_beta_search(LOSS, WIN, depth, true) {
                 Ok((score, best_move)) => {
+                    self.send_status_update();
                     self.status_channel
                         .send(ThreadStatus::SearchFinished {
                             score,
@@ -570,7 +577,14 @@ impl SearchThreadPool {
                 };
                 runner.run();
             });
-            threads.push((thread, command_s, status_r, false));
+
+            let handle = ThreadHandle {
+                join_handle: thread,
+                status_channel: status_r,
+                command_channel: command_s,
+                is_searching: false,
+            };
+            threads.push(handle);
         }
 
         SearchThreadPool {
@@ -588,8 +602,8 @@ impl SearchThreadPool {
         // https://stackoverflow.com/a/68978386
         self.broadcast(&ThreadCommand::Quit).unwrap();
         while !self.threads.is_empty() {
-            let (cur_thread, _, _, _) = self.threads.remove(0);
-            cur_thread.join().expect("Unable to kill thread");
+            let handle = self.threads.remove(0);
+            handle.join_handle.join().expect("Unable to kill thread");
         }
     }
 
@@ -615,6 +629,7 @@ impl SearchThreadPool {
             best_depth: 0,
             pv: Vec::new(),
             pv_instability: self.base_instability,
+            last_pv_update: now,
             nodes_since_pv_update: 0,
 
             nodes_searched: 0,
@@ -647,7 +662,7 @@ impl SearchThreadPool {
     }
 
     pub fn stopped(&self) -> bool {
-        self.threads.iter().all(|(_, _, _, searching)| !searching)
+        self.threads.iter().all(|handle| !handle.is_searching)
     }
 
     pub fn wait_ready(&mut self) {
@@ -659,7 +674,7 @@ impl SearchThreadPool {
                 // We want to wait until we have received a message from each thread that they are
                 // actually idle.
                 while !self.stopped() {
-                    self.communicate()
+                    self.communicate();
                 }
                 self.state = PoolState::Idle;
             }
@@ -675,123 +690,136 @@ impl SearchThreadPool {
     fn update_pv(&mut self) {
         if let PoolState::Searching {
             history,
-            best_move,
             ref mut pv,
             ref mut pv_instability,
-            ref mut nodes_since_pv_update,
-            is_pondering,
+            ref mut last_pv_update,
             ..
         } = &mut self.state
         {
-            let old = pv.clone();
+            let ticks = last_pv_update.elapsed().as_millis() / 10;
+            if ticks != 0 {
+                // TODO: real lambda calculation
+                *pv_instability *= (0.999 as f64).powi(ticks as i32);
+                *last_pv_update = Instant::now();
 
-            // if let Some(ply) = best_move.and_then(|x| x.wrap_null()) {
-            //     game.apply_ply(&ply);
-            //     if old.get(0).is_some_and(|x| *x == ply) {
-            //         old.remove(0);
-            //         new.push(ply)
-            //     } else {
-            //         old = Vec::new();
-            //     }
-            // }
+                let old = pv.clone();
+                let new = self.transposition_table.update_pv(&history, &old);
 
-            let new = self.transposition_table.update_pv(&history, &old);
+                let i = std::iter::zip(new.iter(), old.iter())
+                    .map(|(x, y)| x != y)
+                    .chain([true])
+                    .position(|x| x)
+                    .unwrap();
 
-            let base = 1000;
-            // *pv_instability *= (0.9999 as f64).powi((*nodes_since_pv_update / base) as i32);
-            *pv_instability *= 0.9999;
-            *nodes_since_pv_update %= base;
+                let is_finishing_sequence = history.is_finishing_sequence(&new);
 
-            let i = std::iter::zip(new.iter(), old.iter())
-                .map(|(x, y)| x != y)
-                .chain([true])
-                .position(|x| x)
-                .unwrap();
+                if !is_finishing_sequence {
+                    *pv_instability += self.base_instability * (0.5 as f64).powi(i as i32);
+                }
 
-            *pv_instability += self.base_instability * (0.5 as f64).powi(i as i32);
-
-            if !*is_pondering && !history.is_finishing_sequence(&new) {
-                println!("info string base:        {}", self.base_instability);
-                println!("info string instability: {pv_instability}");
+                *pv = new;
             }
-
-            *pv = new;
         }
     }
 
-    pub fn communicate(&mut self) {
-        self.update_pv();
+    fn recv_any_thread(&mut self, timeout: Duration) -> Option<(usize, ThreadStatus)> {
+        let mut sel = crossbeam_channel::Select::new();
 
-        for (_, _, status_r, searching) in self.threads.iter_mut() {
-            while let Ok(status) = status_r.try_recv() {
+        let mut sels = HashMap::new();
+        for (i, handle) in self.threads.iter().enumerate() {
+            let oper = sel.recv(&handle.status_channel);
+            sels.insert(oper, i);
+        }
+
+        match sel.select_timeout(timeout) {
+            Err(_) => None,
+            Ok(oper) => {
+                let i = *sels.get(&oper.index()).unwrap();
+                let handle = &self.threads[i];
+                let status = oper
+                    .recv(&handle.status_channel)
+                    .expect("Couldn't receive message even though we were promised?");
+                Some((i, status))
+            }
+        }
+    }
+
+    pub fn communicate(&mut self) -> bool {
+        let mut res = false;
+
+        if let Some((i, status)) = self.recv_any_thread(Duration::from_millis(10)) {
+            self.update_pv();
+            let thread = &mut self.threads[i];
+            match status {
+                ThreadStatus::StatusUpdate { .. } => {
+                    thread.is_searching = true;
+                }
+
+                ThreadStatus::Idle => {
+                    thread.is_searching = false;
+                }
+
+                ThreadStatus::Quitting => {
+                    self.state = PoolState::Quitting;
+                }
+
+                _ => {}
+            }
+            if let PoolState::Searching {
+                ref mut best_depth,
+                ref mut score,
+                ref mut best_move,
+                ref mut nodes_searched,
+                ref mut quiescence_nodes_searched,
+                ref mut nodes_since_pv_update,
+                ..
+            } = &mut self.state
+            {
+                // TODO: very very inelegant, but seems to be the only way to do this.
+                let old_score = score;
+                let old_best_move = best_move;
+                let old_best_depth = best_depth;
+                let old_nodes_searched = nodes_searched;
+                let old_quiescence_nodes_searched = quiescence_nodes_searched;
+
                 match status {
-                    ThreadStatus::StatusUpdate { .. } => {
-                        *searching = true;
+                    ThreadStatus::SearchFinished {
+                        score,
+                        best_move,
+                        depth,
+                    } => {
+                        if *old_best_depth < depth || *old_best_depth == depth && score > *old_score
+                        {
+                            if *old_best_depth < depth {
+                                res = true
+                            }
+                            *old_score = score;
+                            *old_best_move = best_move;
+                            *old_best_depth = depth;
+                        }
+                        // *searching = false;
                     }
 
-                    ThreadStatus::Idle => {
-                        *searching = false;
-                    }
-
-                    ThreadStatus::Quitting => {
-                        self.state = PoolState::Quitting;
+                    ThreadStatus::StatusUpdate {
+                        nodes_searched,
+                        quiescence_nodes_searched,
+                    } => {
+                        *old_nodes_searched += nodes_searched + quiescence_nodes_searched;
+                        *nodes_since_pv_update += nodes_searched;
+                        *old_quiescence_nodes_searched += quiescence_nodes_searched;
+                        thread.is_searching = true;
                     }
 
                     _ => {}
                 }
-                if let PoolState::Searching {
-                    ref mut best_depth,
-                    ref mut score,
-                    ref mut best_move,
-                    ref mut nodes_searched,
-                    ref mut quiescence_nodes_searched,
-                    ref mut nodes_since_pv_update,
-                    ..
-                } = &mut self.state
-                {
-                    // TODO: very very inelegant, but seems to be the only way to do this.
-                    let old_score = score;
-                    let old_best_move = best_move;
-                    let old_best_depth = best_depth;
-                    let old_nodes_searched = nodes_searched;
-                    let old_quiescence_nodes_searched = quiescence_nodes_searched;
-
-                    match status {
-                        ThreadStatus::SearchFinished {
-                            score,
-                            best_move,
-                            depth,
-                        } => {
-                            if *old_best_depth < depth
-                                || *old_best_depth == depth && score > *old_score
-                            {
-                                *old_score = score;
-                                *old_best_move = best_move;
-                                *old_best_depth = depth;
-                            }
-                            // *searching = false;
-                        }
-
-                        ThreadStatus::StatusUpdate {
-                            nodes_searched,
-                            quiescence_nodes_searched,
-                        } => {
-                            *old_nodes_searched += nodes_searched + quiescence_nodes_searched;
-                            *nodes_since_pv_update += nodes_searched;
-                            *old_quiescence_nodes_searched += quiescence_nodes_searched;
-                            *searching = true;
-                        }
-
-                        _ => {}
-                    }
-                }
             }
         }
+        res
     }
 
     fn broadcast(&self, command: &ThreadCommand) -> Result<(), channel::SendError<ThreadCommand>> {
-        for (_, s, _, _) in self.threads.iter() {
-            s.send(command.clone())?;
+        for handle in self.threads.iter() {
+            handle.command_channel.send(command.clone())?;
         }
         Ok(())
     }
@@ -1010,8 +1038,8 @@ impl SearchThreadPool {
     }
 
     pub(crate) fn wait_channels_empty(&self) {
-        for (_, s, _, _) in &self.threads {
-            while !s.is_empty() {
+        for handle in &self.threads {
+            while !handle.command_channel.is_empty() {
                 // Should we sleep for a few microseconds or something?
             }
         }
