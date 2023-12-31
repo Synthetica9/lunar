@@ -1001,13 +1001,12 @@ impl SearchThreadPool {
                         }
                     };
 
-                    let ponder = if let Some(ponder_move) =
-                        pv.get(0).filter(|ply| best_move == **ply).and(pv.get(1))
-                    {
-                        format!("ponder {}", ponder_move.long_name())
-                    } else {
-                        "".to_string()
-                    };
+                    let ponder = self
+                        .transposition_table
+                        .get(history.game().hash_after_ply(&best_move))
+                        .and_then(|x| x.best_move())
+                        .map(|ply| format!("ponder {}", ply.long_name()))
+                        .unwrap_or("".to_string());
 
                     if !force {
                         // Our target PV instability upon ending a search is 1. Try to
