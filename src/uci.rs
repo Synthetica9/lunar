@@ -103,7 +103,10 @@ impl UCIState {
     pub fn interpret(&mut self, command: &str) -> Result<(), String> {
         self.log(&format!("> {command}"));
         let mut parts = command.split_whitespace();
-        let command = parts.next().ok_or("No command")?;
+        let command = match parts.next() {
+            None => return Ok(()),
+            Some(x) => x,
+        };
         match command {
             "uci" => {
                 self.send(&format!("id name {NAME}"));
@@ -286,7 +289,7 @@ impl UCIState {
                 self.search_thread_pool.stop();
             }
             "quit" => {
-                self.log("kthxbye");
+                self.info("kthxbye ☀️");
                 std::process::exit(0);
             }
             "wait" => {
@@ -490,11 +493,28 @@ fn spawn_reader_thread() -> crossbeam_channel::Receiver<String> {
     let (tx, rx) = crossbeam_channel::unbounded();
 
     std::thread::spawn(move || {
-        use std::io::BufRead;
-        let lines = std::io::stdin().lock().lines();
+        #[cfg(not(feature = "readline"))]
+        let lines = {
+            use std::io::BufRead;
+            std::io::stdin().lock().lines()
+        };
+
+        #[cfg(feature = "readline")]
+        let mut editor = {
+            use rustyline::config::Configurer;
+
+            let mut rl = rustyline::Editor::<(), _>::new().expect("Could not build editor");
+            rl.set_auto_add_history(true);
+            rl
+        };
+        #[cfg(feature = "readline")]
+        let lines = editor.iter(&"[🌑] ");
+
         for line in lines {
-            tx.send(line.expect("No line?").trim().to_string()).unwrap();
+            tx.send(line.unwrap_or("".to_string()).trim().to_string())
+                .unwrap();
         }
+
         // This kills the process.
         tx.send("quit".to_string()).unwrap();
     });
