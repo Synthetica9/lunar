@@ -330,7 +330,27 @@ pub(crate) trait ApplyPly {
 
     fn _apply_ply(&mut self, game: &Game, ply: &Ply) {
         let info = GameInfoForPly::new(game, ply);
-        self._apply_ply_with_info(&info, ply, false)
+        self._apply_ply_with_info(&info, ply, false);
+    }
+
+    fn _rough_apply(&mut self, game: &Game, ply: &Ply) {
+        let info = GameInfoForPly::new(game, ply);
+        self._rough_apply_with_info(info, ply);
+    }
+
+    fn _rough_apply_with_info(&mut self, info: GameInfoForPly, ply: &Ply) {
+        // Apply in a way that doesn't strictly follow the rules, but should be ok in most cases.
+        // Used for speculative prefetching on hashes.
+
+        let src = ply.src();
+        let dst = ply.dst();
+
+        if let Some(victim) = info.captured_piece {
+            self.toggle_piece(info.to_move.other(), victim, dst);
+        }
+
+        self.toggle_piece_multi(info.to_move, info.our_piece, &[src, dst]);
+        self.flip_side()
     }
 
     fn _apply_ply_with_info(&mut self, info: &GameInfoForPly, ply: &Ply, invert: bool) {

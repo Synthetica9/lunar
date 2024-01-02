@@ -378,6 +378,9 @@ impl ThreadData {
                     command => command.ply().unwrap(),
                 };
 
+                self.transposition_table
+                    .prefetch(self.history.game().speculative_hash_after_ply(&ply));
+
                 debug_assert!(
                     self.game().is_pseudo_legal(&ply),
                     "{command:?} generated illegal move {ply:?} in {:?} (depth {depth})",
@@ -1008,10 +1011,14 @@ impl SearchThreadPool {
                                 // This is ok, we just send any move I guess?
                                 legal_moves[0]
                             } else {
-                                println!("info string No best move found... this is bad!");
-                                println!("info string {:?}", time_policy);
-                                println!("info string {}", history.game().to_fen());
-                                panic!()
+                                eprintln!("info string No best move found... this is bad!");
+                                eprintln!("info string {:?}", time_policy);
+                                eprintln!("info string {}", history.game().to_fen());
+
+                                #[cfg(debug_assertions)]
+                                panic!();
+
+                                legal_moves[0]
                             }
                         }
                     };

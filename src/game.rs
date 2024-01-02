@@ -189,6 +189,12 @@ impl Game {
         res
     }
 
+    pub fn speculative_hash_after_ply(&self, ply: &Ply) -> ZobristHash {
+        let mut res = self.hash();
+        res._rough_apply(self, ply);
+        res
+    }
+
     // Pseudo-legal moves
     fn _step_moves_for(
         &self,

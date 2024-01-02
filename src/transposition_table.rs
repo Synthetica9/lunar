@@ -132,6 +132,7 @@ impl TranspositionTable {
     pub fn new(bytes: usize) -> TranspositionTable {
         let needed_entries = TranspositionTable::needed_entries(bytes);
         let mut table = Vec::with_capacity(needed_entries / ITEMS_PER_BUCKET);
+
         while table.len() < needed_entries / ITEMS_PER_BUCKET {
             table.push(
                 TranspositionLine([TranspositionPair { key: 0, value: 0 }; ITEMS_PER_BUCKET])
@@ -162,7 +163,7 @@ impl TranspositionTable {
     }
 
     pub const fn needed_entries(bytes: usize) -> usize {
-        bytes / ENTRY_SIZE
+        bytes / std::mem::size_of::<TranspositionLine>()
     }
 
     pub fn num_entries(&self) -> usize {
@@ -192,6 +193,18 @@ impl TranspositionTable {
         }
 
         None
+    }
+
+    pub fn prefetch(&self, hash: ZobristHash) {
+        let slot = self.slot(hash);
+        let ptr = self.table[slot].get();
+
+        {
+            use core::arch::x86_64::*;
+            unsafe {
+                _mm_prefetch(ptr.cast(), _MM_HINT_T0);
+            }
+        }
     }
 
     pub fn put(&self, hash: ZobristHash, value: TranspositionEntry) {
