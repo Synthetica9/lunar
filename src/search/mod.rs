@@ -17,6 +17,7 @@ use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
+use crate::transposition_table::PutResult;
 use crate::transposition_table::{TranspositionEntry, TranspositionTable};
 use crate::uci::TimePolicy;
 
@@ -25,7 +26,7 @@ mod move_order;
 
 use currently_searching::CurrentlySearching;
 
-pub const COMMS_INTERVAL: usize = 1 << 10;
+pub const COMMS_INTERVAL: usize = 1 << 14;
 pub const ONE_MP: Millipawns = Millipawns(1);
 pub const N_KILLER_MOVES: usize = 2;
 
@@ -43,6 +44,7 @@ enum ThreadStatus {
     StatusUpdate {
         nodes_searched: usize,
         quiescence_nodes_searched: usize,
+        tt_puts: usize,
     },
     SearchFinished {
         score: Millipawns,
@@ -108,6 +110,7 @@ struct ThreadData {
     status_channel: channel::Sender<ThreadStatus>,
     nodes_searched: usize,
     quiescence_nodes_searched: usize,
+    tt_puts: usize,
 
     transposition_table: Arc<TranspositionTable>,
     currently_searching: CurrentlySearching,
@@ -160,9 +163,11 @@ impl ThreadData {
             let msg = ThreadStatus::StatusUpdate {
                 nodes_searched: self.nodes_searched,
                 quiescence_nodes_searched: self.quiescence_nodes_searched,
+                tt_puts: self.tt_puts,
             };
             self.nodes_searched = 0;
             self.quiescence_nodes_searched = 0;
+            self.tt_puts = 0;
             msg
         } else {
             ThreadStatus::Idle
@@ -379,7 +384,7 @@ impl ThreadData {
                 };
 
                 self.transposition_table
-                    .prefetch(self.history.game().speculative_hash_after_ply(&ply));
+                    .prefetch_read(self.history.game().speculative_hash_after_ply(&ply));
 
                 debug_assert!(
                     self.game().is_pseudo_legal(&ply),
@@ -461,26 +466,32 @@ impl ThreadData {
             }
         }
 
-        let value_type = if value <= alpha_orig {
-            UpperBound
-        } else if value >= beta {
-            LowerBound
-        } else {
-            Exact
-        };
-
         if value.is_mate_in_n().is_some() {
             value -= ONE_MP * value.0.signum();
         }
 
-        let tte = TranspositionEntry::new(
-            depth as u8,
-            best_move,
-            value,
-            value_type,
-            self.transposition_table.age(),
-        );
-        self.transposition_table.put(self.game().hash(), tte);
+        if depth >= 2 {
+            let value_type = if value <= alpha_orig {
+                UpperBound
+            } else if value >= beta {
+                LowerBound
+            } else {
+                Exact
+            };
+
+            let tte = TranspositionEntry::new(
+                depth as u8,
+                best_move,
+                value,
+                value_type,
+                self.transposition_table.age(),
+            );
+
+            match self.transposition_table.put(self.game().hash(), tte) {
+                PutResult::ValueAdded => self.tt_puts += 1,
+                PutResult::ValueReplaced => {}
+            }
+        }
 
         Ok((value, best_move))
     }
@@ -576,6 +587,7 @@ impl SearchThreadPool {
                     status_channel: status_s,
                     nodes_searched: 0,
                     quiescence_nodes_searched: 0,
+                    tt_puts: 0,
 
                     currently_searching,
                     transposition_table,
@@ -808,9 +820,11 @@ impl SearchThreadPool {
                     ThreadStatus::StatusUpdate {
                         nodes_searched: extra_nodes_searched,
                         quiescence_nodes_searched: extra_qnodes_searched,
+                        tt_puts,
                     } => {
                         *nodes_searched += extra_nodes_searched + extra_qnodes_searched;
                         *quiescence_nodes_searched += extra_qnodes_searched;
+                        self.transposition_table.add_occupancy(tt_puts);
                         thread.is_searching = true;
                     }
 
@@ -977,6 +991,10 @@ impl SearchThreadPool {
             info.push_str(&format!("qnodes {quiescence_nodes_searched} "));
             info.push_str(&format!("qnps {} ", quiescence_nodes_per_second as usize));
             info.push_str(&format!("time {} ", (elapsed * 1000.0) as usize));
+            info.push_str(&format!(
+                "hashfull {} ",
+                self.transposition_table.occupancy_mil()
+            ));
             info.push_str(&format!("pv {} ", crate::transposition_table::pv_uci(pv)));
             info
         } else {

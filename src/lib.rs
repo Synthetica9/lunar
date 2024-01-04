@@ -1,4 +1,5 @@
 #![cfg_attr(feature = "simd", feature(portable_simd))]
+#![cfg_attr(feature = "hugepages", feature(allocator_api, slice_ptr_get))]
 
 pub mod basic_enums;
 pub mod bitboard;
@@ -10,6 +11,10 @@ pub mod direction;
 pub mod eval;
 pub mod game;
 pub mod history;
+
+#[cfg(feature = "hugepages")]
+pub mod hugepages_mmap_alloc;
+
 pub mod legality;
 pub mod millipawns;
 pub mod piece;

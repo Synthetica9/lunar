@@ -12,13 +12,14 @@ authors = [
 members = ["parameters"]
 
 [features]
-default = ["asm", "readline"]
+default = ["asm", "readline", "hugepages"]
 # Enables custom assembly. Can be disabled on platforms that support it
 # to test "generic" code. All ASM _should_ be feature-gated.
 asm = []
 # Explicitly uses std::simd. Currently experimental, so disabled by default
 simd = []
 readline = ["rustyline"]
+hugepages = ["nix"]
 
 [profile.release]
 lto = true
@@ -38,6 +39,8 @@ smallvec = { version = "1.11", features = [ "union" ] }
 static_assertions = "1.1"
 parameters = { path = "./parameters" }
 rustyline = { version = "13.0", optional = true }
+nix = { version = "0.27", optional = true, features=["mman"], default-features = false}
+not_empty = "0.1"
 
 [build-dependencies]
 rand = { version = "0.8", features = ["small_rng"], default-features = false }
