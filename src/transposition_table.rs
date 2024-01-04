@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
 
 use not_empty::NonEmptySlice;
@@ -349,49 +350,41 @@ impl TranspositionTable {
     pub fn update_pv(&self, history: &History, old_pv: &[Ply]) -> Vec<Ply> {
         let mut history = history.clone();
         let mut res = Vec::new();
-
-        let mut push = |ply, history: &mut History| {
-            let game = history.game();
-            let is_legal = game.is_legal(&ply);
-
-            if is_legal {
-                res.push(ply);
-                history.push(&ply);
-                !history.repetition_count_at_least_3()
-            } else {
-                false
+        let pv_hash = {
+            let mut res = HashMap::with_capacity(old_pv.len());
+            let mut history = history.clone();
+            for ply in old_pv {
+                res.insert(history.game().hash(), *ply);
+                history.hard_push(ply);
             }
+            res
         };
 
-        for entry in old_pv.iter() {
-            let next = match self
-                .get(history.game().hash())
-                .and_then(|x| x.best_move.wrap_null())
-            {
-                Some(ply_from_tt) => {
-                    if ply_from_tt == *entry {
-                        Some(*entry)
-                    } else {
-                        None
-                    }
-                }
-                None => Some(*entry),
-            };
-
-            if !next.is_some_and(|ply| push(ply, &mut history)) {
-                break;
-            }
-        }
-
         loop {
-            if !self
-                .get(history.game().hash())
-                .and_then(|tte| tte.best_move.wrap_null())
-                .is_some_and(|ply| push(ply, &mut history))
-            {
+            if history.repetition_count_at_least_3() {
+                break;
+            }
+
+            let game = history.game();
+            let hash = game.hash();
+            let from_tt = self.get(hash).and_then(|tte| tte.best_move());
+            let from_pv = pv_hash.get(&hash).copied();
+
+            let to_play = [from_tt, from_pv]
+                .iter()
+                .copied()
+                .flatten()
+                .filter(|ply| game.is_legal(ply))
+                .next();
+
+            if let Some(ply) = to_play {
+                history.hard_push(&ply);
+                res.push(ply);
+            } else {
                 break;
             }
         }
+
         res
     }
 
