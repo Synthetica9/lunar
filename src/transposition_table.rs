@@ -97,6 +97,7 @@ pub struct TranspositionEntry {
 pub enum PutResult {
     ValueReplaced,
     ValueAdded,
+    Noop,
 }
 
 impl TranspositionEntry {
@@ -290,6 +291,26 @@ impl TranspositionTable {
         }
     }
 
+    fn replacement_order_key(&self, entry: &TranspositionPair, new_hash: ZobristHash) -> impl Ord {
+        let value = entry.value();
+        let hash = entry.hash();
+
+        // Effective age is actually a multi-purpose filter:
+        // - Age is initialized to MAX_AGE / 2, which makes 0 age for unoccpied entries
+        //   a pretty high age at the start.
+        // - Invalid entries quickly get aged out.
+        // If we include is_none before this, we run into a problem! We store every hash 4 times...!
+        // Effectively, this means we discard ~3/4 puts!
+
+        (((hash != new_hash) as u16) << 15) // 1 bit
+            | (((MAX_AGE - self.effective_age(&value)) as u16) << 9) // 6 bits
+            | ((value.depth as u16) << 1) // 8 bits
+            | (((value.value_type() == TranspositionEntryType::Exact) as u16) << 0)
+        // 1 bit
+
+        // TOTAL: 16 bits.
+    }
+
     pub fn put(&self, hash: ZobristHash, value: TranspositionEntry) -> PutResult {
         self.prefetch_write(hash);
 
@@ -307,15 +328,20 @@ impl TranspositionTable {
         // SAFETY: We're iterating over a set-length slice, so there will always be _some_ entry.
         // See also the above debug.
         let to_replace = unsafe { to_replace.unwrap_unchecked() };
-        let replaced = unsafe { to_replace.get().read().value() };
+        let replaced = unsafe { to_replace.get().read() };
 
         let entry = TranspositionPair::new(hash, value);
+
+        // What we're plugging in would be actively worse.
+        if hash == replaced.hash() && value.depth < replaced.value().depth {
+            return PutResult::Noop;
+        }
 
         unsafe {
             to_replace.get().write(entry);
         }
 
-        if replaced.age() == value.age() {
+        if replaced.value().age() == value.age() {
             PutResult::ValueReplaced
         } else {
             PutResult::ValueAdded
@@ -413,21 +439,6 @@ impl TranspositionTable {
         let global_age = self.age();
 
         (global_age - entry.age()) % MAX_AGE
-    }
-
-    fn replacement_order_key(&self, entry: &TranspositionPair, new_hash: ZobristHash) -> impl Ord {
-        let value = entry.value();
-        let hash = entry.hash();
-
-        // Effective age is actually a multi-purpose filter:
-        // - Age is initialized to MAX_AGE / 2, which makes 0 age for unoccpied entries
-        //   a pretty high age at the start.
-        // - Invalid entries quickly get aged out.
-        // If we include is_none before this, we run into a problem! We store every hash 4 times...!
-        // Effectively, this means we discard ~3/4 puts!
-        (((hash != new_hash) as u16) << 15)
-            | (((MAX_AGE - self.effective_age(&value)) as u16) << 8)
-            | ((value.depth as u16) << 0)
     }
 }
 

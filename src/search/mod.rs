@@ -490,6 +490,7 @@ impl ThreadData {
             match self.transposition_table.put(self.game().hash(), tte) {
                 PutResult::ValueAdded => self.tt_puts += 1,
                 PutResult::ValueReplaced => {}
+                PutResult::Noop => {}
             }
         }
 
