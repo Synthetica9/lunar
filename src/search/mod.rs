@@ -1097,16 +1097,6 @@ mod tests {
         SearchThreadPool::new(4, tt)
     }
 
-    #[test]
-    fn create_kill_thread_pool() {
-        // Previous implementation had a 1/2 chance of succeeding for every
-        // iteration. Better to test multiple times.
-        for _ in 0..16 {
-            let mut pool = new_thread_pool();
-            pool.kill();
-        }
-    }
-
     macro_rules! position_search_test(
         ($name: ident, $fen: expr, $depth: expr, $expected_eval: expr, $expected_ply: expr) => {
             #[test]

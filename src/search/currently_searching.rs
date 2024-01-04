@@ -29,7 +29,7 @@ impl CurrentlySearching {
     }
 
     fn get_bucket(&self, hash: ZobristHash) -> &[UnsafeCell<ZobristHash>; CS_BUCKET_SIZE] {
-        &self.0[hash.as_u64() as usize % CS_SIZE]
+        &self.0[hash.to_usize() % CS_SIZE]
     }
 
     fn get(&self, hash: ZobristHash) -> bool {
@@ -52,7 +52,7 @@ impl CurrentlySearching {
             if val == hash {
                 return;
             }
-            if val.as_u64() == 0 {
+            if *val.as_u64() == 0 {
                 unsafe { p.write_volatile(hash) };
                 return;
             }

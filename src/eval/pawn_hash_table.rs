@@ -186,7 +186,7 @@ impl PawnHashTable {
     }
 
     pub fn get(&self, game: &Game) -> Option<&PHTEntry> {
-        let entry = self.0.get(game.pawn_hash().as_usize() % PHT_SIZE).unwrap();
+        let entry = self.0.get(game.pawn_hash().to_usize() % PHT_SIZE).unwrap();
 
         if entry.hash != game.pawn_hash()
         // TODO: are both needed?
@@ -200,7 +200,7 @@ impl PawnHashTable {
     }
 
     pub fn insert(&mut self, game: &Game) -> &PHTEntry {
-        let idx = game.pawn_hash().as_usize() % PHT_SIZE;
+        let idx = game.pawn_hash().to_usize() % PHT_SIZE;
         self.0[idx] = PHTEntry::new(game, &eval::STATIC_EVALUATOR);
         &self.0[idx]
     }

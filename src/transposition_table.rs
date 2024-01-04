@@ -52,9 +52,7 @@ struct TranspositionPair {
 
 impl TranspositionPair {
     fn hash(&self) -> ZobristHash {
-        ZobristHash {
-            hash: self.key ^ self.value,
-        }
+        ZobristHash(self.key ^ self.value)
     }
 
     pub fn new(hash: ZobristHash, value: TranspositionEntry) -> Self {
@@ -235,7 +233,7 @@ impl TranspositionTable {
     }
 
     pub const fn needed_entries(bytes: usize) -> usize {
-        bytes / std::mem::size_of::<TranspositionLine>()
+        bytes / ENTRY_SIZE
     }
 
     pub fn num_buckets(&self) -> usize {
@@ -255,7 +253,7 @@ impl TranspositionTable {
     }
 
     pub fn bucket_idx(&self, hash: ZobristHash) -> usize {
-        hash.as_usize() % self.num_buckets()
+        hash.to_usize() % self.num_buckets()
     }
 
     pub fn get(&self, hash: ZobristHash) -> Option<TranspositionEntry> {

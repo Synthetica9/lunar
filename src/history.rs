@@ -59,7 +59,7 @@ impl History {
     }
 
     fn hash_index(&self, hash: ZobristHash) -> usize {
-        hash.hash as usize % HASH_TABLE_SIZE
+        hash.to_usize() % HASH_TABLE_SIZE
     }
 
     pub fn hash_count(&self, hash: ZobristHash) -> &u8 {
