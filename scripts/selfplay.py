@@ -5,8 +5,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from contextlib import contextmanager
 import sys
+import shutil
 import argparse
 
+MAIN_DIR = Path(__file__).parent.parent
+SCRIPTS_DIR = MAIN_DIR / "scripts"
+TARGET_DIR = MAIN_DIR / "target"
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -23,7 +27,7 @@ def selfplay(old, new):
     old_rev, old_path = old
     new_rev, new_path = new
 
-    cli = Path(__file__).parent / "c_chess_cli.py"
+    cli = SCRIPTS_DIR / "c_chess_cli.py"
     subprocess.check_call(
         [
             str(cli),
@@ -41,8 +45,9 @@ def selfplay(old, new):
             *("-draw", "number=40", "score=50", "count=20"),
             *("-pgn", "out.pgn"),
             *("-sprt",),
-            *("-concurrency", "2"),
-            *("-games", "1000"),
+            *("-log",),
+            *("-concurrency", "6"),
+            *("-games", "16000"),
         ],
     )
 
@@ -64,22 +69,30 @@ def name(rev):
 @contextmanager
 def compile_rev(rev, options):
     rev = rev_parse(rev)
-    with TemporaryDirectory() as d:
-        p = Path(d) / rev
-        subprocess.check_call(["git", "worktree", "add", "--detach", str(p), rev])
-        try:
-            pgo_script = p / "scripts/build_pgo.sh"
-            if not options.no_pgo and pgo_script.exists():
-                bin_name = "lunar_pgo"
-                subprocess.check_call([str(pgo_script)], cwd=p)
-            else:
-                bin_name = "lunar"
-                subprocess.check_call(
-                    ["cargo", "build", "--release", "--bin", "lunar"], cwd=p
-                )
-            yield (rev, p / "target/release" / bin_name)
-        finally:
-            subprocess.check_call(["git", "worktree", "remove", str(p)])
+    if not options.no_pgo:
+        bin_name = "lunar_pgo"
+    else:
+        bin_name = "lunar"
+
+    permanent_loc = TARGET_DIR / rev / bin_name
+    if not permanent_loc.exists():
+        with TemporaryDirectory() as d:
+            p = Path(d) / rev
+            subprocess.check_call(["git", "worktree", "add", "--detach", str(p), rev])
+            try:
+                pgo_script = p / "scripts/build_pgo.sh"
+                if not options.no_pgo and pgo_script.exists():
+                    subprocess.check_call([str(pgo_script)], cwd=p)
+                else:
+                    subprocess.check_call(
+                        ["cargo", "build", "--release", "--bin", "lunar"], cwd=p
+                    )
+
+                permanent_loc.parent.mkdir(exist_ok=True)    
+                shutil.copy(p / "target/release" / bin_name, permanent_loc)
+            finally:
+                subprocess.check_call(["git", "worktree", "remove", str(p)])
+    yield (rev, permanent_loc)
 
 
 def main(argv):

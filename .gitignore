@@ -6,3 +6,4 @@ out.pgn
 *.dat
 out.gif
 frames/*.png
+*.log
