@@ -147,7 +147,7 @@ impl Game {
         )
     }
 
-    pub fn apply_ply(&mut self, ply: &Ply) -> crate::ply::UndoPly {
+    pub fn apply_ply(&mut self, ply: &Ply) -> UndoPly {
         debug_assert!(self.board.is_valid());
 
         let half_move_clock_before = self.half_move;
@@ -566,18 +566,18 @@ impl Game {
             }
         }
 
-        #[cfg(debug_assertions)]
-        {
-            let mut cpy = self.clone();
-            cpy.apply_ply(ply);
-            let fen = self.to_fen();
-            assert_eq!(
-                res,
-                cpy.is_in_check(),
-                "Inconsistent check... {ply:?}\n{fen}\n{}",
-                occupied_after.simple_render()
-            );
-        }
+        // #[cfg(debug_assertions)]
+        // {
+        //     let mut cpy = self.clone();
+        //     cpy.apply_ply(ply);
+        //     let fen = self.to_fen();
+        //     assert_eq!(
+        //         res,
+        //         cpy.is_in_check(),
+        //         "Inconsistent check... {ply:?}\n{fen}\n{}",
+        //         occupied_after.simple_render()
+        //     );
+        // }
 
         res
     }

@@ -94,9 +94,7 @@ impl Ply {
         Ply::new(src, dst, Some(SpecialFlag::EnPassant))
     }
 
-    pub const fn null() -> Ply {
-        Ply(0)
-    }
+    pub const NULL: Ply = Ply(0);
 
     pub const fn is_null(&self) -> bool {
         self.0 == 0
@@ -112,7 +110,7 @@ impl Ply {
     }
 
     pub fn unwrap_null(val: &Option<Ply>) -> Ply {
-        val.unwrap_or(Ply::null())
+        val.unwrap_or(Ply::NULL)
     }
 
     pub const fn normalize(self) -> Ply {
@@ -208,7 +206,7 @@ impl Ply {
 
     pub fn resets_halfmove_clock(&self, game: &Game) -> bool {
         // TODO: move to Game object
-        self.is_capture(game) || self.moved_piece(game) == Piece::Pawn
+        !self.is_null() && (self.is_capture(game) || self.moved_piece(game) == Piece::Pawn)
     }
 }
 
@@ -280,11 +278,11 @@ impl PartialEq for Ply {
 
 #[derive(Copy, Clone, Debug)]
 pub struct GameInfoForPly {
-    to_move: Color,
-    our_piece: Piece,
-    captured_piece: Option<Piece>,
-    en_passant: Option<Square>,
-    castle_rights: CastleRights,
+    pub to_move: Color,
+    pub our_piece: Piece,
+    pub captured_piece: Option<Piece>,
+    pub en_passant: Option<Square>,
+    pub castle_rights: CastleRights,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -296,13 +294,30 @@ pub struct UndoPly {
 
 impl GameInfoForPly {
     pub fn new(game: &Game, ply: &Ply) -> GameInfoForPly {
-        debug_assert!(game.is_pseudo_legal(ply));
+        debug_assert!(
+            game.is_pseudo_legal(ply) || ply.is_null(),
+            "{ply:?} is not pseudo-legal or null! FEN:\n{}",
+            game.to_fen()
+        );
 
-        let to_move = game.to_move();
-        let our_piece = ply.moved_piece(game);
-        let captured_piece = ply._captured_piece(game);
         let en_passant = game.en_passant();
         let castle_rights = game.castle_rights();
+        let to_move = game.to_move();
+
+        if ply.is_null() {
+            return GameInfoForPly {
+                en_passant,
+                castle_rights,
+                to_move,
+
+                // Knight will never trigger any special conditions.
+                our_piece: Piece::Knight,
+                captured_piece: None,
+            };
+        }
+
+        let our_piece = ply.moved_piece(game);
+        let captured_piece = ply._captured_piece(game);
 
         GameInfoForPly {
             to_move,
@@ -362,6 +377,41 @@ pub(crate) trait ApplyPly {
 
         let flag = ply.flag();
 
+        self.flip_side();
+
+        // update en passant rights
+        // First, disable current en passant rights.
+        if !invert {
+            if let Some(en_passant) = info.en_passant {
+                self.toggle_en_passant(en_passant);
+            }
+        }
+
+        // Then, enable new en passant rights.
+        // En passant is only possible after a double pawn move.
+        {
+            let is_pawn_move = info.our_piece == Pawn;
+            let is_double_move = (dst.rank().as_u8() as i8 - src.rank().as_u8() as i8).abs() == 2;
+            if is_pawn_move && is_double_move {
+                let en_passant = Square::new(dst.file(), info.to_move.en_passant_rank());
+                self.toggle_en_passant(en_passant);
+            }
+        }
+
+        if invert {
+            if let Some(en_passant) = info.en_passant {
+                self.toggle_en_passant(en_passant);
+            }
+
+            if ply.is_null() {
+                return;
+            }
+        }
+
+        if ply.is_null() {
+            return;
+        }
+
         // Remove opponent piece from the destination square.
         if let Some(SpecialFlag::EnPassant) = flag {
             let capture_square = Square::new(dst.file(), src.rank());
@@ -395,31 +445,6 @@ pub(crate) trait ApplyPly {
             // self.toggle_piece_multi(to_move, Rook, &[rook_src, rook_dst]);
             self.toggle_piece(info.to_move, Rook, rook_src);
             self.toggle_piece(info.to_move, Rook, rook_dst);
-        }
-
-        // update en passant rights
-        // First, disable current en passant rights.
-        if !invert {
-            if let Some(en_passant) = info.en_passant {
-                self.toggle_en_passant(en_passant);
-            }
-        }
-
-        // Then, enable new en passant rights.
-        // En passant is only possible after a double pawn move.
-        {
-            let is_pawn_move = info.our_piece == Pawn;
-            let is_double_move = (dst.rank().as_u8() as i8 - src.rank().as_u8() as i8).abs() == 2;
-            if is_pawn_move && is_double_move {
-                let en_passant = Square::new(dst.file(), info.to_move.en_passant_rank());
-                self.toggle_en_passant(en_passant);
-            }
-        }
-
-        if invert {
-            if let Some(en_passant) = info.en_passant {
-                self.toggle_en_passant(en_passant);
-            }
         }
 
         // update castling rights
@@ -488,8 +513,6 @@ pub(crate) trait ApplyPly {
                 }
             }
         }
-
-        self.flip_side();
     }
 }
 

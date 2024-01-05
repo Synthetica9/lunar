@@ -8,8 +8,6 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 use std::time::Instant;
 
-use channel::Receiver;
-use channel::RecvTimeoutError;
 // TODO: use stock rust channels?
 use crossbeam_channel as channel;
 
@@ -29,8 +27,10 @@ use currently_searching::CurrentlySearching;
 pub const COMMS_INTERVAL: usize = 1 << 14;
 pub const ONE_MP: Millipawns = Millipawns(1);
 pub const N_KILLER_MOVES: usize = 2;
+pub const NULL_MOVE_REDUCTION: usize = 2;
 
 pub const PREDICTED_BRANCHING_FACTOR: f64 = 2.1;
+
 
 #[derive(Clone, Debug)]
 enum ThreadCommand {
@@ -280,13 +280,29 @@ impl ThreadData {
         let mut best_move = None;
         let mut value = Millipawns(i32::MIN);
 
+        let is_in_check = self.game().is_in_check();
         if depth == 0 {
-            if self.game().is_in_check() {
+            if is_in_check {
                 (value, best_move) = self.alpha_beta_search(alpha, beta, 1, is_pv)?
             } else {
                 value = self.quiescence_search(alpha, beta)
             };
         } else {
+            // Null move pruning
+            // http://mediocrechess.blogspot.com/2007/01/guide-null-moves.html
+            // TODO: increase reduction on deeper depths?
+            // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
+            if depth >= NULL_MOVE_REDUCTION + 1 && !is_in_check && !self.history.last_is_null() {
+                self.history.push(&Ply::NULL);
+                let null_value = -self
+                    .alpha_beta_search(-beta, -alpha, depth - NULL_MOVE_REDUCTION - 1, false)?
+                    .0;
+                self.history.pop();
+                if null_value >= beta {
+                    return Ok((null_value, best_move));
+                }
+            }
+
             best_move = if is_pv && depth > 5 {
                 // Internal iterative deepening
                 self.alpha_beta_search(alpha, beta, depth / 2, true)?.1
@@ -314,18 +330,8 @@ impl ThreadData {
                     }
                     GenQuiescenceMoves => {
                         for ply in self.game().quiescence_pseudo_legal_moves() {
-                            // TODO: hashable plies
-                            let after_hash = self.game().hash_after_ply(&ply);
-                            let tte = self.transposition_table.get(after_hash);
-
                             let see = static_exchange_evaluation(self.game(), ply);
-                            let value = if let Some(tte) = tte {
-                                // TODO: upper/lower bound?
-                                // TODO: merge these?
-                                CaptureValue::Hash(tte.value)
-                            } else {
-                                CaptureValue::Static(see)
-                            };
+                            let value = CaptureValue::Static(see);
 
                             let command = {
                                 use std::cmp::Ordering::*;
@@ -398,6 +404,7 @@ impl ThreadData {
                     continue;
                 }
 
+                debug_assert!(legality_checker.is_legal(&ply, self.game()));
                 any_moves_seen = true;
 
                 let is_first_move = i == 0;
@@ -447,7 +454,7 @@ impl ThreadData {
                     x
                 };
 
-                self.history.pop();
+                let undo = self.history.pop();
 
                 value = value.max(x);
                 if value > alpha {
@@ -456,7 +463,7 @@ impl ThreadData {
                 }
 
                 if alpha >= beta {
-                    if !ply.is_capture(self.game()) {
+                    if undo.info.captured_piece.is_none() {
                         self.insert_killer_move(ply, self.game().half_move_total() as usize);
                     }
                     break;

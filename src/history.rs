@@ -50,12 +50,17 @@ impl History {
         }
     }
 
-    pub fn pop(&mut self) {
+    pub fn pop(&mut self) -> UndoPly {
         let undo = self.undo_history.pop().unwrap();
         *self.hash_count_mut(self.game.hash()) -= 1;
         self.game.undo_ply(&undo);
         let old_hash = self.hash_history.pop().unwrap();
         debug_assert_eq!(old_hash, self.game.hash());
+        undo
+    }
+
+    pub fn last_is_null(&self) -> bool {
+        self.undo_history.last().is_some_and(|undo| undo.ply.is_null())
     }
 
     fn hash_index(&self, hash: ZobristHash) -> usize {
