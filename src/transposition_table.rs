@@ -2,6 +2,7 @@ use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
 
+use std::num::NonZeroUsize;
 use not_empty::NonEmptySlice;
 use static_assertions::*;
 
@@ -16,7 +17,7 @@ use crate::hugepages_mmap_alloc::HugePagesAlloc;
 
 pub struct TranspositionTable {
     #[cfg(not(feature = "hugepages"))]
-    table: Box<NonEmeptySlice<TranspositionLine>>,
+    table: Box<NonEmptySlice<TranspositionLine>>,
 
     #[cfg(feature = "hugepages")]
     table: Box<NonEmptySlice<TranspositionLine>, HugePagesAlloc>,
@@ -156,7 +157,7 @@ impl TranspositionTable {
         let needed_entries = TranspositionTable::needed_entries(bytes);
         let needed_lines = needed_entries / ITEMS_PER_BUCKET;
 
-        let mut table: Vec<TranspositionLine, _> = {
+        let mut table = {
             #[cfg(not(feature = "hugepages"))]
             let res = Vec::with_capacity(needed_lines);
 
@@ -173,6 +174,8 @@ impl TranspositionTable {
         }
 
         let boxed = table.into_boxed_slice();
+
+        assert!(boxed.len() > 0, "tt was found empty!");
 
         // TODO: can this be done better?
         // SAFETY: Box<[T], A> and Box<NonEmptySlice<T>, A> have the same memory layout
@@ -254,7 +257,18 @@ impl TranspositionTable {
     }
 
     pub fn bucket_idx(&self, hash: ZobristHash) -> usize {
-        hash.to_usize() % self.num_buckets()
+        let num_buckets: NonZeroUsize = self.table.len();
+        let n: usize = num_buckets.into();
+
+        #[cfg(feature = "intrinsics")]
+        {
+            debug_assert!(n > 0);
+            // NonZeroUsize doesn't propagate this static claim. This is important to make some
+            // other things non-panicking.
+            // SAFTEY: guaranteed by NonZeroUsize, see also assert above.
+            unsafe { std::intrinsics::assume(n > 0) }
+        }
+        hash.to_usize() % n
     }
 
     pub fn get(&self, hash: ZobristHash) -> Option<TranspositionEntry> {
@@ -266,6 +280,7 @@ impl TranspositionTable {
             .map(|x| x.value())
     }
 
+    #[allow(unreachable_code)]
     pub fn prefetch_read(&self, hash: ZobristHash) {
         let ptr = self.bucket(hash).0[0].get();
 
@@ -276,8 +291,15 @@ impl TranspositionTable {
             unsafe { _mm_prefetch(ptr.cast(), FLAG) };
             return;
         }
+
+        #[cfg(feature = "intrinsics")]
+        {
+            unsafe { core::intrinsics::prefetch_read_data(ptr, 3) }
+            return;
+        }
     }
 
+    #[allow(unreachable_code)]
     pub fn prefetch_write(&self, hash: ZobristHash) {
         let ptr = self.bucket(hash).0[0].get();
 
@@ -286,6 +308,12 @@ impl TranspositionTable {
             use core::arch::x86_64::*;
             const FLAG: i32 = _MM_HINT_ET0;
             unsafe { _mm_prefetch(ptr.cast(), FLAG) };
+            return;
+        }
+
+        #[cfg(feature = "intrinsics")]
+        {
+            unsafe { core::intrinsics::prefetch_write_data(ptr, 3) }
             return;
         }
     }

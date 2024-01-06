@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "simd", feature(portable_simd))]
 #![cfg_attr(feature = "hugepages", feature(allocator_api, slice_ptr_get))]
+#![cfg_attr(feature = "intrinsics", feature(core_intrinsics))]
 
 pub mod basic_enums;
 pub mod bitboard;

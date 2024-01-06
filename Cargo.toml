@@ -12,7 +12,7 @@ authors = [
 members = ["parameters"]
 
 [features]
-default = ["asm", "readline", "hugepages"]
+default = ["asm", "readline", "hugepages", "intrinsics"]
 # Enables custom assembly. Can be disabled on platforms that support it
 # to test "generic" code. All ASM _should_ be feature-gated.
 asm = []
@@ -20,6 +20,8 @@ asm = []
 simd = []
 readline = ["rustyline"]
 hugepages = ["nix"]
+# Enable core_intrinsics and some implementations that that enables.
+intrinsics = []
 
 [profile.release]
 lto = true
