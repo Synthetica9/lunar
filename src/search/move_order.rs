@@ -148,8 +148,8 @@ pub enum SearchCommand {
         ply: Ply,
     },
     QuietMove {
-        value: Millipawns,
         is_check: bool,
+        value: Millipawns,
         ply: Ply,
     },
     GenQuietMoves,

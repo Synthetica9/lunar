@@ -358,11 +358,9 @@ impl ThreadData {
                         continue;
                     }
                     GenQuietMoves => {
+                        let game = self.game();
                         for ply in self.game().quiet_pseudo_legal_moves() {
-                            let tte = self
-                                .transposition_table
-                                .get(self.game().hash_after_ply(&ply));
-                            let value = tte.map_or(LOSS, |tte| tte.value);
+                            let value = crate::eval::quiet_move_order(game, ply);
                             let is_check = self.game().is_check(&ply);
                             commands.push(QuietMove {
                                 ply,
