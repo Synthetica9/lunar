@@ -4,15 +4,13 @@ version = "0.1.0"
 edition = "2021"
 build = "build/main.rs"
 default-run = "lunar"
-authors = [
-  "Patrick Hilhorst"
-]
+authors = ["Patrick Hilhorst"]
 
 [workspace]
 members = ["parameters"]
 
 [features]
-default = ["asm", "readline", "hugepages", "intrinsics"]
+default = ["asm", "readline", "intrinsics"]
 # Enables custom assembly. Can be disabled on platforms that support it
 # to test "generic" code. All ASM _should_ be feature-gated.
 asm = []
@@ -37,11 +35,13 @@ opt-level = 3
 strum = "0.25"
 strum_macros = "0.25"
 crossbeam-channel = "0.5"
-smallvec = { version = "1.11", features = [ "union" ] }
+smallvec = { version = "1.11", features = ["union"] }
 static_assertions = "1.1"
 parameters = { path = "./parameters" }
 rustyline = { version = "13.0", optional = true }
-nix = { version = "0.27", optional = true, features=["mman"], default-features = false}
+nix = { version = "0.27", optional = true, features = [
+  "mman",
+], default-features = false }
 not_empty = "0.1"
 
 [build-dependencies]
@@ -53,7 +53,10 @@ serde_yaml = "0.9"
 [dev-dependencies]
 csv = "1.1"
 # criterion = { version = "0.4", features = ["html_reports"] }
-rand = { version = "0.8", features = ["small_rng", "alloc"], default-features = false }
+rand = { version = "0.8", features = [
+  "small_rng",
+  "alloc",
+], default-features = false }
 serde_yaml = "0.9"
 
 [[bench]]
