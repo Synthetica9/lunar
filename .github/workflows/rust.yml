@@ -29,8 +29,8 @@ jobs:
           cat /sys/kernel/mm/transparent_hugepage/enabled
         if: ${{ matrix.hugepages }}
       - name: Build
-        run: cargo build --verbose $FEATURES
+        run: cargo build --verbose "$FEATURES"
       - name: Run tests (regular)
-        run: cargo test --verbose $FEATURES
+        run: cargo test --verbose "$FEATURES"
       - name: Run tests (release)
-        run: cargo test --release --verbose $FEATURES
+        run: cargo test --release --verbose "$FEATURES"
