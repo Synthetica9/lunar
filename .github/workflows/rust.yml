@@ -11,15 +11,26 @@ env:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        hugepages: [true, false]
+        default-features: [true, false]
+
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
+      - name: Setup Hugepages
+        run: |
+          cat /sys/kernel/mm/transparent_hugepage/enabled
+          sudo su
+          echo "madvise" | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+          echo "::set-env name=FEATURES::$FEATURES --features=hugepages"
+          cat /sys/kernel/mm/transparent_hugepage/enabled
+        if: ${{ matrix.hugepages }}
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --verbose $FEATURES
       - name: Run tests (regular)
-        run: cargo test --verbose
+        run: cargo test --verbose $FEATURES
       - name: Run tests (release)
-        run: cargo test --release --verbose
-      - name: Run tests (no-default-features)
-        run: cargo test --no-default-features --verbose
+        run: cargo test --release --verbose $FEATURES
