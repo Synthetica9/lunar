@@ -25,6 +25,7 @@ jobs:
           cat /sys/kernel/mm/transparent_hugepage/enabled
           sudo su
           echo "madvise" | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+          echo 128 | sudo tee /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
           echo "FEATURES=$FEATURES --features=hugepages" >> "$GITHUB_ENV"
           cat /sys/kernel/mm/transparent_hugepage/enabled
         if: ${{ matrix.hugepages }}
