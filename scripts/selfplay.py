@@ -88,7 +88,7 @@ def compile_rev(rev, options):
                         ["cargo", "build", "--release", "--bin", "lunar"], cwd=p
                     )
 
-                permanent_loc.parent.mkdir(exist_ok=True)    
+                permanent_loc.parent.mkdir(exist_ok=True, parents=True)
                 shutil.copy(p / "target/release" / bin_name, permanent_loc)
             finally:
                 subprocess.check_call(["git", "worktree", "remove", str(p)])
