@@ -31,7 +31,6 @@ pub const NULL_MOVE_REDUCTION: usize = 2;
 
 pub const PREDICTED_BRANCHING_FACTOR: f64 = 2.1;
 
-
 #[derive(Clone, Debug)]
 enum ThreadCommand {
     Quit,
@@ -260,19 +259,27 @@ impl ThreadData {
 
         let from_tt = self.transposition_table.get(self.game().hash());
         if let Some(tte) = from_tt {
-            if depth <= tte.depth as usize && !self.history.may_be_repetition() && !is_pv {
+            if depth <= tte.depth as usize && !self.history.may_be_repetition() {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
                 // TODO: check that the move is legal.
-                match tte.value_type() {
-                    Exact => return Ok((tte.value, tte.best_move())),
-                    LowerBound => alpha = alpha.max(tte.value),
-                    UpperBound => beta = beta.min(tte.value),
+                let best_move = tte
+                    .best_move()
+                    .filter(|ply| !is_pv || self.game().is_legal(ply));
+
+                let value_type = tte.value_type();
+
+                if value_type == LowerBound {
+                    alpha = alpha.max(tte.value);
                 }
 
-                if alpha >= beta {
-                    return Ok((tte.value, tte.best_move()));
+                if value_type == UpperBound {
+                    beta = beta.min(tte.value);
+                }
+
+                if (alpha >= beta || value_type == Exact) && (!is_pv || best_move.is_some()) {
+                    return Ok((tte.value, best_move));
                 }
             }
         }
