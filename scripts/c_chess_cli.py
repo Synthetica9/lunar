@@ -44,30 +44,70 @@ def to_args(kwargs):
         it.append(("engine", engine))
 
     for k, v in it:
+        if v == False:
+            continue
+
         yield f"-{k}"
 
-        if v is True:
+        if v == True:
             continue
 
         if isinstance(v, dict):
             for a, b in v.items():
                 if isinstance(b, bool):
                     b = "y" if b else "n"
+                if b is None:
+                    continue
                 yield f"{a}={b}"
 
         else:
             yield str(v)
 
 
-def c_chess_cli(output=False, defaults=True, **kwargs):
+def c_chess_cli(output=False, backend=None, defaults=True, **kwargs):
     setup_chess_cli()
 
     if defaults:
         kwargs = {**default_kwargs(), **kwargs}
 
-    call = [str(OUT_FILE), *to_args(kwargs)]
+    if backend is None:
+        backend = str(OUT_FILE)
 
-    subprocess.check_call(call, stderr=subprocess.DEVNULL)
+    if backend == "cutechess-cli":
+        # Do conversions!
+        kwargs["log"] = False
+
+        draw = kwargs.get("draw", {})
+        draw["movenumber"] = draw.pop("moves", 0)
+        draw["movecount"] = draw.pop("count", 0)
+
+        resign = kwargs.get("resign", {})
+        resign["movecount"] = resign.pop("count", 0)
+
+        openings = kwargs.get("openings", {})
+        openings["order"] = "random" if openings.pop("random", False) else "sequential"
+        openings.pop("repeat", None)
+
+        each = kwargs.get("each", {})
+        each["proto"] = "uci"
+        kwargs["ratinginterval"] = 10
+        kwargs["outcomeinterval"] = 10
+
+        sprt = kwargs.get("sprt", None)
+
+        if sprt == True:
+            sprt = {}
+
+        if isinstance(sprt, dict):
+            sprt.setdefault("elo0", 0)
+            sprt.setdefault("elo1", 4)
+            sprt.setdefault("alpha", 0.05)
+            sprt.setdefault("beta", 0.05)
+            kwargs["sprt"] = sprt
+
+    call = [backend, *to_args(kwargs)]
+
+    subprocess.check_call(call)
 
 
 if __name__ == "__main__":

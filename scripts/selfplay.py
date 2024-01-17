@@ -7,6 +7,7 @@ import sys
 import shutil
 import argparse
 from itertools import count
+from c_chess_cli import c_chess_cli
 
 MAIN_DIR = Path(__file__).parent.parent
 SCRIPTS_DIR = MAIN_DIR / "scripts"
@@ -16,52 +17,76 @@ TARGET_DIR = MAIN_DIR / "target"
 def get_parser():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("revs", nargs="*", default="HEAD~1")
+    parser.add_argument("revs", nargs="*")
 
     parser.add_argument("--no-pgo", action="store_true")
+
+    have_cutechess = shutil.which("cutechess-cli") is not None
+    parser.add_argument(
+        "--backend",
+        choices=["internal", "cutechess-cli"],
+        default="cutechess-cli" if have_cutechess else "internal",
+    )
+
+    parser.add_argument("--stockfish", type=int, nargs="*")
 
     return parser
 
 
-def selfplay(*revs):
-    if len(revs) <= 1:
-        raise ValueError("Not enough revs.")
+def selfplay(options, *revs, stockfishes=None):
+    if len(revs) == 1:
+        names = [""]
     elif len(revs) == 2:
         names = ["new", "old"]
     else:
         names = map(str, count(1))
 
-    def engine_args():
-        for (rev, path), identifier in zip(revs, names):
-            yield from (
-                "-engine",
-                f"name=lunar {identifier} - {name(rev)}",
-                f"cmd={path}",
+    engines = [
+        {
+            "name": f"lunar {identifier} - {name(rev)}",
+            "cmd": path,
+        }
+        for (rev, path), identifier in zip(revs, names)
+    ]
+
+    if stockfishes is not None:
+        for elo in stockfishes:
+            engines.append(
+                {
+                    "name": f"stockfish - {elo} elo",
+                    "cmd": "stockfish",
+                    "option.UCI_LimitStrength": "true",
+                    "option.UCI_Elo": elo,
+                }
             )
 
-        if len(revs) == 2:
-            yield "-sprt"
+    if len(engines) < 2:
+        raise ValueError("Not enough revs.")
 
-    cli = SCRIPTS_DIR / "c_chess_cli.py"
-    subprocess.check_call(
-        [
-            str(cli),
-            *engine_args(),
-            # Set opening book
-            *(
-                "-openings",
-                "file=./test_data/blitz_openings.fen",
-                "order=random",
-                "-repeat",
-            ),
-            *("-each", "tc=2+.1", "option.Hash=128"),
-            *("-resign", "score=1000", "count=10"),
-            *("-draw", "number=40", "score=50", "count=20"),
-            *("-pgn", "out.pgn"),
-            *("-log",),
-            *("-concurrency", "6"),
-            *("-games", "16000"),
-        ],
+    backend = None if options.backend == "internal" else options.backend
+
+    c_chess_cli(
+        backend=backend,
+        engines=engines,
+        sprt=len(engines) == 2,
+        openings={
+            "file": "./test_data/blitz_openings.fen",
+            "order": "random",
+        },
+        repeat=True,
+        each={
+            "tc": "2+.1",
+            "option.Hash": 128,
+        },
+        resign={"score": 1000, "count": 10},
+        draw={
+            "score": 50,
+            "count": 20,
+        },
+        log=True,
+        concurrency=2,
+        rounds=1000,
+        games=2,
     )
 
 
@@ -111,15 +136,16 @@ def main(argv):
     parser = get_parser()
     args = parser.parse_args(argv)
 
+    print(args.revs)
     revs = list(args.revs)
 
     head = parse_rev("HEAD")
     master = parse_rev("master")
 
     if len(revs) == 0:
-        revs.append(head)
+        revs.append("HEAD")
 
-    if len(revs) == 1:
+    if len(revs) == 1 and not args.stockfish:
         (rev,) = revs
         if parse_rev(rev) != master:
             revs.append("master")
@@ -127,7 +153,7 @@ def main(argv):
             revs.append("HEAD~1")
 
     revs = [compile_rev(rev, args) for rev in revs]
-    selfplay(*revs)
+    selfplay(args, *revs, stockfishes=args.stockfish)
 
 
 if __name__ == "__main__":
