@@ -88,13 +88,18 @@ impl UCIState {
     fn manage_thread_pool(&mut self) {
         let force_print = self.search_thread_pool.communicate();
         if self.search_thread_pool.is_searching() {
-            if force_print || self.last_info_string.elapsed() >= Duration::from_millis(100) {
+            let search_result = self.search_thread_pool.maybe_end_search(false);
+
+            if force_print
+                || self.last_info_string.elapsed() >= Duration::from_millis(100)
+                || search_result.is_some()
+            {
+                self.search_thread_pool.update_pv();
                 self.send(&self.search_thread_pool.info_string());
                 self.last_info_string = Instant::now();
             }
-            // self.log(&self.pv_string());
-            if let Some(result) = self.search_thread_pool.maybe_end_search(false) {
-                self.send(&self.search_thread_pool.info_string());
+
+            if let Some(result) = search_result {
                 self.send(&result);
             }
         }

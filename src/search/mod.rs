@@ -714,7 +714,7 @@ impl SearchThreadPool {
         }
     }
 
-    fn update_pv(&mut self) {
+    pub fn update_pv(&mut self) {
         if let PoolState::Searching {
             history,
             ref mut pv,
