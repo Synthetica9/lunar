@@ -31,7 +31,6 @@ pub const NULL_MOVE_REDUCTION: usize = 2;
 
 pub const PREDICTED_BRANCHING_FACTOR: f64 = 2.1;
 
-
 #[derive(Clone, Debug)]
 enum ThreadCommand {
     Quit,
@@ -1057,11 +1056,18 @@ impl SearchThreadPool {
                     if !force {
                         // Our target PV instability upon ending a search is 1. Try to
                         // approach this value.
-                        if *pv_instability < 1.0 {
-                            self.base_instability *= 1.3
-                        } else {
-                            self.base_instability *= 0.8
-                        }
+                        const MAX_CORRECT: f64 = 1.25;
+                        // println!(
+                        //     "info string instability: before     {}",
+                        //     self.base_instability
+                        // );
+                        println!("info string instability correction {}", pv_instability);
+                        self.base_instability /=
+                            pv_instability.clamp(1. / MAX_CORRECT, MAX_CORRECT);
+                        // println!(
+                        //     "info string instability: after      {}",
+                        //     self.base_instability
+                        // );
                     }
 
                     self.stop();
