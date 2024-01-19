@@ -2,6 +2,7 @@
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
@@ -10,6 +11,7 @@ use std::time::Instant;
 
 // TODO: use stock rust channels?
 use crossbeam_channel as channel;
+use lru::LruCache;
 
 use crate::game::Game;
 use crate::history::History;
@@ -18,6 +20,7 @@ use crate::ply::Ply;
 use crate::transposition_table::PutResult;
 use crate::transposition_table::{TranspositionEntry, TranspositionTable};
 use crate::uci::TimePolicy;
+use crate::zobrist_hash::ZobristHash;
 
 mod currently_searching;
 mod move_order;
@@ -98,6 +101,7 @@ pub struct SearchThreadPool {
     pub base_instability: f64,
 
     state: PoolState,
+    pv_hash: LruCache<ZobristHash, Ply>,
 }
 
 // TODO: does this struct need to exist?
@@ -619,6 +623,8 @@ impl SearchThreadPool {
 
             ponder: false,
             state: PoolState::Idle,
+
+            pv_hash: LruCache::new(NonZeroUsize::new(1024).unwrap()),
         }
     }
 
@@ -713,7 +719,7 @@ impl SearchThreadPool {
         }
     }
 
-    pub fn update_pv(&mut self) {
+    pub fn update_pv(&mut self, force: bool) {
         if let PoolState::Searching {
             history,
             ref mut pv,
@@ -723,27 +729,33 @@ impl SearchThreadPool {
         } = &mut self.state
         {
             let ticks = last_pv_update.elapsed().as_millis() / 10;
-            if ticks != 0 {
+
+            if ticks != 0 || force {
+                let new = self
+                    .transposition_table
+                    .update_pv(&history, &mut self.pv_hash);
+                let old = pv.clone();
+                *pv = new;
+
+                if force && ticks == 0 {
+                    return;
+                }
+
                 // TODO: real lambda calculation
                 *pv_instability *= (0.999 as f64).powi(ticks as i32);
                 *last_pv_update = Instant::now();
 
-                let old = pv.clone();
-                let new = self.transposition_table.update_pv(&history, &old);
-
-                let i = std::iter::zip(new.iter(), old.iter())
+                let i = std::iter::zip(pv.iter(), old.iter())
                     .map(|(x, y)| x != y)
                     .chain([true])
                     .position(|x| x)
                     .unwrap();
 
-                let is_finishing_sequence = history.is_finishing_sequence(&new);
+                let is_finishing_sequence = history.is_finishing_sequence(&pv);
 
                 if !is_finishing_sequence {
                     *pv_instability += self.base_instability * (0.5 as f64).powi(i as i32);
                 }
-
-                *pv = new;
             }
         }
     }
@@ -774,7 +786,7 @@ impl SearchThreadPool {
         let mut res = false;
 
         if let Some((i, status)) = self.recv_any_thread(Duration::from_millis(10)) {
-            self.update_pv();
+            self.update_pv(false);
             let thread = &mut self.threads[i];
             match status {
                 ThreadStatus::StatusUpdate { .. } => {

@@ -1,10 +1,11 @@
 use std::cell::UnsafeCell;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
+use std::sync::RwLock;
 
-use std::num::NonZeroUsize;
+use lru::LruCache;
 use not_empty::NonEmptySlice;
 use static_assertions::*;
+use std::num::NonZeroUsize;
 
 use crate::game::Game;
 use crate::history::History;
@@ -375,18 +376,14 @@ impl TranspositionTable {
         }
     }
 
-    pub fn update_pv(&self, history: &History, old_pv: &[Ply]) -> Vec<Ply> {
+    pub fn update_pv(
+        &self,
+        history: &History,
+        pv_hash: &mut LruCache<ZobristHash, Ply>,
+    ) -> Vec<Ply> {
         let mut history = history.clone();
+
         let mut res = Vec::new();
-        let pv_hash = {
-            let mut res = HashMap::with_capacity(old_pv.len());
-            let mut history = history.clone();
-            for ply in old_pv {
-                res.insert(history.game().hash(), *ply);
-                history.hard_push(ply);
-            }
-            res
-        };
 
         loop {
             if history.repetition_count_at_least_3() {
@@ -402,10 +399,10 @@ impl TranspositionTable {
                 .iter()
                 .copied()
                 .flatten()
-                .filter(|ply| game.is_legal(ply))
-                .next();
+                .find(|ply| game.is_legal(ply));
 
             if let Some(ply) = to_play {
+                pv_hash.push(hash, ply);
                 history.hard_push(&ply);
                 res.push(ply);
             } else {

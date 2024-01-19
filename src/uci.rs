@@ -94,7 +94,7 @@ impl UCIState {
                 || self.last_info_string.elapsed() >= Duration::from_millis(100)
                 || search_result.is_some()
             {
-                self.search_thread_pool.update_pv();
+                self.search_thread_pool.update_pv(search_result.is_none());
                 self.send(&self.search_thread_pool.info_string());
                 self.last_info_string = Instant::now();
             }
