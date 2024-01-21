@@ -306,11 +306,13 @@ impl ThreadData {
                 }
             }
 
-            if depth >= r && !is_in_check && !self.history.last_is_null() {
+            if !is_pv && depth >= r && !is_in_check && !self.history.last_is_null() {
                 self.history.push(&Ply::NULL);
                 let null_value = -self.alpha_beta_search(-beta, -alpha, depth - r, false)?.0;
                 self.history.pop();
                 if null_value >= beta {
+                    // Whoah, store in tt?
+                    // println!("Null move cutoff");
                     return Ok((null_value, best_move));
                 }
             }
