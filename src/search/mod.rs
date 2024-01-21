@@ -478,7 +478,8 @@ impl ThreadData {
             value -= ONE_MP * value.0.signum();
         }
 
-        if depth >= 2 {
+        // if depth >= 0 {
+        {
             let value_type = if value <= alpha_orig {
                 UpperBound
             } else if value >= beta {
@@ -1012,7 +1013,7 @@ impl SearchThreadPool {
                 "hashfull {} ",
                 self.transposition_table.occupancy_mil()
             ));
-            info.push_str(&format!("pv {} ", crate::transposition_table::pv_uci(pv)));
+            info.push_str(&format!("pv {} ", crate::transposition_table::pv_uci(&pv)));
             info
         } else {
             "info string idle".to_string()
