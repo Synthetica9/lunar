@@ -441,7 +441,7 @@ impl ThreadData {
                     // late move reduction
                     // https://www.chessprogramming.org/Late_Move_Reductions
 
-                    let next_depth = if i < 5 || depth <= 3 || is_pv {
+                    let next_depth = if i < 5 || depth <= 3 || is_pv || is_in_check {
                         depth - 1
                     } else {
                         depth / 3
