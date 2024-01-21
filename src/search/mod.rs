@@ -295,11 +295,20 @@ impl ThreadData {
             // http://mediocrechess.blogspot.com/2007/01/guide-null-moves.html
             // TODO: increase reduction on deeper depths?
             // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
-            if depth >= NULL_MOVE_REDUCTION + 1 && !is_in_check && !self.history.last_is_null() {
+
+            let mut r = NULL_MOVE_REDUCTION + 1;
+            if depth > 7 {
+                let game = self.game();
+                let board = game.board();
+                let bb = board.get_color(&game.to_move());
+                if bb.popcount() >= 4 {
+                    r += 1
+                }
+            }
+
+            if depth >= r && !is_in_check && !self.history.last_is_null() {
                 self.history.push(&Ply::NULL);
-                let null_value = -self
-                    .alpha_beta_search(-beta, -alpha, depth - NULL_MOVE_REDUCTION - 1, false)?
-                    .0;
+                let null_value = -self.alpha_beta_search(-beta, -alpha, depth - r, false)?.0;
                 self.history.pop();
                 if null_value >= beta {
                     return Ok((null_value, best_move));
