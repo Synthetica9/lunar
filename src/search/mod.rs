@@ -438,7 +438,10 @@ impl ThreadData {
                     // Arbitrary low value
                     Millipawns(i32::MIN)
                 } else {
-                    let next_depth = if i < 5 || depth <= 3 {
+                    // late move reduction
+                    // https://www.chessprogramming.org/Late_Move_Reductions
+
+                    let next_depth = if i < 5 || depth <= 3 || is_pv {
                         depth - 1
                     } else {
                         depth / 3
