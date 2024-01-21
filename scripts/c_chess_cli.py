@@ -75,7 +75,7 @@ def c_chess_cli(output=False, backend=None, defaults=True, **kwargs):
 
     if backend == "cutechess-cli":
         # Do conversions!
-        kwargs["log"] = False
+        kwargs["debug"] = kwargs.pop("log", False)
 
         draw = kwargs.get("draw", {})
         draw["movenumber"] = draw.pop("moves", 0)
@@ -91,7 +91,8 @@ def c_chess_cli(output=False, backend=None, defaults=True, **kwargs):
         each = kwargs.get("each", {})
         each["proto"] = "uci"
         kwargs["ratinginterval"] = 10
-        kwargs["outcomeinterval"] = 10
+        kwargs["outcomeinterval"] = 100
+        kwargs["recover"] = True
 
         sprt = kwargs.get("sprt", None)
 
@@ -104,6 +105,8 @@ def c_chess_cli(output=False, backend=None, defaults=True, **kwargs):
             sprt.setdefault("alpha", 0.05)
             sprt.setdefault("beta", 0.05)
             kwargs["sprt"] = sprt
+
+        kwargs["pgnout"] = kwargs.pop("pgn", None)
 
     call = [backend, *to_args(kwargs)]
 

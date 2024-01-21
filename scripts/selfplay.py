@@ -18,8 +18,8 @@ def get_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("revs", nargs="*")
-
     parser.add_argument("--no-pgo", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
 
     have_cutechess = shutil.which("cutechess-cli") is not None
     parser.add_argument(
@@ -43,7 +43,7 @@ def selfplay(options, *revs, stockfishes=None):
 
     engines = [
         {
-            "name": f"lunar {identifier} - {name(rev)}",
+            "name": f"lunar {identifier} - {rev[:8]}",
             "cmd": path,
         }
         for (rev, path), identifier in zip(revs, names)
@@ -76,17 +76,19 @@ def selfplay(options, *revs, stockfishes=None):
         repeat=True,
         each={
             "tc": "2+.1",
-            "option.Hash": 128,
+            "option.Hash": 64,
         },
         resign={"score": 1000, "count": 10},
         draw={
             "score": 50,
             "count": 20,
         },
-        log=True,
+        # log=True,
         concurrency=2,
         rounds=1000,
         games=2,
+        pgn="out.pgn",
+        # tournament="swiss-tcec",
     )
 
 
@@ -117,12 +119,22 @@ def compile_rev(rev, options):
             p = Path(d) / rev
             subprocess.check_call(["git", "worktree", "add", "--detach", str(p), rev])
             try:
+                output = subprocess.PIPE if options.verbose else subprocess.DEVNULL
+
                 pgo_script = p / "scripts/build_pgo.sh"
                 if not options.no_pgo and pgo_script.exists():
-                    subprocess.check_call([str(pgo_script)], cwd=p)
+                    subprocess.check_call(
+                        [str(pgo_script)],
+                        cwd=p,
+                        stderr=output,
+                        stdout=output,
+                    )
                 else:
                     subprocess.check_call(
-                        ["cargo", "build", "--release", "--bin", "lunar"], cwd=p
+                        ["cargo", "build", "--release", "--bin", "lunar"],
+                        cwd=p,
+                        stderr=output,
+                        stdout=output,
                     )
 
                 permanent_loc.parent.mkdir(exist_ok=True, parents=True)
@@ -136,7 +148,6 @@ def main(argv):
     parser = get_parser()
     args = parser.parse_args(argv)
 
-    print(args.revs)
     revs = list(args.revs)
 
     head = parse_rev("HEAD")
@@ -152,8 +163,27 @@ def main(argv):
         else:
             revs.append("HEAD~1")
 
-    revs = [compile_rev(rev, args) for rev in revs]
-    selfplay(args, *revs, stockfishes=args.stockfish)
+    compiled_revs = []
+
+    rev_dir = TARGET_DIR / "revs"
+    rev_dir.mkdir(exist_ok=True, parents=True)
+
+    for i, rev in enumerate(revs, start=1):
+        print(f"Compiling {i}/{len(revs)}")
+        subprocess.check_call([*"git log -1 --oneline".split(), rev])
+        compiled = compile_rev(rev, args)
+        compiled_revs.append(compiled)
+        _rev, cli = compiled
+        dst = rev_dir / rev
+        try:
+            shutil.rmtree(dst)
+        except FileNotFoundError:
+            pass
+        shutil.copytree(cli.parent, dst)
+
+    # compiled_revs.reverse()
+
+    selfplay(args, *compiled_revs, stockfishes=args.stockfish)
 
 
 if __name__ == "__main__":
