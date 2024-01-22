@@ -34,19 +34,12 @@ def get_parser():
 
 
 def selfplay(options, *revs, stockfishes=None):
-    if len(revs) == 1:
-        names = [""]
-    elif len(revs) == 2:
-        names = ["new", "old"]
-    else:
-        names = map(str, count(1))
-
     engines = [
         {
-            "name": f"lunar {identifier} - {rev[:8]}",
+            "name": f"lunar {parse_rev(rev, short=True)}",
             "cmd": path,
         }
-        for (rev, path), identifier in zip(revs, names)
+        for (rev, path) in revs
     ]
 
     if stockfishes is not None:
@@ -92,8 +85,12 @@ def selfplay(options, *revs, stockfishes=None):
     )
 
 
-def parse_rev(rev):
-    return subprocess.check_output(["git", "rev-parse", rev]).strip().decode()
+def parse_rev(rev, short=False):
+    return (
+        subprocess.check_output(["git", "rev-parse", *["--short"] * short, rev])
+        .strip()
+        .decode()
+    )
 
 
 def name(rev):
