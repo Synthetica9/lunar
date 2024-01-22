@@ -423,6 +423,8 @@ impl ThreadData {
 
                 self.history.push(&ply);
 
+                let is_check = self.game().is_in_check();
+
                 let x = if is_first_move {
                     best_move = Some(ply);
                     -self.alpha_beta_search(-beta, -alpha, depth - 1, is_pv)?.0
@@ -438,7 +440,10 @@ impl ThreadData {
                     // Arbitrary low value
                     Millipawns(i32::MIN)
                 } else {
-                    let next_depth = if i < 5 || depth <= 3 {
+                    // late move reduction
+                    // https://www.chessprogramming.org/Late_Move_Reductions
+
+                    let next_depth = if i < 5 || depth <= 3 || is_pv || is_in_check || is_check {
                         depth - 1
                     } else {
                         depth / 3
