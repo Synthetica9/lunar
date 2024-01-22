@@ -11,6 +11,10 @@ env:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        pgo: ["", "--no-pgo"]
+        id: [1,2,3,4,5,6,7,8]
     runs-on: ubuntu-latest
 
     steps:
@@ -27,7 +31,10 @@ jobs:
           cargo install cargo-pgo
           rustup component add llvm-tools-preview
       - name: Run self-play
-        run: python ./scripts/selfplay.py ${{ github.event.before }} ${{ github.event.after }}
+        run: |
+          # Run ${{ matrix.id }}
+          python ./scripts/selfplay.py ${{ matrix.pgo }} \
+             ${{ github.event.after }} ${{ github.event.before }}
       - name: Publish PGN
         uses: actions/upload-artifact@v3
         with:
