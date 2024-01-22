@@ -32,7 +32,6 @@ jobs:
           rustup component add llvm-tools-preview
       - name: Run self-play
         run: |
-          # Run ${{ matrix.id }}
           python ./scripts/selfplay.py ${{ matrix.pgo }} \
              ${{ github.event.after }} ${{ github.event.after }}~${{ matrix.offset }}
       - name: Publish PGN
