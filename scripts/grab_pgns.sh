@@ -1,11 +1,17 @@
 rm concat.pgn
 
-gh run list --json 'workflowName,databaseId' --jq ".[].databaseId" | \
+mkdir -p pgns
+
+gh run list --limit 1000 --json 'workflowName,databaseId' \
+  --jq '.[] | select(.workflowName == "Self-Play") | .databaseId' | \
   while read -r line; do
     TEMP="$(mktemp -d)"
-    gh run download -n pgn -D "$TEMP" > /dev/stderr
-    cat "$TEMP"/out.pgn
+    [[ -f "pgns/$line.pgn" ]] && continue
+    echo "Grabbing $line.pgn"
+    gh run download -n pgn -D "$TEMP" $line || touch $TEMP/out.pgn
+    mv "$TEMP/out.pgn" "$TEMP/$line.pgn" || true
+    mv "$TEMP/*.pgn" pgns/
     rm -r "$TEMP"
-  done >> concat.pgn
+  done
 
-cat out.pgn >> concat.pgn
+cat out.pgn pgns/*.pgn >> concat.pgn

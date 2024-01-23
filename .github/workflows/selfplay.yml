@@ -24,8 +24,8 @@ jobs:
           fetch-depth: 0
       - name: Show git log
         run: |
-          git --no-pager show ${{ github.event.before }}
           git --no-pager show ${{ github.event.after }}
+          git --no-pager show ${{ github.event.after }}~${{ matrix.offset }}
       - name: Install PGO deps
         run: |
           cargo install cargo-pgo
@@ -34,8 +34,12 @@ jobs:
         run: |
           python ./scripts/selfplay.py ${{ matrix.pgo }} \
              ${{ github.event.after }} ${{ github.event.after }}~${{ matrix.offset }}
+      - name: Move artefact
+        run: |
+          mv out.pgn out_${{ env.RUN_UNIQUE_ID }}_${{ matrix.step }}.pgn
       - name: Publish PGN
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: pgn
-          path: out.pgn
+          name: ${{ env.RUN_UNIQUE_ID }}_${{ matrix.step }}_pgn
+          path: "*.pgn"
+          compression-level: 9
