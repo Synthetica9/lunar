@@ -22,18 +22,20 @@ jobs:
         # We also need the previous commit to compare to
         with:
           fetch-depth: 0
+      - name: determine commit
+        run: |
+          echo "BEFORE_COMMIT=$(./scripts/relevant_commits.sh ${{ github.event.after }} | sed -n '${{ matrix.offset }}p')" >> $GITHUB_ENV
       - name: Show git log
         run: |
           git --no-pager show ${{ github.event.after }}
-          git --no-pager show ${{ github.event.after }}~${{ matrix.offset }}
+          git --no-pager show $BEFORE_COMMIT
       - name: Install PGO deps
         run: |
           cargo install cargo-pgo
           rustup component add llvm-tools-preview
       - name: Run self-play
         run: |
-          python ./scripts/selfplay.py ${{ matrix.pgo }} \
-             ${{ github.event.after }} ${{ github.event.after }}~${{ matrix.offset }}
+          python ./scripts/selfplay.py ${{ matrix.pgo }} ${{ github.event.after }} $BEFORE_COMMIT
       - name: Move artefact
         run: |
           mv out.pgn ${{ github.run_id }}_${{ strategy.job-index }}.pgn
