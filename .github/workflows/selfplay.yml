@@ -36,10 +36,10 @@ jobs:
              ${{ github.event.after }} ${{ github.event.after }}~${{ matrix.offset }}
       - name: Move artefact
         run: |
-          mv out.pgn out_${{ env.RUN_UNIQUE_ID }}_${{ matrix.step }}.pgn
+          mv out.pgn ${{ github.run_id }}_${{ strategy.job-index }}.pgn
       - name: Publish PGN
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.RUN_UNIQUE_ID }}_${{ matrix.step }}_pgn
+          name: ${{ github.run_id }}_${{ strategy.job-index }}_pgn
           path: "*.pgn"
           compression-level: 9
