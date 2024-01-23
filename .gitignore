@@ -1,7 +1,7 @@
 /target
 
 callgrind.out.*
-out.pgn
+*.pgn
 *.csv
 *.dat
 out.gif
