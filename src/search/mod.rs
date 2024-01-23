@@ -191,23 +191,50 @@ impl ThreadData {
     }
 
     pub fn search(&mut self) -> ThreadCommand {
+        const ASPIRATION_WINDOWS: &[Millipawns] =
+            &[Millipawns(200), Millipawns(1000), Millipawns(2000), WIN];
+
         use crate::millipawns::*;
-        for depth in 1..=255 {
-            // TODO: narrow alpha and beta? (aspiration windows)
-            // Tried this, available in aspiration-windows branch, but it
-            // seems to significantly weaken self-play.
-            match self.alpha_beta_search(LOSS, WIN, depth, true) {
-                Ok((score, best_move)) => {
-                    self.send_status_update();
-                    self.status_channel
-                        .send(ThreadStatus::SearchFinished {
-                            score,
-                            best_move,
-                            depth,
-                        })
-                        .unwrap();
+        let mut last_score = None;
+        for depth in 2..=255 {
+            let mut fail_highs = 0;
+            let mut fail_lows = 0;
+
+            loop {
+                let alpha = last_score
+                    .map(|x| x - ASPIRATION_WINDOWS[fail_lows])
+                    .unwrap_or(LOSS)
+                    .min(LOSS);
+                let beta = last_score
+                    .map(|x| x + ASPIRATION_WINDOWS[fail_highs])
+                    .unwrap_or(WIN)
+                    .max(WIN);
+
+                match self.alpha_beta_search(alpha, beta, depth, true) {
+                    Ok((score, best_move)) => {
+                        if score < alpha {
+                            fail_lows += 1;
+                            println!("info string fail low! {fail_lows}");
+                            continue;
+                        } else if score > beta {
+                            fail_highs += 1;
+                            println!("info string fail high! {fail_highs}");
+                            continue;
+                        } else {
+                            self.send_status_update();
+                            self.status_channel
+                                .send(ThreadStatus::SearchFinished {
+                                    score,
+                                    best_move,
+                                    depth,
+                                })
+                                .unwrap();
+                            last_score = Some(score);
+                        }
+                        break;
+                    }
+                    Err(command) => return command,
                 }
-                Err(command) => return command,
             }
         }
         ThreadCommand::StopSearch
