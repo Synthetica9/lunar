@@ -35,7 +35,8 @@ jobs:
           python ./scripts/selfplay.py ${{ matrix.pgo }} \
              ${{ github.event.after }} ${{ github.event.after }}~${{ matrix.offset }}
       - name: Publish PGN
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pgn
           path: out.pgn
+          compression-level: 9

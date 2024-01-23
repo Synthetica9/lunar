@@ -20,6 +20,12 @@ def get_parser():
     parser.add_argument("revs", nargs="*")
     parser.add_argument("--no-pgo", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--ponder", action="store_true")
+    parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--processors-available", type=int, default=4)
+    parser.add_argument("--time-control", default="2+.1")
+    parser.add_argument("--hash", type=int, default=64)
+    parser.add_argument("--games", type=int, default=1000)
 
     have_cutechess = shutil.which("cutechess-cli") is not None
     parser.add_argument(
@@ -55,6 +61,8 @@ def selfplay(options, *revs, stockfishes=None):
 
     if len(engines) < 2:
         raise ValueError("Not enough revs.")
+
+    cores_per_game = (2 if options.ponder else 1) * options.threads
 
     backend = None if options.backend == "internal" else options.backend
 
