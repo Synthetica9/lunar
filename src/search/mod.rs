@@ -317,11 +317,15 @@ impl ThreadData {
                 }
             }
 
-            best_move = if is_pv && depth > 5 {
+            best_move = from_tt.and_then(|x| x.best_move());
+
+            let iid_depth = depth / 2;
+            if is_pv
+                && depth > 5
+                && (best_move.is_none() || from_tt.map(|x| x.depth).unwrap_or(0) < iid_depth as u8)
+            {
                 // Internal iterative deepening
-                self.alpha_beta_search(alpha, beta, depth / 2, true)?.1
-            } else {
-                from_tt.and_then(|x| x.best_move())
+                best_move = self.alpha_beta_search(alpha, beta, iid_depth, true)?.1
             };
 
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
