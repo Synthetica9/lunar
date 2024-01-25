@@ -196,7 +196,7 @@ impl ThreadData {
             // TODO: narrow alpha and beta? (aspiration windows)
             // Tried this, available in aspiration-windows branch, but it
             // seems to significantly weaken self-play.
-            match self.alpha_beta_search(LOSS, WIN, depth, true) {
+            match self.alpha_beta_search::<true>(LOSS, WIN, depth) {
                 Ok((score, best_move)) => {
                     self.send_status_update();
                     self.status_channel
@@ -230,12 +230,11 @@ impl ThreadData {
         self.history.game()
     }
 
-    fn alpha_beta_search(
+    fn alpha_beta_search<const IsPV: bool>(
         &mut self,
         alpha: Millipawns,
         beta: Millipawns,
         depth: usize,
-        is_pv: bool,
     ) -> Result<(Millipawns, Option<Ply>), ThreadCommand> {
         use crate::millipawns::*;
         use crate::transposition_table::TranspositionEntryType::*;
@@ -263,7 +262,7 @@ impl ThreadData {
 
         let from_tt = self.transposition_table.get(self.game().hash());
         if let Some(tte) = from_tt {
-            if depth <= tte.depth as usize && !self.history.may_be_repetition() && !is_pv {
+            if depth <= tte.depth as usize && !self.history.may_be_repetition() && !IsPV {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
@@ -286,7 +285,7 @@ impl ThreadData {
         let is_in_check = self.game().is_in_check();
         if depth == 0 {
             if is_in_check {
-                (value, best_move) = self.alpha_beta_search(alpha, beta, 1, is_pv)?
+                (value, best_move) = self.alpha_beta_search::<IsPV>(alpha, beta, 1)?
             } else {
                 value = self.quiescence_search(alpha, beta)
             };
@@ -306,9 +305,9 @@ impl ThreadData {
                 }
             }
 
-            if !is_pv && depth >= r && !is_in_check && !self.history.last_is_null() {
+            if !IsPV && depth >= r && !is_in_check && !self.history.last_is_null() {
                 self.history.push(&Ply::NULL);
-                let null_value = -self.alpha_beta_search(-beta, -alpha, depth - r, false)?.0;
+                let null_value = -self.alpha_beta_search::<false>(-beta, -alpha, depth - r)?.0;
                 self.history.pop();
                 if null_value >= beta {
                     // Whoah, store in tt?
@@ -320,12 +319,12 @@ impl ThreadData {
             best_move = from_tt.and_then(|x| x.best_move());
 
             let iid_depth = depth / 2;
-            if is_pv
+            if IsPV
                 && depth > 5
                 && (best_move.is_none() || from_tt.map(|x| x.depth).unwrap_or(0) < iid_depth as u8)
             {
                 // Internal iterative deepening
-                best_move = self.alpha_beta_search(alpha, beta, iid_depth, true)?.1
+                best_move = self.alpha_beta_search::<true>(alpha, beta, iid_depth)?.1
             };
 
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
@@ -431,7 +430,7 @@ impl ThreadData {
 
                 let x = if is_first_move {
                     best_move = Some(ply);
-                    -self.alpha_beta_search(-beta, -alpha, depth - 1, is_pv)?.0
+                    -self.alpha_beta_search::<IsPV>(-beta, -alpha, depth - 1)?.0
                 } else if !is_deferred
                     && self
                         .currently_searching
@@ -447,7 +446,7 @@ impl ThreadData {
                     // late move reduction
                     // https://www.chessprogramming.org/Late_Move_Reductions
 
-                    let next_depth = if i < 5 || depth <= 3 || is_pv || is_in_check || is_check {
+                    let next_depth = if IsPV || i < 5 || depth <= 3 || is_in_check || is_check {
                         depth - 1
                     } else {
                         depth / 3
@@ -460,11 +459,13 @@ impl ThreadData {
 
                     // Null-window search
                     let mut x = -self
-                        .alpha_beta_search(-alpha - ONE_MP, -alpha, next_depth, false)?
+                        .alpha_beta_search::<false>(-alpha - ONE_MP, -alpha, next_depth)?
                         .0;
 
                     if x > alpha && x < beta {
-                        x = -self.alpha_beta_search(-beta, -alpha, next_depth, false)?.0;
+                        x = -self
+                            .alpha_beta_search::<false>(-beta, -alpha, next_depth)?
+                            .0;
                     };
 
                     if !is_deferred {
