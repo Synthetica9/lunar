@@ -24,7 +24,7 @@ mod move_order;
 pub enum ThreadCommand {
     Quit,
     StopSearch,
-    SearchThis(History),
+    SearchThis(Arc<History>),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -111,7 +111,7 @@ impl ThreadData {
                         self.send_status_update();
                     }
                     SearchThis(new_history) => {
-                        self.history = new_history;
+                        self.history = new_history.as_ref().clone();
                         self.searching = true;
                     }
                 };

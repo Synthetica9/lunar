@@ -129,7 +129,7 @@ impl SearchThreadPool {
 
         self.transposition_table.inc_age();
 
-        self.broadcast(&ThreadCommand::SearchThis(history.clone()))
+        self.broadcast(&ThreadCommand::SearchThis(history.clone().into()))
             .unwrap();
 
         self.state = PoolState::Searching {
