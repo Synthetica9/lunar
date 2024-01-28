@@ -1,10 +1,14 @@
 // Simplified ABDADA.
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crossbeam_channel as channel;
+use smallvec::SmallVec;
+
+use self::move_order::{MoveGenerator, StandardMoveGenerator};
 
 use super::currently_searching::CurrentlySearching;
 use crate::game::Game;
@@ -41,6 +45,46 @@ pub enum ThreadStatus {
     },
     Idle,
     Quitting,
+}
+
+struct RootNode;
+
+struct PVNode;
+
+struct GenericNode;
+
+trait Node
+where
+    Self::Gen: MoveGenerator,
+    Self::FirstSuccessor: Node,
+    Self::OtherSuccessors: Node,
+{
+    const IS_PV: bool;
+    const IS_ROOT: bool;
+
+    type Gen;
+    type FirstSuccessor;
+    type OtherSuccessors;
+}
+
+impl Node for PVNode {
+    const IS_PV: bool = true;
+    const IS_ROOT: bool = false;
+
+    type Gen = StandardMoveGenerator;
+
+    type FirstSuccessor = PVNode;
+    type OtherSuccessors = GenericNode;
+}
+
+impl Node for GenericNode {
+    const IS_PV: bool = false;
+    const IS_ROOT: bool = false;
+
+    type Gen = StandardMoveGenerator;
+
+    type FirstSuccessor = GenericNode;
+    type OtherSuccessors = GenericNode;
 }
 
 pub struct ThreadData {
@@ -156,7 +200,7 @@ impl ThreadData {
             // TODO: narrow alpha and beta? (aspiration windows)
             // Tried this, available in aspiration-windows branch, but it
             // seems to significantly weaken self-play.
-            match self.alpha_beta_search::<true>(LOSS, WIN, depth) {
+            match self.alpha_beta_search::<PVNode>(LOSS, WIN, depth) {
                 Ok((score, best_move)) => {
                     self.send_status_update();
                     self.status_channel
@@ -190,12 +234,15 @@ impl ThreadData {
         self.history.game()
     }
 
-    fn alpha_beta_search<const IsPV: bool>(
+    fn alpha_beta_search<N>(
         &mut self,
         alpha: Millipawns,
         beta: Millipawns,
         depth: usize,
-    ) -> Result<(Millipawns, Option<Ply>), ThreadCommand> {
+    ) -> Result<(Millipawns, Option<Ply>), ThreadCommand>
+    where
+        N: Node,
+    {
         use crate::millipawns::*;
         use crate::transposition_table::TranspositionEntryType::*;
         use move_order::*;
@@ -222,7 +269,7 @@ impl ThreadData {
 
         let from_tt = self.transposition_table.get(self.game().hash());
         if let Some(tte) = from_tt {
-            if depth <= tte.depth as usize && !self.history.may_be_repetition() && !IsPV {
+            if depth <= tte.depth as usize && !self.history.may_be_repetition() && !N::IS_PV {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
@@ -240,15 +287,16 @@ impl ThreadData {
         }
 
         let mut best_move = None;
-        let mut value = Millipawns(i32::MIN);
+        let mut value = Millipawns(i32::MIN + 12345);
 
         let is_in_check = self.game().is_in_check();
+
         if depth == 0 {
             if is_in_check {
-                (value, best_move) = self.alpha_beta_search::<IsPV>(alpha, beta, 1)?
+                (value, best_move) = self.alpha_beta_search::<N>(alpha, beta, 1)?;
             } else {
-                value = self.quiescence_search(alpha, beta)
-            };
+                value = self.quiescence_search(alpha, beta);
+            }
         } else {
             // Null move pruning
             // http://mediocrechess.blogspot.com/2007/01/guide-null-moves.html
@@ -265,13 +313,14 @@ impl ThreadData {
                 }
             }
 
-            if !IsPV && depth >= r && !is_in_check && !self.history.last_is_null() {
+            if !N::IS_PV && depth >= r && !is_in_check && !self.history.last_is_null() {
                 self.history.push(&Ply::NULL);
-                let null_value = -self.alpha_beta_search::<false>(-beta, -alpha, depth - r)?.0;
+                let null_value = -self
+                    .alpha_beta_search::<N::OtherSuccessors>(-beta, -alpha, depth - r)?
+                    .0;
                 self.history.pop();
                 if null_value >= beta {
                     // Whoah, store in tt?
-                    // println!("Null move cutoff");
                     return Ok((null_value, best_move));
                 }
             }
@@ -279,109 +328,73 @@ impl ThreadData {
             best_move = from_tt.and_then(|x| x.best_move());
 
             let iid_depth = depth / 2;
-            if IsPV
+            let do_iid = N::IS_PV
                 && depth > 5
-                && (best_move.is_none() || from_tt.map(|x| x.depth).unwrap_or(0) < iid_depth as u8)
-            {
+                && (best_move.is_none() || from_tt.map(|x| x.depth).unwrap_or(0) < iid_depth as u8);
+            if do_iid {
                 // Internal iterative deepening
-                best_move = self.alpha_beta_search::<true>(alpha, beta, iid_depth)?.1
+                // TODO: Should this use FirstSuccessor? What are other engines doing?
+                best_move = self
+                    .alpha_beta_search::<N::FirstSuccessor>(alpha, beta, iid_depth)?
+                    .1
             };
 
+            let mut deferred_moves = VecDeque::new();
+            let mut hash_moves_played = SmallVec::<[Ply; 4]>::new();
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
 
-            let mut commands = std::collections::BinaryHeap::from(INITIAL_SEARCH_COMMANDS);
+            let mut generator = N::Gen::init(self);
             let mut i = 0;
 
             let mut any_moves_seen = false;
 
-            while let Some(command) = commands.pop() {
-                use SearchCommand::*;
-                let is_deferred = matches!(command, DeferredMove { .. });
-                let ply: Ply = match &command {
-                    GetHashMove => {
-                        if let Some(ply) = best_move {
-                            ply
-                        } else {
-                            continue;
-                        }
+            while let Some(Generated { ply, guarantee }) = generator.next(self).or_else(|| {
+                deferred_moves.pop_front().map(|ply| Generated {
+                    ply: GeneratedMove::Ply(ply),
+                    guarantee: GuaranteeLevel::Deferred,
+                })
+            }) {
+                let ply = {
+                    use GeneratedMove::*;
+                    match ply {
+                        HashMove => match best_move {
+                            Some(ply) => ply,
+                            None => continue,
+                        },
+                        Ply(ply) => ply,
                     }
-                    GenQuiescenceMoves => {
-                        for ply in self.game().quiescence_pseudo_legal_moves() {
-                            let see = static_exchange_evaluation(self.game(), ply);
-                            let value = CaptureValue::Static(see);
-
-                            let command = {
-                                use std::cmp::Ordering::*;
-                                match see.cmp(&DRAW) {
-                                    Greater => WinningCapture { ply, value },
-                                    Less => LosingCapture { ply, value },
-                                    Equal => EqualCapture { ply, value },
-                                }
-                            };
-
-                            commands.push(command);
-                        }
-                        continue;
-                    }
-                    GenKillerMoves => {
-                        let move_total = self.game().half_move_total() as usize;
-                        if let Some(killer_moves) = self.killer_moves.get(move_total) {
-                            for ply in killer_moves.iter().flatten() {
-                                if self.game().is_pseudo_legal(ply) {
-                                    commands.push(KillerMove { ply: *ply });
-                                }
-                            }
-                        }
-                        continue;
-                    }
-                    GenQuietMoves => {
-                        let game = self.game();
-                        for ply in self.game().quiet_pseudo_legal_moves() {
-                            let value = crate::eval::quiet_move_order(game, ply);
-                            let is_check = self.game().is_check(&ply);
-                            commands.push(QuietMove {
-                                ply,
-                                value,
-                                is_check,
-                            });
-                        }
-                        continue;
-                    }
-                    MovesExhausted => {
-                        if !any_moves_seen {
-                            return Ok((
-                                if self.game().is_in_check() {
-                                    LOSS
-                                } else {
-                                    self.draw_value()
-                                },
-                                None,
-                            ));
-                        }
-                        debug_assert!(commands.is_empty(), "Moves exhausted but queue not empty!");
-                        continue;
-                    }
-                    command => command.ply().unwrap(),
                 };
+
+                let is_deferred;
+                {
+                    use GuaranteeLevel::*;
+
+                    is_deferred = matches!(guarantee, Deferred);
+                    let hash_like = matches!(guarantee, HashLike);
+                    let legal = is_deferred || matches!(guarantee, Deferred);
+                    let pseudo_legal = legal || matches!(guarantee, PseudoLegal);
+
+                    let game = self.game();
+
+                    if hash_moves_played.contains(&ply)
+                        || !(pseudo_legal || game.is_pseudo_legal(&ply))
+                        || !(legal || legality_checker.is_legal(&ply, game))
+                    {
+                        continue;
+                    }
+
+                    debug_assert!(game.is_pseudo_legal(&ply));
+                    debug_assert!(legality_checker.is_legal(&ply, game));
+
+                    if hash_like {
+                        hash_moves_played.push(ply);
+                    }
+                }
 
                 self.transposition_table
                     .prefetch_read(self.history.game().speculative_hash_after_ply(&ply));
 
-                debug_assert!(
-                    self.game().is_pseudo_legal(&ply),
-                    "{command:?} generated illegal move {ply:?} in {:?} (depth {depth})",
-                    self.game(),
-                );
-
-                // TODO: don't re-search hash and killer moves
-                // Deferred moves have already been checked for legality.
-                if !is_deferred && !legality_checker.is_legal(&ply, self.game()) {
-                    continue;
-                }
-
-                debug_assert!(legality_checker.is_legal(&ply, self.game()));
                 any_moves_seen = true;
-
                 let is_first_move = i == 0;
 
                 self.history.push(&ply);
@@ -390,23 +403,22 @@ impl ThreadData {
 
                 let x = if is_first_move {
                     best_move = Some(ply);
-                    -self.alpha_beta_search::<IsPV>(-beta, -alpha, depth - 1)?.0
+                    -self
+                        .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, depth - 1)?
+                        .0
                 } else if !is_deferred
                     && self
                         .currently_searching
                         .defer_move(self.game().hash(), depth)
                 {
-                    commands.push(DeferredMove {
-                        ply,
-                        index: std::cmp::Reverse(i as usize),
-                    });
-                    // Arbitrary low value
+                    deferred_moves.push_back(ply);
+                    // Can't continue because that would skip the rollback
                     Millipawns(i32::MIN)
                 } else {
                     // late move reduction
                     // https://www.chessprogramming.org/Late_Move_Reductions
 
-                    let next_depth = if IsPV || i < 5 || depth <= 3 || is_in_check || is_check {
+                    let next_depth = if N::IS_PV || i < 5 || depth <= 3 || is_in_check || is_check {
                         depth - 1
                     } else {
                         depth / 3
@@ -419,12 +431,16 @@ impl ThreadData {
 
                     // Null-window search
                     let mut x = -self
-                        .alpha_beta_search::<false>(-alpha - ONE_MP, -alpha, next_depth)?
+                        .alpha_beta_search::<N::OtherSuccessors>(
+                            -alpha - ONE_MP,
+                            -alpha,
+                            next_depth,
+                        )?
                         .0;
 
                     if x > alpha && x < beta {
                         x = -self
-                            .alpha_beta_search::<false>(-beta, -alpha, next_depth)?
+                            .alpha_beta_search::<N::OtherSuccessors>(-beta, -alpha, next_depth)?
                             .0;
                     };
 
@@ -452,6 +468,10 @@ impl ThreadData {
                 }
 
                 i += 1;
+            }
+
+            if !any_moves_seen {
+                return Ok((if is_in_check { LOSS } else { DRAW }, None));
             }
         }
 
@@ -503,7 +523,6 @@ impl ThreadData {
         }
 
         let candidates = {
-            use smallvec::SmallVec;
             use std::cmp::Reverse;
 
             let res = self.game().quiescence_pseudo_legal_moves();

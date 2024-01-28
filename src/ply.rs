@@ -177,11 +177,14 @@ impl Ply {
         self.flag().is_some()
     }
 
-    pub const fn moved_piece(&self, game: &Game) -> Piece {
+    pub fn moved_piece(&self, game: &Game) -> Piece {
         let src = self.src();
         match game.board().occupant_piece(src) {
             Some(piece) => piece,
-            None => unreachable!(),
+            None => unreachable!(
+                "Attempting to get moved piece for {self:?} in {}",
+                game.to_fen()
+            ),
         }
     }
 

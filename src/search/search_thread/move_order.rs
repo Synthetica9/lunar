@@ -2,12 +2,15 @@ use smallvec::SmallVec;
 use strum::IntoEnumIterator;
 
 use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 
 use crate::bitboard::Bitboard;
 use crate::game::Game;
-use crate::millipawns::Millipawns;
+use crate::millipawns::{Millipawns, DRAW, LOSS};
 use crate::piece::Piece;
 use crate::ply::Ply;
+
+use super::ThreadData;
 
 fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns {
     // @first specifies whether to immediately quit after finding a plausible advantage.
@@ -25,7 +28,7 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
             let mut res = attackers_defenders;
             res &= board.get_color(side);
             if is_attacking {
-                // Handled seperately, must be the first attacker to be counted.
+                // Handled separately, must be the first attacker to be counted.
                 res &= !Bitboard::from_square(ply.src());
             }
             res
@@ -138,11 +141,6 @@ pub enum CaptureValue {
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug)]
 pub enum SearchCommand {
     // Should be searched _last_
-    MovesExhausted,
-    DeferredMove {
-        index: Reverse<usize>,
-        ply: Ply,
-    },
     LosingCapture {
         value: CaptureValue,
         ply: Ply,
@@ -176,7 +174,6 @@ impl SearchCommand {
         use SearchCommand::*;
 
         let ply = match self {
-            DeferredMove { ply, .. } => ply,
             LosingCapture { ply, .. } => ply,
             QuietMove { ply, .. } => ply,
             EqualCapture { ply, .. } => ply,
@@ -187,21 +184,118 @@ impl SearchCommand {
 
         Some(*ply)
     }
-
-    pub fn is_regular_ply(&self) -> bool {
-        use SearchCommand::*;
-
-        !matches!(self, KillerMove { .. } | GetHashMove)
-    }
 }
 
-pub const INITIAL_SEARCH_COMMANDS: [SearchCommand; 5] = {
+const INITIAL_SEARCH_COMMANDS: [SearchCommand; 4] = {
     use SearchCommand::*;
     [
         GetHashMove,
         GenQuiescenceMoves,
         GenKillerMoves,
         GenQuietMoves,
-        MovesExhausted,
     ]
 };
+
+pub enum GeneratedMove {
+    HashMove,
+    Ply(Ply),
+}
+
+pub struct Generated {
+    pub ply: GeneratedMove,
+    pub guarantee: GuaranteeLevel,
+}
+
+pub enum GuaranteeLevel {
+    HashLike,
+    PseudoLegal,
+    Legal,
+    Deferred,
+}
+
+pub trait MoveGenerator {
+    fn init(thread: &ThreadData) -> Self;
+    fn next(&mut self, thread: &mut ThreadData) -> Option<Generated>;
+}
+
+pub struct StandardMoveGenerator {
+    commands: BinaryHeap<SearchCommand>,
+}
+
+impl MoveGenerator for StandardMoveGenerator {
+    fn init(_thread: &ThreadData) -> Self {
+        let mut commands = BinaryHeap::with_capacity(32);
+        commands.extend(INITIAL_SEARCH_COMMANDS);
+        Self { commands }
+    }
+
+    fn next(&mut self, thread: &mut ThreadData) -> Option<Generated> {
+        use GuaranteeLevel::*;
+        use SearchCommand::*;
+        while let Some(command) = self.commands.pop() {
+            let mut guarantee = HashLike;
+            match command {
+                GetHashMove => {
+                    return Some(Generated {
+                        ply: GeneratedMove::HashMove,
+                        guarantee: HashLike,
+                    })
+                }
+                GenQuiescenceMoves => {
+                    for ply in thread.game().quiescence_pseudo_legal_moves() {
+                        let see = static_exchange_evaluation(thread.game(), ply);
+                        let value = CaptureValue::Static(see);
+
+                        let command = {
+                            use std::cmp::Ordering::*;
+                            match see.cmp(&DRAW) {
+                                Greater => WinningCapture { ply, value },
+                                Less => LosingCapture { ply, value },
+                                Equal => EqualCapture { ply, value },
+                            }
+                        };
+
+                        self.commands.push(command);
+                    }
+                }
+                GenKillerMoves => {
+                    let move_total = thread.game().half_move_total() as usize;
+                    if let Some(killer_moves) = thread.killer_moves.get(move_total) {
+                        for ply in killer_moves.iter().flatten() {
+                            self.commands.push(KillerMove { ply: *ply });
+                        }
+                    }
+                }
+                GenQuietMoves => {
+                    let game = thread.game();
+                    for ply in thread.game().quiet_pseudo_legal_moves() {
+                        let value = crate::eval::quiet_move_order(game, ply);
+                        let is_check = thread.game().is_check(&ply);
+                        self.commands.push(QuietMove {
+                            ply,
+                            value,
+                            is_check,
+                        });
+                    }
+                }
+                EqualCapture { .. }
+                | WinningCapture { .. }
+                | LosingCapture { .. }
+                | QuietMove { .. } => guarantee = PseudoLegal,
+                KillerMove { .. } => guarantee = HashLike,
+            };
+
+            match command.ply() {
+                None => continue,
+                Some(ply) => {
+                    return Some(Generated {
+                        ply: GeneratedMove::Ply(ply),
+                        guarantee,
+                    })
+                }
+            }
+            // Also: what would the guarantee be in this case?
+        }
+        None
+    }
+}
