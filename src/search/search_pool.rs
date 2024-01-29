@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::thread::{spawn, JoinHandle};
 use std::time::Duration;
@@ -7,6 +8,7 @@ use std::time::Instant;
 
 // TODO: use stock rust channels?
 use crossbeam_channel as channel;
+use linear_map::LinearMap;
 use lru::LruCache;
 
 use super::currently_searching::CurrentlySearching;
@@ -128,9 +130,20 @@ impl SearchThreadPool {
         let clock_start_time = (!is_pondering).then_some(now);
 
         self.transposition_table.inc_age();
+        let root_moves = Arc::new({
+            history
+                .game()
+                .legal_moves_plausible_ordering()
+                .iter()
+                .map(|x| (*x, AtomicUsize::new(0)))
+                .collect()
+        });
 
-        self.broadcast(&ThreadCommand::SearchThis(history.clone().into()))
-            .unwrap();
+        self.broadcast(&ThreadCommand::SearchThis(
+            history.clone().into(),
+            root_moves,
+        ))
+        .unwrap();
 
         self.state = PoolState::Searching {
             history: history.clone(),

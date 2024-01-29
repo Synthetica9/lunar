@@ -2,13 +2,15 @@
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use crossbeam_channel as channel;
+use linear_map::LinearMap;
 use smallvec::SmallVec;
 
-use self::move_order::{MoveGenerator, StandardMoveGenerator};
+use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::currently_searching::CurrentlySearching;
 use crate::game::Game;
@@ -24,11 +26,13 @@ const ONE_MP: Millipawns = Millipawns(1);
 
 mod move_order;
 
+pub use move_order::static_exchange_evaluation;
+
 #[derive(Clone, Debug)]
 pub enum ThreadCommand {
     Quit,
     StopSearch,
-    SearchThis(Arc<History>),
+    SearchThis(Arc<History>, Arc<LinearMap<Ply, AtomicUsize>>),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -67,6 +71,16 @@ where
     type OtherSuccessors;
 }
 
+impl Node for RootNode {
+    const IS_PV: bool = true;
+    const IS_ROOT: bool = true;
+
+    type Gen = RootMoveGenerator;
+
+    type FirstSuccessor = PVNode;
+    type OtherSuccessors = GenericNode;
+}
+
 impl Node for PVNode {
     const IS_PV: bool = true;
     const IS_ROOT: bool = false;
@@ -93,9 +107,14 @@ pub struct ThreadData {
 
     command_channel: channel::Receiver<ThreadCommand>,
     status_channel: channel::Sender<ThreadStatus>,
+
     nodes_searched: usize,
+    total_nodes_searched: usize,
     quiescence_nodes_searched: usize,
     tt_puts: usize,
+
+    root_move_counts: Arc<LinearMap<Ply, AtomicUsize>>,
+    best_move: Option<Ply>,
 
     transposition_table: Arc<TranspositionTable>,
     currently_searching: CurrentlySearching,
@@ -112,6 +131,15 @@ impl ThreadData {
         search_coordinator: CurrentlySearching,
         transposition_table: Arc<TranspositionTable>,
     ) -> Self {
+        let game = Game::new();
+        let root_move_counts = Arc::new({
+            let mut map = LinearMap::new();
+            for ply in game.legal_moves() {
+                map.insert(ply, AtomicUsize::new(0));
+            }
+            map
+        });
+
         Self {
             command_channel,
             status_channel,
@@ -121,8 +149,11 @@ impl ThreadData {
             searching: false,
             history: History::new(&Game::new()),
             nodes_searched: 0,
+            total_nodes_searched: 0,
             quiescence_nodes_searched: 0,
             tt_puts: 0,
+            root_move_counts,
+            best_move: None,
 
             killer_moves: Vec::new(),
         }
@@ -154,9 +185,10 @@ impl ThreadData {
                         // Send idle message:
                         self.send_status_update();
                     }
-                    SearchThis(new_history) => {
+                    SearchThis(new_history, root_moves) => {
                         self.history = new_history.as_ref().clone();
                         self.searching = true;
+                        self.root_move_counts = root_moves;
                     }
                 };
             } else {
@@ -200,7 +232,7 @@ impl ThreadData {
             // TODO: narrow alpha and beta? (aspiration windows)
             // Tried this, available in aspiration-windows branch, but it
             // seems to significantly weaken self-play.
-            match self.alpha_beta_search::<PVNode>(LOSS, WIN, depth) {
+            match self.alpha_beta_search::<RootNode>(LOSS, WIN, depth) {
                 Ok((score, best_move)) => {
                     self.send_status_update();
                     self.status_channel
@@ -210,6 +242,7 @@ impl ThreadData {
                             depth,
                         })
                         .unwrap();
+                    self.best_move = best_move;
                 }
                 Err(command) => return command,
             }
@@ -250,6 +283,7 @@ impl ThreadData {
         // Must be only incremented here because it is also used to initiate
         // communication.
         self.nodes_searched += 1;
+        self.total_nodes_searched += 1;
 
         // This causes a lot of branch mispredictions...
         if self.nodes_searched % COMMS_INTERVAL == 0 {
@@ -365,6 +399,8 @@ impl ThreadData {
                     }
                 };
 
+                let total_nodes_before = self.total_nodes_searched;
+
                 let is_deferred;
                 {
                     use GuaranteeLevel::*;
@@ -453,6 +489,14 @@ impl ThreadData {
                 };
 
                 let undo = self.history.pop();
+
+                if N::IS_ROOT {
+                    let total_nodes_after = self.total_nodes_searched;
+                    let searched = total_nodes_after - total_nodes_before;
+                    // println!("{ply:?} {searched}");
+                    let atom = &self.root_move_counts[&ply];
+                    atom.fetch_add(searched, Ordering::Relaxed);
+                }
 
                 value = value.max(x);
                 if value > alpha {

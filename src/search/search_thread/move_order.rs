@@ -1,8 +1,8 @@
 use smallvec::SmallVec;
 use strum::IntoEnumIterator;
 
-use std::cmp::Reverse;
 use std::collections::BinaryHeap;
+use std::sync::atomic::Ordering;
 
 use crate::bitboard::Bitboard;
 use crate::game::Game;
@@ -216,6 +216,37 @@ pub enum GuaranteeLevel {
 pub trait MoveGenerator {
     fn init(thread: &ThreadData) -> Self;
     fn next(&mut self, thread: &mut ThreadData) -> Option<Generated>;
+}
+
+pub struct RootMoveGenerator {
+    plies: Vec<Ply>,
+}
+
+impl MoveGenerator for RootMoveGenerator {
+    fn init(thread: &ThreadData) -> Self {
+        let mut items: Vec<_> = thread.root_move_counts.iter().collect();
+
+        // Sort, worst to best move. In the end, we pop from the end.
+        items.sort_by_key(|(ply, count)| {
+            (
+                // Best ply last
+                thread.best_move.is_some_and(|x| &&x == ply),
+                // Highest number of nodes to refute last.
+                count.load(Ordering::Relaxed),
+            )
+        });
+
+        let plies = items.into_iter().map(|(x, _)| *x).collect();
+
+        Self { plies }
+    }
+
+    fn next(&mut self, _thread: &mut ThreadData) -> Option<Generated> {
+        self.plies.pop().map(|ply| Generated {
+            ply: GeneratedMove::Ply(ply),
+            guarantee: GuaranteeLevel::Legal,
+        })
+    }
 }
 
 pub struct StandardMoveGenerator {

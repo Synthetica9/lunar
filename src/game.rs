@@ -6,11 +6,13 @@ use crate::bitboard_map;
 use crate::bitboard_map::BitboardMap;
 use crate::board::Board;
 use crate::castlerights::CastleRights;
+use crate::eval::quiet_move_order;
 use crate::legality::LegalityChecker;
 
 use crate::piece::Piece;
 use crate::ply::{ApplyPly, Ply, SpecialFlag, UndoPly, _combination_moves};
 use crate::plyset::PlySet;
+use crate::search::static_exchange_evaluation;
 use crate::square::Square;
 use crate::zobrist_hash::ZobristHash;
 
@@ -445,6 +447,22 @@ impl Game {
             .iter()
             .filter(|ply| legality_checker.is_legal(ply, self))
             .copied()
+            .collect()
+    }
+
+    pub fn legal_moves_plausible_ordering(&self) -> Vec<Ply> {
+        let mut quiescence_moves = self.quiescence_pseudo_legal_moves();
+        quiescence_moves.sort_by_key(|x| static_exchange_evaluation(self, *x));
+
+        let mut quiet_moves = self.quiet_pseudo_legal_moves();
+        quiet_moves.sort_by_key(|x| quiet_move_order(self, *x));
+
+        let legality_checker = LegalityChecker::new(self);
+
+        quiet_moves
+            .into_iter()
+            .chain(quiescence_moves)
+            .filter(|x| legality_checker.is_legal(x, self))
             .collect()
     }
 
