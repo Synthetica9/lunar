@@ -12,21 +12,21 @@ pub mod direction;
 pub mod eval;
 pub mod game;
 pub mod history;
-
-#[cfg(feature = "hugepages")]
-pub mod hugepages_mmap_alloc;
-
 pub mod legality;
 pub mod millipawns;
 pub mod piece;
 pub mod ply;
 pub mod plyset;
+pub mod poison_drop;
 pub mod search;
 pub mod square;
 pub mod transposition_table;
 pub mod uci;
 pub mod values;
 pub mod zobrist_hash;
+
+#[cfg(feature = "hugepages")]
+pub mod hugepages_mmap_alloc;
 
 // pub mod build;
 

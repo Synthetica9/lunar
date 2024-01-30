@@ -17,6 +17,7 @@ use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
+use crate::poison_drop::PoisonDrop;
 use crate::transposition_table::TranspositionTable;
 
 const N_KILLER_MOVES: usize = 2;
@@ -374,10 +375,11 @@ impl ThreadData {
             };
 
             let mut deferred_moves = VecDeque::new();
-            let mut hash_moves_played = SmallVec::<[Ply; 4]>::new();
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
 
             let mut generator = N::Gen::init(self);
+
+            let mut searched = SmallVec::<[Ply; 32]>::new();
             let mut i = 0;
 
             let mut any_moves_seen = false;
@@ -412,7 +414,7 @@ impl ThreadData {
 
                     let game = self.game();
 
-                    if hash_moves_played.contains(&ply)
+                    if searched.contains(&ply)
                         || !(pseudo_legal || game.is_pseudo_legal(&ply))
                         || !(legal || legality_checker.is_legal(&ply, game))
                     {
@@ -422,9 +424,7 @@ impl ThreadData {
                     debug_assert!(game.is_pseudo_legal(&ply));
                     debug_assert!(legality_checker.is_legal(&ply, game));
 
-                    if hash_like {
-                        hash_moves_played.push(ply);
-                    }
+                    debug_assert!(!searched.contains(&ply));
                 }
 
                 self.transposition_table
@@ -432,6 +432,8 @@ impl ThreadData {
 
                 any_moves_seen = true;
                 let is_first_move = i == 0;
+
+                let mut undone_move = PoisonDrop::new();
 
                 self.history.push(&ply);
 
@@ -448,8 +450,10 @@ impl ThreadData {
                         .defer_move(self.game().hash(), depth)
                 {
                     deferred_moves.push_back(ply);
-                    // Can't continue because that would skip the rollback
-                    Millipawns(i32::MIN)
+
+                    self.history.pop();
+                    undone_move.safe = true;
+                    continue;
                 } else {
                     // late move reduction
                     // https://www.chessprogramming.org/Late_Move_Reductions
@@ -490,6 +494,8 @@ impl ThreadData {
 
                 let undo = self.history.pop();
 
+                undone_move.safe = true;
+
                 if N::IS_ROOT {
                     let total_nodes_after = self.total_nodes_searched;
                     let searched = total_nodes_after - total_nodes_before;
@@ -511,8 +517,22 @@ impl ThreadData {
                     break;
                 }
 
+                searched.push(ply);
                 i += 1;
             }
+
+            #[cfg(debug_assertions)]
+            {
+                let mut legal_moves = self.game().legal_moves();
+                legal_moves.sort();
+                let num_legal_moves = legal_moves.len();
+                searched.sort();
+                debug_assert!(
+                    i <= num_legal_moves,
+                    "{i} <= {num_legal_moves}\n{legal_moves:?}\n{searched:?}"
+                );
+            }
+            // debug_assert_eq!(i != 0, any_moves_seen);
 
             if !any_moves_seen {
                 return Ok((if is_in_check { LOSS } else { DRAW }, None));

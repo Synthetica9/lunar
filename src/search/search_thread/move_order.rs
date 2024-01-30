@@ -265,6 +265,7 @@ impl MoveGenerator for StandardMoveGenerator {
         use SearchCommand::*;
         while let Some(command) = self.commands.pop() {
             let mut guarantee = HashLike;
+            // println!("{command:?}");
             match command {
                 GetHashMove => {
                     return Some(Generated {
