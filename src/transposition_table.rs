@@ -83,7 +83,7 @@ pub enum TranspositionEntryType {
 }
 
 const AGE_BITS: usize = 6;
-const MAX_AGE: u8 = 1 << AGE_BITS;
+const MAX_AGE: u8 = (1 << AGE_BITS) - 1;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TranspositionEntry {
@@ -141,7 +141,7 @@ impl TranspositionEntry {
         value_type: TranspositionEntryType,
         age: u8,
     ) -> TranspositionEntry {
-        debug_assert!(age < MAX_AGE);
+        debug_assert!(age <= MAX_AGE);
         TranspositionEntry {
             depth,
             value,
@@ -209,7 +209,7 @@ impl TranspositionTable {
 
     pub fn inc_age(&self) {
         self.age.fetch_add(1, Ordering::Acquire);
-        self.age.fetch_and(MAX_AGE - 1, Ordering::Release);
+        self.age.fetch_and(MAX_AGE, Ordering::Release);
         self.occupancy.store(0, Ordering::Release);
     }
 
@@ -329,6 +329,13 @@ impl TranspositionTable {
         // - Invalid entries quickly get aged out.
         // If we include is_none before this, we run into a problem! We store every hash 4 times...!
         // Effectively, this means we discard ~3/4 puts!
+
+        // h000 0000 0000 0000
+        // 0aaa aaa0 0000 0000
+        // 0000 000d dddd ddd0
+        // 0000 0000 0000 000t
+        // ------------------- |
+        // haaa aaad dddd dddt
 
         (((hash != new_hash) as u16) << 15) // 1 bit
             | (((MAX_AGE - self.effective_age(&value)) as u16) << 9) // 6 bits
