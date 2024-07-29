@@ -549,11 +549,21 @@ impl ThreadData {
             }
         }
 
+        #[cfg(feature = "coz")]
+        {
+            coz::progress!("Search iteration")
+        }
+
         Ok((value, best_move))
     }
 
     fn quiescence_search(&mut self, alpha: Millipawns, beta: Millipawns) -> Millipawns {
         self.quiescence_nodes_searched += 1;
+
+        #[cfg(feature = "coz")]
+        {
+            coz::progress!("Q-Search iteration")
+        }
 
         let stand_pat = crate::eval::evaluation(self.game());
 

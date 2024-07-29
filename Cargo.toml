@@ -26,12 +26,14 @@ lto = true
 opt-level = 3
 panic = "abort"
 codegen-units = 1
+debug = 1
 
 # Make the build script run faster.
 [profile.dev]
 opt-level = 3
 
 [dependencies]
+coz = "0.1"
 strum = "0.25"
 strum_macros = "0.25"
 crossbeam-channel = "0.5"
