@@ -141,28 +141,13 @@ pub enum CaptureValue {
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug)]
 pub enum SearchCommand {
     // Should be searched _last_
-    LosingCapture {
-        value: CaptureValue,
-        ply: Ply,
-    },
-    QuietMove {
-        is_check: bool,
-        value: Millipawns,
-        ply: Ply,
-    },
+    LosingCapture { value: CaptureValue, ply: Ply },
+    QuietMove { value: Millipawns, ply: Ply },
     GenQuietMoves,
-    EqualCapture {
-        value: CaptureValue,
-        ply: Ply,
-    }, // see = 0 (TODO: MVV-LVA?)
-    KillerMove {
-        ply: Ply,
-    },
+    EqualCapture { value: CaptureValue, ply: Ply }, // see = 0 (TODO: MVV-LVA?)
+    KillerMove { ply: Ply },
     GenKillerMoves,
-    WinningCapture {
-        value: CaptureValue,
-        ply: Ply,
-    },
+    WinningCapture { value: CaptureValue, ply: Ply },
     GenQuiescenceMoves,
     GetHashMove,
     // Should be searched _first_
@@ -301,12 +286,7 @@ impl MoveGenerator for StandardMoveGenerator {
                     let game = thread.game();
                     for ply in thread.game().quiet_pseudo_legal_moves() {
                         let value = crate::eval::quiet_move_order(game, ply);
-                        let is_check = thread.game().is_check(&ply);
-                        self.commands.push(QuietMove {
-                            ply,
-                            value,
-                            is_check,
-                        });
+                        self.commands.push(QuietMove { ply, value });
                     }
                 }
                 EqualCapture { .. }
