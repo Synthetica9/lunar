@@ -60,7 +60,9 @@ impl History {
     }
 
     pub fn last_is_null(&self) -> bool {
-        self.undo_history.last().is_some_and(|undo| undo.ply.is_null())
+        self.undo_history
+            .last()
+            .is_some_and(|undo| undo.ply.is_null())
     }
 
     fn hash_index(&self, hash: ZobristHash) -> usize {

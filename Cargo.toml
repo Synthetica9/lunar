@@ -32,8 +32,6 @@ codegen-units = 1
 opt-level = 3
 
 [dependencies]
-strum = "0.25"
-strum_macros = "0.25"
 crossbeam-channel = "0.5"
 smallvec = { version = "1.11", features = ["union"] }
 static_assertions = "1.1"

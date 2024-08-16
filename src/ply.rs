@@ -230,7 +230,7 @@ pub fn _combination_moves(
     // can_promote determines whether we can promote.
 
     let calc_reserve = |mask: Bitboard| {
-        srcs.iter_squares()
+        srcs.iter()
             .map(|src| (move_table[src] & *dsts & mask).popcount() as usize)
             .sum::<usize>()
     };
@@ -248,10 +248,10 @@ pub fn _combination_moves(
 
     plyset.reserve(to_reserve);
 
-    for src in srcs.iter_squares() {
+    for src in srcs.iter() {
         let potential = move_table[src];
 
-        for dst in (potential & *dsts).iter_squares() {
+        for dst in (potential & *dsts).iter() {
             use crate::square::ranks::*;
             if can_promote && (dst.rank() == EIGHT || dst.rank() == ONE) {
                 use Piece::*;

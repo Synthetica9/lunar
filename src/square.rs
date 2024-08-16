@@ -1,6 +1,5 @@
 use std::string::String;
 
-use strum::IntoEnumIterator;
 pub mod files {
     #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
     pub struct File(u8);
@@ -88,7 +87,7 @@ pub mod ranks {
 }
 pub use ranks::Rank;
 
-pub use crate::generated::squares::{Square, SquareIter};
+pub use crate::generated::squares::Square;
 
 impl Square {
     pub const fn new(file: File, rank: Rank) -> Square {
@@ -102,6 +101,10 @@ impl Square {
     pub const fn from_index(index: u8) -> Square {
         debug_assert!(index < 64);
         Square::from_u8(index)
+    }
+
+    pub fn iter() -> impl DoubleEndedIterator<Item = Self> {
+        (0..64).map(Self::from_u8)
     }
 
     pub const fn as_index(self) -> usize {

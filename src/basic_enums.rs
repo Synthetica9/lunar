@@ -1,11 +1,9 @@
-use strum_macros::EnumIter;
-
 use crate::direction::{directions, Direction};
 
 use crate::ply::Ply;
 use crate::square::{files, ranks, Rank, Square};
 
-#[derive(Debug, Clone, PartialEq, Copy, EnumIter)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Color {
     White,
     Black,
@@ -27,6 +25,10 @@ impl Color {
             Color::White => "w",
             Color::Black => "b",
         }
+    }
+
+    pub fn iter() -> impl DoubleEndedIterator<Item = Self> {
+        Self::COLORS.iter().copied()
     }
 
     pub const fn as_index(self) -> usize {
@@ -86,15 +88,21 @@ impl Color {
 }
 
 // TODO: move to castlerights.rs
-#[derive(Debug, Clone, PartialEq, Copy, EnumIter)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum CastleDirection {
     Kingside,
     Queenside,
 }
 
 impl CastleDirection {
+    pub const DIRECTIONS: [Self; 2] = [Self::Kingside, Self::Queenside];
+
     pub const fn as_index(self) -> usize {
         self as usize
+    }
+
+    pub fn iter() -> impl DoubleEndedIterator<Item = Self> {
+        Self::DIRECTIONS.iter().copied()
     }
 
     pub const fn to_ply(self, color: &Color) -> Ply {
@@ -115,7 +123,6 @@ impl CastleDirection {
 mod tests {
     // use super::*;
     use crate::piece::Piece;
-    use strum::IntoEnumIterator;
 
     #[test]
     fn test_piece_convert() {

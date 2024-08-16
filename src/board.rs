@@ -1,7 +1,5 @@
 use std::cmp::Ordering;
 
-use strum::IntoEnumIterator;
-
 use crate::{
     basic_enums::Color,
     bitboard::Bitboard,
@@ -142,7 +140,7 @@ impl Board {
 
     pub fn to_piece_list(&self) -> Vec<(Color, Piece, Square)> {
         self.get_occupied()
-            .iter_squares()
+            .iter()
             .map(|s| {
                 let (color, piece) = self.square(s).unwrap();
                 (color, piece, s)
@@ -374,7 +372,7 @@ impl Board {
         occupancy: Bitboard,
     ) -> Bitboard {
         let mut res = Bitboard::new();
-        for sqr in self.get(color, piece).iter_squares() {
+        for sqr in self.get(color, piece).iter() {
             res |= Bitboard::piece_attacks_from_with_occupancy(piece, sqr, color, occupancy)
         }
         res

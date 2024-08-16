@@ -352,7 +352,7 @@ impl Game {
         let eligible_pawns = friendly_pawns & attacking_squares;
 
         plyset.reserve(eligible_pawns.popcount() as usize);
-        for pawn in eligible_pawns.iter_squares() {
+        for pawn in eligible_pawns.iter() {
             let ply = Ply::en_passant(pawn, ep);
             // println!("En passant capture: {:?}", ply);
             plyset.push(ply);
@@ -380,10 +380,10 @@ impl Game {
             Cannot => !occupied,
         };
 
-        for src in self.board.get(&self.to_move, &piece).iter_squares() {
+        for src in self.board.get(&self.to_move, &piece).iter() {
             let dsts = Bitboard::magic_attacks(src, piece, occupied) & postmask;
             plyset.reserve(dsts.popcount() as usize);
-            for dst in dsts.iter_squares() {
+            for dst in dsts.iter() {
                 plyset.push(Ply::simple(src, dst));
             }
         }
@@ -499,7 +499,7 @@ impl Game {
 
             // Now we have a bitboard of pieces pinning something to the square.
             // We need to find the piece that it is pinning.
-            for pinner in pinners.iter_squares() {
+            for pinner in pinners.iter() {
                 // Todo: is an explicit interposition check better here?
                 // look in reverse
                 let path = Bitboard::magic_attacks(pinner, other, occupied);

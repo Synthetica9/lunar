@@ -1,7 +1,5 @@
 use std::hash::Hash;
 
-use strum::IntoEnumIterator;
-
 use crate::basic_enums::Color;
 use crate::castlerights::CastleRights;
 use crate::game::Game;
@@ -48,7 +46,7 @@ impl ZobristHash {
 
         for color in Color::iter() {
             for piece in Piece::iter() {
-                for square in game.board().get(&color, &piece).iter_squares() {
+                for square in game.board().get(&color, &piece).iter() {
                     hash.toggle_piece(color, piece, square);
                 }
             }

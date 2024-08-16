@@ -1,5 +1,4 @@
 use smallvec::SmallVec;
-use strum::IntoEnumIterator;
 
 use std::collections::BinaryHeap;
 use std::sync::atomic::Ordering;
@@ -129,7 +128,7 @@ fn test_see() {
     assert_eq!(static_exchange_evaluation(&game, ply), Millipawns(4000));
 }
 
-#[derive(Eq, PartialEq, PartialOrd, Ord, Debug)]
+#[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub enum CaptureValue {
     // Based on SEE
     Static(Millipawns),
@@ -138,7 +137,7 @@ pub enum CaptureValue {
 }
 
 // You can re-order these to change the search order that is used by alpha-beta.
-#[derive(Eq, PartialEq, PartialOrd, Ord, Debug)]
+#[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub enum SearchCommand {
     // Should be searched _last_
     LosingCapture {

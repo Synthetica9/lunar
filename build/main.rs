@@ -46,11 +46,7 @@ fn squares() -> Vec<String> {
 
 fn gen_squares() -> std::io::Result<()> {
     let mut file = open("squares")?;
-    writeln!(file, "use strum_macros::EnumIter;")?;
-    writeln!(
-        file,
-        "#[derive(Debug, Clone, Copy, Eq, PartialEq, EnumIter)]"
-    )?;
+    writeln!(file, "#[derive(Debug, Clone, Copy, Eq, PartialEq)]")?;
     writeln!(file, "pub enum Square {{")?;
     for sq in squares() {
         writeln!(file, "    {sq},")?;

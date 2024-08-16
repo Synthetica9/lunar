@@ -1,9 +1,7 @@
-use strum_macros::EnumIter;
-
 use crate::basic_enums::Color;
 use crate::millipawns::Millipawns;
 
-#[derive(Debug, Clone, PartialEq, Copy, EnumIter, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Copy, Eq, PartialOrd, Ord)]
 // Pawn and king are special in that they can't be promoted to, should we swap them to the back?
 pub enum Piece {
     Pawn,
@@ -39,6 +37,10 @@ impl Piece {
         use Piece::*;
         [Pawn, Knight, Bishop, Rook, Queen, King]
     };
+
+    pub fn iter() -> impl DoubleEndedIterator<Item = Self> {
+        Self::PIECES.iter().copied()
+    }
 
     pub const fn to_u8(self) -> u8 {
         // TODO: rename to as_u8

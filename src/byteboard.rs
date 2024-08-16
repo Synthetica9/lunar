@@ -2,7 +2,6 @@ use std::ops::{Index, IndexMut};
 
 use crate::bitboard::Bitboard;
 use crate::square::Square;
-use strum::IntoEnumIterator;
 
 #[derive(PartialEq, Copy, Clone)]
 pub struct Byteboard(pub [i8; 64]);
