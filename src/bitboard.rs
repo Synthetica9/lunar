@@ -1,12 +1,10 @@
 use std::fmt::{Debug, Formatter};
 
-use strum::IntoEnumIterator;
-
 use crate::basic_enums::Color;
 use crate::byteboard::Byteboard;
 use crate::direction::Direction;
 use crate::piece::Piece;
-use crate::square::{files, ranks, Square, SquareIter};
+use crate::square::{files, ranks, Square};
 
 #[derive(Copy, Clone, PartialEq)]
 pub struct Bitboard(pub u64);
@@ -64,21 +62,13 @@ impl Bitboard {
         }
     }
 
-    pub fn iter(self) -> BitboardIter {
-        BitboardIter {
-            bitboard: self,
-            index: Square::iter(),
-        }
-    }
-
-    pub fn iter_squares(self) -> BitboardSquareIter {
-        // TODO: should probably be named iter (current iter should be iter_values or smth.)
+    pub fn iter(self) -> BitboardSquareIter {
         BitboardSquareIter(self)
     }
 
     pub fn to_byteboard(self) -> Byteboard {
         let mut byteboard = Byteboard::new();
-        for i in self.iter_squares() {
+        for i in self.iter() {
             byteboard[i] = 1;
         }
         byteboard
@@ -86,7 +76,7 @@ impl Bitboard {
 
     pub fn to_byteboard_mask(self) -> Byteboard {
         let mut byteboard = Byteboard::new();
-        for i in self.iter_squares() {
+        for i in self.iter() {
             byteboard[i] = !0;
         }
         byteboard
@@ -451,26 +441,9 @@ impl Debug for Bitboard {
             write!(
                 fmt,
                 "Bitboard::from_squares(&{:?})",
-                self.iter_squares().collect::<Vec<_>>()
+                self.iter().collect::<Vec<_>>()
             )
         }
-    }
-}
-
-pub struct BitboardIter {
-    bitboard: Bitboard,
-    index: SquareIter,
-}
-
-impl Iterator for BitboardIter {
-    type Item = bool;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.index.next().map(|square| self.bitboard.get(square))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.index.size_hint()
     }
 }
 
@@ -633,7 +606,7 @@ mod tests {
     #[test]
     fn test_bitboard_square_iter() {
         let bb = Bitboard::from_squares(&[A1, H8]);
-        let mut iter = bb.iter_squares();
+        let mut iter = bb.iter();
         assert_eq!(iter.next(), Some(A1));
         assert_eq!(iter.next(), Some(H8));
         assert_eq!(iter.next(), None);

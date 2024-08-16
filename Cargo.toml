@@ -34,8 +34,6 @@ opt-level = 3
 
 [dependencies]
 coz = "0.1"
-strum = "0.25"
-strum_macros = "0.25"
 crossbeam-channel = "0.5"
 smallvec = { version = "1.11", features = ["union"] }
 static_assertions = "1.1"

@@ -1,7 +1,5 @@
 use std::iter::Sum;
 
-use strum::IntoEnumIterator;
-
 use crate::basic_enums::Color;
 use crate::bitboard::{self, Bitboard};
 use crate::board::Board;
@@ -172,7 +170,7 @@ impl Evaluator {
 
     //     self.0.connected_rooks.map(|x| {
     //         rooks
-    //             .iter_squares()
+    //             .iter()
     //             .map(|square| {
     //                 let attacks = Bitboard::rook_attacks(square, occupied) & rooks;
     //                 x.dot_product(&attacks.perspective(color))
@@ -301,7 +299,7 @@ impl DotProduct for BoardParameter {
         // }
         // result
         bitboard
-            .iter_squares()
+            .iter()
             .map(|sq| Millipawns(self.values[sq.as_index()] as i32))
             .sum()
     }

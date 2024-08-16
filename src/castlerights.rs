@@ -1,5 +1,3 @@
-use strum::IntoEnumIterator;
-
 use crate::basic_enums::{CastleDirection, Color};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
