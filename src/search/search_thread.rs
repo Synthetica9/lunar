@@ -410,6 +410,17 @@ impl ThreadData {
                     let pseudo_legal = legal || matches!(guarantee, PseudoLegal);
                     let hash_like = matches!(guarantee, HashLike);
 
+                    // TODO: this pattern should probably be a library function somewhere
+                    debug_assert!(
+                        matches!(guarantee, Legal) || !N::IS_ROOT,
+                        "When we are in the root, we will only see legal moves."
+                    );
+
+                    #[cfg(not(debug_assert))]
+                    unsafe {
+                        std::intrinsics::assume(matches!(guarantee, Legal) || !N::IS_ROOT)
+                    };
+
                     let game = self.game();
 
                     if hash_moves_played.contains(&ply)
