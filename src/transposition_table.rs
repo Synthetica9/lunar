@@ -177,6 +177,7 @@ impl TranspositionTable {
         let boxed = table.into_boxed_slice();
 
         assert!(boxed.len() > 0, "tt was found empty!");
+        assert!(boxed.len().is_power_of_two(), "must be power of two");
 
         // TODO: can this be done better?
         // SAFETY: Box<[T], A> and Box<NonEmptySlice<T>, A> have the same memory layout
@@ -268,8 +269,10 @@ impl TranspositionTable {
             // other things non-panicking.
             // SAFTEY: guaranteed by NonZeroUsize, see also assert above.
             unsafe { std::intrinsics::assume(n > 0) }
+
         }
-        hash.to_usize() % n
+        debug_assert!(n.is_power_of_two());
+        hash.to_usize() & (n - 1)
     }
 
     pub fn get(&self, hash: ZobristHash) -> Option<TranspositionEntry> {
@@ -461,7 +464,7 @@ impl TranspositionTable {
     fn effective_age(&self, entry: &TranspositionEntry) -> u8 {
         let global_age = self.age();
 
-        (global_age - entry.age()) % MAX_AGE
+        (global_age - entry.age()) & MAX_AGE
     }
 }
 
