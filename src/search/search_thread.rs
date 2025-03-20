@@ -406,9 +406,9 @@ impl ThreadData {
                     use GuaranteeLevel::*;
 
                     is_deferred = matches!(guarantee, Deferred);
-                    let hash_like = matches!(guarantee, HashLike);
-                    let legal = is_deferred || matches!(guarantee, Deferred);
+                    let legal = is_deferred || matches!(guarantee, Legal);
                     let pseudo_legal = legal || matches!(guarantee, PseudoLegal);
+                    let hash_like = matches!(guarantee, HashLike);
 
                     let game = self.game();
 
@@ -559,11 +559,6 @@ impl ThreadData {
 
     fn quiescence_search(&mut self, alpha: Millipawns, beta: Millipawns) -> Millipawns {
         self.quiescence_nodes_searched += 1;
-
-        #[cfg(feature = "coz")]
-        {
-            coz::progress!("Q-Search iteration")
-        }
 
         let stand_pat = crate::eval::evaluation(self.game());
 

@@ -26,14 +26,14 @@ lto = true
 opt-level = 3
 panic = "abort"
 codegen-units = 1
-debug = 1
+# debug = 1
 
 # Make the build script run faster.
 [profile.dev]
 opt-level = 3
 
 [dependencies]
-coz = "0.1"
+coz = { version = "0.1", optional = true }
 crossbeam-channel = "0.5"
 smallvec = { version = "1.11", features = ["union"] }
 static_assertions = "1.1"
@@ -45,6 +45,7 @@ nix = { version = "0.27", optional = true, features = [
 not_empty = "0.1"
 lru = { version = "0.12", default-features = false }
 linear-map = "1.2"
+heapless = "0.8"
 
 [build-dependencies]
 rand = { version = "0.8", features = ["small_rng"], default-features = false }

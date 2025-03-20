@@ -1,6 +1,7 @@
+use heapless::binary_heap::Max;
 use smallvec::SmallVec;
 
-use std::collections::BinaryHeap;
+use heapless::BinaryHeap as Heap;
 use std::sync::atomic::Ordering;
 
 use crate::bitboard::Bitboard;
@@ -11,7 +12,7 @@ use crate::ply::Ply;
 
 use super::ThreadData;
 
-fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns {
+pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
     // @first specifies whether to immediately quit after finding a plausible advantage.
     let board = game.board();
 
@@ -22,7 +23,7 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
     let sq = ply.dst();
     let attackers_defenders = board.squares_attacking_defending(sq);
 
-    let get_attackers = &move |side, is_attacking| {
+    let get_attackers = &move |side, is_attacking, res: &mut SmallVec<[Millipawns; 8]>| {
         let attackers = {
             let mut res = attackers_defenders;
             res &= board.get_color(side);
@@ -33,7 +34,6 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
             res
         };
         // let mut res = Vec::with_capacity(attackers.popcount() as usize + is_attacking as usize);
-        let mut res = SmallVec::<[_; 8]>::new();
 
         for piece in Piece::iter().rev() {
             if piece == Piece::King {
@@ -59,14 +59,15 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
         if let Some(piece) = piece {
             res.push(piece.base_value());
         }
-
-        res
     };
 
     let to_move = game.to_move();
     let to_move_other = to_move.other();
-    let mut attackers = get_attackers(&to_move, true);
-    let mut defenders = get_attackers(&to_move_other, false);
+
+    let mut attackers = SmallVec::new();
+    get_attackers(&to_move, true, &mut attackers);
+    let mut defenders = SmallVec::new();
+    get_attackers(&to_move_other, false, &mut defenders);
 
     debug_assert!(!attackers.is_empty());
     debug_assert!(!defenders.is_empty());
@@ -100,22 +101,10 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
 
         if balance > best.unwrap_or(crate::millipawns::LOSS) {
             best = Some(balance);
-
-            if first && balance >= Millipawns(0) {
-                break;
-            }
         }
     }
 
     best.unwrap_or(crate::millipawns::LOSS)
-}
-
-pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
-    _static_exchange_evaluation(game, ply, false)
-}
-
-pub fn static_exchange_evaluation_winning(game: &Game, ply: Ply) -> bool {
-    _static_exchange_evaluation(game, ply, true) >= Millipawns(0)
 }
 
 #[test]
@@ -234,13 +223,15 @@ impl MoveGenerator for RootMoveGenerator {
 }
 
 pub struct StandardMoveGenerator {
-    commands: BinaryHeap<SearchCommand>,
+    commands: Heap<SearchCommand, Max, 128>,
 }
 
 impl MoveGenerator for StandardMoveGenerator {
     fn init(_thread: &ThreadData) -> Self {
-        let mut commands = BinaryHeap::with_capacity(32);
-        commands.extend(INITIAL_SEARCH_COMMANDS);
+        let mut commands = Heap::new();
+        (INITIAL_SEARCH_COMMANDS).iter().for_each(|x| {
+            commands.push(*x).unwrap();
+        });
         Self { commands }
     }
 
@@ -270,22 +261,27 @@ impl MoveGenerator for StandardMoveGenerator {
                             }
                         };
 
-                        self.commands.push(command);
+                        self.commands.push(command).unwrap();
                     }
                 }
                 GenKillerMoves => {
                     let move_total = thread.game().half_move_total() as usize;
                     if let Some(killer_moves) = thread.killer_moves.get(move_total) {
-                        for ply in killer_moves.iter().flatten() {
-                            self.commands.push(KillerMove { ply: *ply });
-                        }
+                        killer_moves
+                            .iter()
+                            .flatten()
+                            // .filter(|x| x.1 == mate_killers)
+                            // .map(|x| x.0)
+                            .for_each(|ply| {
+                                self.commands.push(KillerMove { ply: *ply }).unwrap();
+                            });
                     }
                 }
                 GenQuietMoves => {
                     let game = thread.game();
                     for ply in thread.game().quiet_pseudo_legal_moves() {
                         let value = crate::eval::quiet_move_order(game, ply);
-                        self.commands.push(QuietMove { ply, value });
+                        self.commands.push(QuietMove { ply, value }).unwrap();
                     }
                 }
                 EqualCapture { .. }

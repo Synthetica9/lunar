@@ -338,7 +338,7 @@ impl SearchThreadPool {
                         quiescence_nodes_searched: extra_qnodes_searched,
                         tt_puts,
                     } => {
-                        *nodes_searched += extra_nodes_searched + extra_qnodes_searched;
+                        *nodes_searched += extra_nodes_searched;
                         *quiescence_nodes_searched += extra_qnodes_searched;
                         self.transposition_table.add_occupancy(tt_puts);
                         thread.is_searching = true;
