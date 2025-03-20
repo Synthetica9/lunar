@@ -541,63 +541,9 @@ impl Game {
     }
 
     pub fn is_check(&self, ply: &Ply) -> bool {
-        debug_assert!(self.is_pseudo_legal(ply));
-
-        use Piece::*;
-
-        // Common data for both:
-        let occupied = self.board.get_occupied();
-        let occupied_after = occupied ^ Bitboard::from_squares(&[ply.src(), ply.dst()]);
-        let other_color = self.to_move.other();
-        let other_king_square = self.board.king_square(&other_color);
-
-        // Direct checks:
-        let final_piece = if let Some(SpecialFlag::Promotion(p)) = ply.flag() {
-            p
-        } else {
-            ply.moved_piece(self)
-        };
-
-        let attacks = Bitboard::piece_attacks_from_with_occupancy(
-            &final_piece,
-            ply.dst(),
-            &self.to_move,
-            occupied_after,
-        );
-
-        let mut res = attacks.get(other_king_square);
-
-        // Discovered checks:
-        if !res {
-            let friendly_pieces = self.board.get_color(&self.to_move);
-            let queens = self.board.get_piece(&Queen);
-            for piece in [Bishop, Rook] {
-                let attacks = Bitboard::piece_attacks_from_with_occupancy(
-                    &piece,
-                    other_king_square,
-                    &self.to_move,
-                    occupied_after,
-                );
-                let relevant_friendly_pieces =
-                    friendly_pieces & (self.board.get_piece(&piece) | queens);
-                res |= !(attacks & relevant_friendly_pieces).is_empty();
-            }
-        }
-
-        // #[cfg(debug_assertions)]
-        // {
-        //     let mut cpy = self.clone();
-        //     cpy.apply_ply(ply);
-        //     let fen = self.to_fen();
-        //     assert_eq!(
-        //         res,
-        //         cpy.is_in_check(),
-        //         "Inconsistent check... {ply:?}\n{fen}\n{}",
-        //         occupied_after.simple_render()
-        //     );
-        // }
-
-        res
+        let mut cpy = self.clone();
+        cpy.apply_ply(ply);
+        cpy.is_in_check()
     }
 
     pub fn is_in_mate(&self) -> bool {
@@ -628,11 +574,7 @@ impl Game {
 
     pub fn ply_name(&self, ply: &Ply) -> String {
         use CastleDirection::*;
-        match ply.castling_direction() {
-            Some(Kingside) => return "O-O".to_string(),
-            Some(Queenside) => return "O-O-O".to_string(),
-            None => {}
-        }
+
         let dst = ply.dst();
         let src = ply.src();
         let legal_moves = self.legal_moves();
@@ -661,23 +603,30 @@ impl Game {
 
         let mut res = String::new();
 
-        if !is_pawn_move {
-            res.push(piece.to_char().to_ascii_uppercase());
+        match ply.castling_direction() {
+            Some(Kingside) => res.push_str("O-O"),
+            Some(Queenside) => res.push_str("O-O-O"),
+            None => {
+                if !is_pawn_move {
+                    res.push(piece.to_char().to_ascii_uppercase());
+                }
+                if other_on_file || is_pawn_capture {
+                    res.push(src.file().as_char());
+                }
+                if other_on_rank {
+                    res.push(src.rank().as_char());
+                }
+                if is_capture {
+                    res.push('x');
+                }
+                res.push_str(&dst.to_fen_part());
+                if let Some(piece) = ply.promotion_piece() {
+                    res.push('=');
+                    res.push(piece.to_char().to_ascii_uppercase());
+                }
+            }
         }
-        if other_on_file || is_pawn_capture {
-            res.push(src.file().as_char());
-        }
-        if other_on_rank {
-            res.push(src.rank().as_char());
-        }
-        if is_capture {
-            res.push('x');
-        }
-        res.push_str(&dst.to_fen_part());
-        if let Some(piece) = ply.promotion_piece() {
-            res.push('=');
-            res.push(piece.to_char().to_ascii_uppercase());
-        }
+
         if is_check {
             res.push(if is_checkmate { '#' } else { '+' });
         }
@@ -1070,6 +1019,13 @@ mod tests {
         "4k3/R7/7R/8/8/8/8/4K3 w - - 0 1",
         "Rh8#",
         "4k2R/R7/8/8/8/8/8/4K3 b - - 1 1"
+    );
+
+    simple_move_test!(
+        test_castle_with_check,
+        "5k2/8/8/8/8/8/8/4K2R w K - 0 1",
+        "O-O+",
+        "5k2/8/8/8/8/8/8/5RK1 b - - 1 1"
     );
 
     macro_rules! perft_test(
