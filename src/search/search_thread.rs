@@ -410,6 +410,17 @@ impl ThreadData {
                     let legal = is_deferred || matches!(guarantee, Deferred);
                     let pseudo_legal = legal || matches!(guarantee, PseudoLegal);
 
+                    // TODO: this pattern should probably be a library function somewhere
+                    debug_assert!(
+                        matches!(guarantee, Legal) || !N::IS_ROOT,
+                        "When we are in the root, we will only see legal moves."
+                    );
+
+                    #[cfg(not(debug_assert))]
+                    unsafe {
+                        std::intrinsics::assume(matches!(guarantee, Legal) || !N::IS_ROOT)
+                    };
+
                     let game = self.game();
 
                     if hash_moves_played.contains(&ply)
@@ -443,6 +454,7 @@ impl ThreadData {
                         .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, depth - 1)?
                         .0
                 } else if !is_deferred
+                    && !N::IS_ROOT // TODO: Should we defer in the root? Probably not...?
                     && self
                         .currently_searching
                         .defer_move(self.game().hash(), depth)
