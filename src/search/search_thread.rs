@@ -16,6 +16,7 @@ use super::currently_searching::CurrentlySearching;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
+use crate::piece::Piece;
 use crate::ply::Ply;
 use crate::transposition_table::TranspositionTable;
 
@@ -338,23 +339,28 @@ impl ThreadData {
             // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
 
             let mut r = NULL_MOVE_REDUCTION + 1;
-            if depth > 7 {
-                let game = self.game();
-                let board = game.board();
-                let bb = board.get_color(&game.to_move());
-                if bb.popcount() >= 4 {
-                    r += 1
-                }
+            let game = self.game();
+            let board = game.board();
+            let bb = board.get_color(&game.to_move());
+            if depth > 7 && bb.popcount() >= 4 {
+                r += 1;
             }
 
-            if !N::IS_PV && depth >= r && !is_in_check && !self.history.last_is_null() {
+            let side_to_move_only_kp =
+                bb == board.get_piece(&Piece::Pawn) | board.get_piece(&Piece::King);
+
+            if !N::IS_PV
+                && !side_to_move_only_kp
+                && depth >= r
+                && !is_in_check
+                && !self.history.last_is_null()
+            {
                 self.history.push(&Ply::NULL);
                 let null_value = -self
-                    .alpha_beta_search::<N::OtherSuccessors>(-beta, -alpha, depth - r)?
+                    .alpha_beta_search::<N::OtherSuccessors>(-beta, -(beta - ONE_MP), depth - r)?
                     .0;
                 self.history.pop();
                 if null_value >= beta {
-                    // Whoah, store in tt?
                     return Ok((null_value, best_move));
                 }
             }
