@@ -436,13 +436,15 @@ impl SearchThreadPool {
 
                         // If we are running up against the real limits of time, we should return
                         // regardles`s to avoid losing on time.
-                        if time - time_spent <= Duration::from_millis(100) {
+                        if time - time_spent <= Duration::from_millis(30) {
+                            println!("info string exiting because lt 30ms remain");
                             return true;
                         }
 
                         // If we spent a large percentage of our time, also return.
-                        if time <= time_spent * 3 {
+                        if time <= time_spent * 2 {
                             return true;
+                            println!("info string exiting because large part of time was spent");
                         }
                     }
 
@@ -463,10 +465,15 @@ impl SearchThreadPool {
 
                     let time_per_move = (time + inc * (moves_to_go - 1)) / moves_to_go;
                     let per_move_millis = time_per_move.as_millis() as f64;
-                    let adjusted_millis = per_move_millis * pv_instability.clamp(0.1, 5.0);
+                    let adjusted_millis = 1.3 * per_move_millis * pv_instability.clamp(0.1, 5.0);
                     let time_per_move = Duration::from_millis(adjusted_millis as u64);
 
-                    elapsed_then >= time_per_move
+                    let res = elapsed_then >= time_per_move;
+                    if res {
+                        let discarded = *nodes_searched - *nodes_searched;
+                        println!("info string normal dynamic quit, nodes discarded {discarded}");
+                    }
+                    res
                 }
             }
         } else {
