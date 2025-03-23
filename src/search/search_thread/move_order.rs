@@ -128,20 +128,12 @@ fn test_see() {
     assert_eq!(static_exchange_evaluation(&game, ply), Millipawns(4000));
 }
 
-#[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Clone, Copy)]
-pub enum CaptureValue {
-    // Based on SEE
-    Static(Millipawns),
-    // Based on hash table
-    Hash(Millipawns),
-}
-
 // You can re-order these to change the search order that is used by alpha-beta.
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub enum SearchCommand {
     // Should be searched _last_
     LosingCapture {
-        value: CaptureValue,
+        value: Millipawns,
         ply: Ply,
     },
     QuietMove {
@@ -151,7 +143,7 @@ pub enum SearchCommand {
     },
     GenQuietMoves,
     EqualCapture {
-        value: CaptureValue,
+        value: Millipawns,
         ply: Ply,
     }, // see = 0 (TODO: MVV-LVA?)
     KillerMove {
@@ -159,7 +151,7 @@ pub enum SearchCommand {
     },
     GenKillerMoves,
     WinningCapture {
-        value: CaptureValue,
+        value: Millipawns,
         ply: Ply,
     },
     GenQuiescenceMoves,
@@ -273,12 +265,11 @@ impl MoveGenerator for StandardMoveGenerator {
                 }
                 GenQuiescenceMoves => {
                     for ply in thread.game().quiescence_pseudo_legal_moves() {
-                        let see = static_exchange_evaluation(thread.game(), ply);
-                        let value = CaptureValue::Static(see);
+                        let value = static_exchange_evaluation(thread.game(), ply);
 
                         let command = {
                             use std::cmp::Ordering::*;
-                            match see.cmp(&DRAW) {
+                            match value.cmp(&DRAW) {
                                 Greater => WinningCapture { ply, value },
                                 Less => LosingCapture { ply, value },
                                 Equal => EqualCapture { ply, value },
