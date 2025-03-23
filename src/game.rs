@@ -383,6 +383,9 @@ impl Game {
         let friends = self.board.get_color(&self.to_move);
         let enemies = self.board.get_color(&self.to_move.other());
         let occupied = friends | enemies;
+        let selected_piece = self.board.get_piece(&piece);
+        let queens = self.board.get_piece(&Piece::Queen);
+        let srcs = (selected_piece | queens) & friends;
 
         use CapturePolicy::*;
         let postmask = match capture_policy {
@@ -391,7 +394,7 @@ impl Game {
             Cannot => !occupied,
         };
 
-        for src in self.board.get(&self.to_move, &piece).iter() {
+        for src in srcs.iter() {
             let dsts = Bitboard::magic_attacks(src, piece, occupied) & postmask;
             plyset.reserve(dsts.popcount() as usize);
             for dst in dsts.iter() {
@@ -406,10 +409,6 @@ impl Game {
 
     fn _rook_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
         self._magic_moves(plyset, Piece::Rook, capture_policy);
-    }
-
-    fn _queen_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
-        self._magic_moves(plyset, Piece::Queen, capture_policy);
     }
 
     pub fn pseudo_legal_moves(&self) -> PlySet {
@@ -427,7 +426,7 @@ impl Game {
         self._knight_moves(plyset, quiescence);
         self._bishop_moves(plyset, capture_policy);
         self._rook_moves(plyset, capture_policy);
-        self._queen_moves(plyset, capture_policy);
+        // Queen moves included in bishop and rook.
         self._king_moves(plyset, quiescence);
     }
 
