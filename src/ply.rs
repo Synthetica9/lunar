@@ -229,13 +229,10 @@ pub fn _combination_moves(
     // dsts is empty/enemy squares
     // can_promote determines whether we can promote.
 
-    let calc_reserve = |mask: Bitboard| {
-        srcs.iter()
-            .map(|src| (move_table[src] & *dsts & mask).popcount() as usize)
-            .sum::<usize>()
-    };
-
-    let mut to_reserve = calc_reserve(crate::bitboard::FULL);
+    let to_reserve = srcs
+        .iter()
+        .map(|src| (move_table[src] & *dsts).popcount() as usize)
+        .sum::<usize>();
 
     let len_after = plyset.len() + to_reserve;
 

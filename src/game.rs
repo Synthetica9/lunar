@@ -283,57 +283,57 @@ impl Game {
 
     fn _pawn_pushes(&self, plyset: &mut PlySet, promote_to: Option<Piece>) {
         let color = self.to_move;
+        let srcs = self.board.get(&color, &Piece::Pawn);
+        let occupied = self.board.get_occupied();
+
+        // Single pushes
+        let move_table: &'static BitboardMap = match (color, promote_to.is_some()) {
+            (Color::White, false) => &bitboard_map::WHITE_PAWN_MOVES,
+            (Color::Black, false) => &bitboard_map::BLACK_PAWN_MOVES,
+            (Color::White, true) => &bitboard_map::WHITE_PAWN_MOVES_PROMOTION,
+            (Color::Black, true) => &bitboard_map::BLACK_PAWN_MOVES_PROMOTION,
+        };
+
+        let dsts = !occupied;
+        let flag = promote_to.map(SpecialFlag::Promotion);
+
+        _combination_moves(plyset, &srcs, &dsts, move_table, flag);
+    }
+
+    fn _pawn_double_pushes(&self, plyset: &mut PlySet) {
+        use bitboard_map::*;
+
+        let color = self.to_move;
         let pawns = self.board.get(&color, &Piece::Pawn);
         let direction = color.pawn_move_direction();
         let occupied = self.board.get_occupied();
 
-        if promote_to.is_none() {
-            // Double pushes
-            let pawns_on_start_rank = pawns & color.pawn_start_rank().as_bitboard();
-            let blocker_row = color.en_passant_rank().as_bitboard();
-            let double_push_blockers = blocker_row & occupied;
-            let double_pushes = pawns_on_start_rank
-                .and(!double_push_blockers.shift(-direction))
-                .shift(direction + direction)
-                .and(!occupied);
+        let double_pushes = !(occupied | occupied.shift(direction));
 
-            let tbl = match color {
-                Color::White => &bitboard_map::WHITE_PAWN_DOUBLE_MOVES,
-                Color::Black => &bitboard_map::BLACK_PAWN_DOUBLE_MOVES,
-            };
+        let move_table: &'static BitboardMap = match color {
+            Color::White => &WHITE_PAWN_DOUBLE_MOVES,
+            Color::Black => &BLACK_PAWN_DOUBLE_MOVES,
+        };
 
-            _combination_moves(plyset, &pawns_on_start_rank, &double_pushes, tbl, None);
-        }
-        {
-            // Single pushes
-            let tbl = match (color, promote_to.is_some()) {
-                (Color::White, false) => &bitboard_map::WHITE_PAWN_MOVES,
-                (Color::Black, false) => &bitboard_map::BLACK_PAWN_MOVES,
-                (Color::White, true) => &bitboard_map::WHITE_PAWN_MOVES_PROMOTION,
-                (Color::Black, true) => &bitboard_map::BLACK_PAWN_MOVES_PROMOTION,
-            };
-
-            let single_pushes = pawns.shift(direction) & !occupied;
-            let flag = promote_to.map(SpecialFlag::Promotion);
-
-            _combination_moves(plyset, &pawns, &single_pushes, tbl, flag);
-        }
+        _combination_moves(plyset, &pawns, &double_pushes, move_table, None);
     }
 
     fn _pawn_captures(&self, plyset: &mut PlySet, promote_to: Option<Piece>) {
-        let tbl = match (self.to_move, promote_to.is_some()) {
-            (Color::White, false) => &bitboard_map::WHITE_PAWN_ATTACKS,
-            (Color::Black, false) => &bitboard_map::BLACK_PAWN_ATTACKS,
-            (Color::White, true) => &bitboard_map::WHITE_PAWN_ATTACKS_PROMOTION,
-            (Color::Black, true) => &bitboard_map::BLACK_PAWN_ATTACKS_PROMOTION,
+        use bitboard_map::*;
+
+        let move_table: &'static BitboardMap = match (self.to_move, promote_to.is_some()) {
+            (Color::White, false) => &WHITE_PAWN_ATTACKS,
+            (Color::Black, false) => &BLACK_PAWN_ATTACKS,
+            (Color::White, true) => &WHITE_PAWN_ATTACKS_PROMOTION,
+            (Color::Black, true) => &BLACK_PAWN_ATTACKS_PROMOTION,
         };
 
         let color = self.to_move;
-        let pawns = self.board.get(&color, &Piece::Pawn);
-        let enemies = self.board.get_color(&color.other());
+        let srcs = self.board.get(&color, &Piece::Pawn);
+        let dsts = self.board.get_color(&color.other());
         let flag = promote_to.map(|x| SpecialFlag::Promotion(x));
 
-        _combination_moves(plyset, &pawns, &enemies, tbl, flag)
+        _combination_moves(plyset, &srcs, &dsts, move_table, flag)
     }
 
     fn _en_passant_captures(&self, plyset: &mut PlySet) {
@@ -343,28 +343,19 @@ impl Game {
             None => return,
         };
 
-        // println!("En passant square: {:?}", ep);
-
         let color = self.to_move;
-        // println!("Color: {:?}", color);
-
         let rev_move_table = match color {
             Color::White => &bitboard_map::BLACK_PAWN_ATTACKS,
             Color::Black => &bitboard_map::WHITE_PAWN_ATTACKS,
         };
 
         let friendly_pawns = self.board.get(&color, &Piece::Pawn);
-        // println!("Friendly pawns: {:?}", friendly_pawns);
-
         let attacking_squares = rev_move_table[ep];
-        // println!("Attacking squares: {:?}", attacking_squares);
-
         let eligible_pawns = friendly_pawns & attacking_squares;
 
         plyset.reserve(eligible_pawns.popcount() as usize);
         for pawn in eligible_pawns.iter() {
             let ply = Ply::en_passant(pawn, ep);
-            // println!("En passant capture: {:?}", ply);
             plyset.push(ply);
         }
     }
@@ -379,6 +370,7 @@ impl Game {
         } else {
             // Regular pushes and underpromotions
             self._pawn_pushes(plyset, None);
+            self._pawn_double_pushes(plyset);
 
             for underpromotion in [Knight, Bishop, Rook] {
                 self._pawn_pushes(plyset, Some(underpromotion));
