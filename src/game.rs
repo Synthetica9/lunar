@@ -32,13 +32,6 @@ pub struct Game {
     pawn_hash: ZobristHash,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CapturePolicy {
-    Can,
-    Must,
-    Cannot,
-}
-
 pub const STARTING_POSITION: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 impl Game {
@@ -198,50 +191,32 @@ impl Game {
     }
 
     // Pseudo-legal moves
-    fn _step_moves_for(
+    fn _step_moves_for<const QUIESCENCE: bool>(
         &self,
         plyset: &mut PlySet,
         piece_type: &Piece,
         move_table: &BitboardMap,
-        capture_policy: CapturePolicy,
-        _quiescence_moves: bool,
     ) {
         debug_assert!(piece_type == &Piece::King || piece_type == &Piece::Knight);
         let board = &self.board;
         let color = &self.to_move;
         let srcs = board.get(color, piece_type);
-        let dsts = match capture_policy {
-            CapturePolicy::Can => !board.get_color(color),
-            CapturePolicy::Must => board.get_color(&color.other()),
-            CapturePolicy::Cannot => !board.get_occupied(),
+        let dsts = if QUIESCENCE {
+            board.get_color(&color.other())
+        } else {
+            !board.get_occupied()
         };
 
         _combination_moves(plyset, &srcs, &dsts, move_table, None)
     }
 
-    fn _knight_moves(&self, plyset: &mut PlySet, quiescence_moves: bool) {
-        use CapturePolicy::*;
-
-        self._step_moves_for(
-            plyset,
-            &Piece::Knight,
-            &bitboard_map::KNIGHT_MOVES,
-            if quiescence_moves { Must } else { Cannot },
-            quiescence_moves,
-        )
+    fn _knight_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+        self._step_moves_for::<QUIESCENCE>(plyset, &Piece::Knight, &bitboard_map::KNIGHT_MOVES)
     }
 
     // Disregards castling
-    fn _simple_king_moves(&self, plyset: &mut PlySet, quiescence_moves: bool) {
-        use CapturePolicy::*;
-
-        self._step_moves_for(
-            plyset,
-            &Piece::King,
-            &bitboard_map::KING_MOVES,
-            if quiescence_moves { Must } else { Cannot },
-            quiescence_moves,
-        )
+    fn _simple_king_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+        self._step_moves_for::<QUIESCENCE>(plyset, &Piece::King, &bitboard_map::KING_MOVES)
     }
 
     pub fn _castle_moves(&self, plyset: &mut PlySet) {
@@ -273,10 +248,10 @@ impl Game {
         }
     }
 
-    pub fn _king_moves(&self, plyset: &mut PlySet, quiescence: bool) {
-        self._simple_king_moves(plyset, quiescence);
+    pub fn _king_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+        self._simple_king_moves::<QUIESCENCE>(plyset);
 
-        if !quiescence {
+        if !QUIESCENCE {
             self._castle_moves(plyset);
         }
     }
@@ -360,9 +335,9 @@ impl Game {
         }
     }
 
-    fn _pawn_moves(&self, plyset: &mut PlySet, quiescence_moves: bool) {
+    fn _pawn_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
         use Piece::*;
-        if quiescence_moves {
+        if QUIESCENCE {
             self._pawn_captures(plyset, None);
             self._pawn_captures(plyset, Some(Queen));
             self._pawn_pushes(plyset, Some(Queen));
@@ -379,7 +354,7 @@ impl Game {
         }
     }
 
-    fn _magic_moves(&self, plyset: &mut PlySet, piece: Piece, capture_policy: CapturePolicy) {
+    fn _magic_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet, piece: Piece) {
         let friends = self.board.get_color(&self.to_move);
         let enemies = self.board.get_color(&self.to_move.other());
         let occupied = friends | enemies;
@@ -387,12 +362,7 @@ impl Game {
         let queens = self.board.get_piece(&Piece::Queen);
         let srcs = (selected_piece | queens) & friends;
 
-        use CapturePolicy::*;
-        let postmask = match capture_policy {
-            Can => !friends,
-            Must => enemies,
-            Cannot => !occupied,
-        };
+        let postmask = if QUIESCENCE { enemies } else { !occupied };
 
         for src in srcs.iter() {
             let dsts = Bitboard::magic_attacks(src, piece, occupied) & postmask;
@@ -403,42 +373,39 @@ impl Game {
         }
     }
 
-    fn _bishop_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
-        self._magic_moves(plyset, Piece::Bishop, capture_policy);
+    fn _bishop_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+        self._magic_moves::<QUIESCENCE>(plyset, Piece::Bishop);
     }
 
-    fn _rook_moves(&self, plyset: &mut PlySet, capture_policy: CapturePolicy) {
-        self._magic_moves(plyset, Piece::Rook, capture_policy);
+    fn _rook_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+        self._magic_moves::<QUIESCENCE>(plyset, Piece::Rook);
     }
 
     pub fn pseudo_legal_moves(&self) -> PlySet {
         let mut plyset = PlySet::new();
-        self._pseudo_legal_moves_by_quiescence(&mut plyset, true);
-        self._pseudo_legal_moves_by_quiescence(&mut plyset, false);
+        self._pseudo_legal_moves_by_quiescence::<true>(&mut plyset);
+        self._pseudo_legal_moves_by_quiescence::<false>(&mut plyset);
         plyset
     }
 
-    fn _pseudo_legal_moves_by_quiescence(&self, plyset: &mut PlySet, quiescence: bool) {
-        use crate::game::CapturePolicy::*;
-        let capture_policy = if quiescence { Must } else { Cannot };
-
-        self._pawn_moves(plyset, quiescence);
-        self._knight_moves(plyset, quiescence);
-        self._bishop_moves(plyset, capture_policy);
-        self._rook_moves(plyset, capture_policy);
+    fn _pseudo_legal_moves_by_quiescence<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+        self._pawn_moves::<QUIESCENCE>(plyset);
+        self._knight_moves::<QUIESCENCE>(plyset);
+        self._bishop_moves::<QUIESCENCE>(plyset);
+        self._rook_moves::<QUIESCENCE>(plyset);
         // Queen moves included in bishop and rook.
-        self._king_moves(plyset, quiescence);
+        self._king_moves::<QUIESCENCE>(plyset);
     }
 
     pub fn quiet_pseudo_legal_moves(&self) -> PlySet {
         let mut plyset = PlySet::new();
-        self._pseudo_legal_moves_by_quiescence(&mut plyset, false);
+        self._pseudo_legal_moves_by_quiescence::<false>(&mut plyset);
         plyset
     }
 
     pub fn quiescence_pseudo_legal_moves(&self) -> PlySet {
         let mut plyset = PlySet::new();
-        self._pseudo_legal_moves_by_quiescence(&mut plyset, true);
+        self._pseudo_legal_moves_by_quiescence::<true>(&mut plyset);
         plyset
     }
 
