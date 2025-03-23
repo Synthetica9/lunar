@@ -17,7 +17,7 @@ use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
-use crate::ply::Ply;
+use crate::ply::{Ply, SpecialFlag};
 use crate::transposition_table::TranspositionTable;
 
 const N_KILLER_MOVES: usize = 2;
@@ -523,7 +523,9 @@ impl ThreadData {
                 }
 
                 if alpha >= beta {
-                    if undo.info.captured_piece.is_none() {
+                    let is_queen_promo =
+                        undo.ply.flag() == Some(SpecialFlag::Promotion(Piece::Queen));
+                    if undo.info.captured_piece.is_none() && !is_queen_promo {
                         self.insert_killer_move(ply, self.game().half_move_total() as usize);
                     }
                     break;

@@ -7,7 +7,7 @@ use crate::bitboard::Bitboard;
 use crate::game::Game;
 use crate::millipawns::{Millipawns, DRAW, LOSS};
 use crate::piece::Piece;
-use crate::ply::Ply;
+use crate::ply::{Ply, SpecialFlag};
 
 use super::ThreadData;
 
@@ -16,7 +16,11 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
     let board = game.board();
 
     if !ply.is_capture(game) || ply.is_en_passant() {
-        return Millipawns(0);
+        return if let Some(SpecialFlag::Promotion(prom)) = ply.flag() {
+            prom.base_value()
+        } else {
+            Millipawns(0)
+        };
     }
 
     let sq = ply.dst();
