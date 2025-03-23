@@ -269,7 +269,6 @@ impl TranspositionTable {
             // other things non-panicking.
             // SAFTEY: guaranteed by NonZeroUsize, see also assert above.
             unsafe { std::intrinsics::assume(n > 0) }
-
         }
         debug_assert!(n.is_power_of_two());
         hash.to_usize() & (n - 1)

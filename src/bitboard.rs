@@ -314,11 +314,11 @@ impl Bitboard {
     }
 
     pub fn pawn_attacks(square: Square, color: Color) -> Bitboard {
-        use crate::bitboard_map::{BLACK_PAWN_ATTACKS, WHITE_PAWN_ATTACKS};
+        use crate::bitboard_map::{BLACK_PAWN_ATTACKS_ALL, WHITE_PAWN_ATTACKS_ALL};
 
         let table = match color {
-            Color::White => &WHITE_PAWN_ATTACKS,
-            Color::Black => &BLACK_PAWN_ATTACKS,
+            Color::White => &WHITE_PAWN_ATTACKS_ALL,
+            Color::Black => &BLACK_PAWN_ATTACKS_ALL,
         };
 
         table[square]

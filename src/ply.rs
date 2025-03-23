@@ -218,7 +218,7 @@ pub fn _combination_moves(
     srcs: &Bitboard,
     dsts: &Bitboard,
     move_table: &BitboardMap,
-    can_promote: bool,
+    flag: Option<SpecialFlag>,
 ) {
     // TODO: terrible name.
 
@@ -236,13 +236,6 @@ pub fn _combination_moves(
     };
 
     let mut to_reserve = calc_reserve(crate::bitboard::FULL);
-    let mut can_promote = can_promote;
-
-    if can_promote {
-        let promotion_reserve = calc_reserve(crate::bitboard::HOME_RANKS) * 3;
-        to_reserve += promotion_reserve;
-        can_promote = promotion_reserve != 0;
-    }
 
     let len_after = plyset.len() + to_reserve;
 
@@ -252,24 +245,15 @@ pub fn _combination_moves(
         let potential = move_table[src];
 
         for dst in (potential & *dsts).iter() {
-            use crate::square::ranks::*;
-            if can_promote && (dst.rank() == EIGHT || dst.rank() == ONE) {
-                use Piece::*;
-                for piece in &[Queen, Rook, Bishop, Knight] {
-                    plyset.push(Ply::promotion(src, dst, *piece));
-                }
-            } else {
-                plyset.push(Ply::simple(src, dst));
-            }
+            plyset.push(Ply::new(src, dst, flag));
         }
     }
 
     debug_assert!(
         plyset.len() == len_after,
-        "{} != {}, miscalculated plyset reservation (should be exact!) can_promote: {}",
+        "{} != {}, miscalculated plyset reservation (should be exact!)",
         plyset.len(),
         len_after,
-        can_promote,
     );
 }
 

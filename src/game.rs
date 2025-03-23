@@ -206,6 +206,7 @@ impl Game {
         capture_policy: CapturePolicy,
         _quiescence_moves: bool,
     ) {
+        debug_assert!(piece_type == &Piece::King || piece_type == &Piece::Knight);
         let board = &self.board;
         let color = &self.to_move;
         let srcs = board.get(color, piece_type);
@@ -214,9 +215,8 @@ impl Game {
             CapturePolicy::Must => board.get_color(&color.other()),
             CapturePolicy::Cannot => !board.get_occupied(),
         };
-        let can_promote = piece_type == &Piece::Pawn;
 
-        _combination_moves(plyset, &srcs, &dsts, move_table, can_promote)
+        _combination_moves(plyset, &srcs, &dsts, move_table, None)
     }
 
     fn _knight_moves(&self, plyset: &mut PlySet, quiescence_moves: bool) {
@@ -281,13 +281,13 @@ impl Game {
         }
     }
 
-    fn _pawn_pushes(&self, plyset: &mut PlySet) {
+    fn _pawn_pushes(&self, plyset: &mut PlySet, promote_to: Option<Piece>) {
         let color = self.to_move;
         let pawns = self.board.get(&color, &Piece::Pawn);
         let direction = color.pawn_move_direction();
         let occupied = self.board.get_occupied();
 
-        {
+        if promote_to.is_none() {
             // Double pushes
             let pawns_on_start_rank = pawns & color.pawn_start_rank().as_bitboard();
             let blocker_row = color.en_passant_rank().as_bitboard();
@@ -302,28 +302,38 @@ impl Game {
                 Color::Black => &bitboard_map::BLACK_PAWN_DOUBLE_MOVES,
             };
 
-            _combination_moves(plyset, &pawns_on_start_rank, &double_pushes, tbl, false);
+            _combination_moves(plyset, &pawns_on_start_rank, &double_pushes, tbl, None);
         }
         {
             // Single pushes
-            let tbl = match color {
-                Color::White => &bitboard_map::WHITE_PAWN_MOVES,
-                Color::Black => &bitboard_map::BLACK_PAWN_MOVES,
+            let tbl = match (color, promote_to.is_some()) {
+                (Color::White, false) => &bitboard_map::WHITE_PAWN_MOVES,
+                (Color::Black, false) => &bitboard_map::BLACK_PAWN_MOVES,
+                (Color::White, true) => &bitboard_map::WHITE_PAWN_MOVES_PROMOTION,
+                (Color::Black, true) => &bitboard_map::BLACK_PAWN_MOVES_PROMOTION,
             };
 
             let single_pushes = pawns.shift(direction) & !occupied;
+            let flag = promote_to.map(SpecialFlag::Promotion);
 
-            _combination_moves(plyset, &pawns, &single_pushes, tbl, true);
+            _combination_moves(plyset, &pawns, &single_pushes, tbl, flag);
         }
     }
 
-    fn _pawn_captures(&self, plyset: &mut PlySet) {
-        let move_table = match self.to_move {
-            Color::White => &bitboard_map::WHITE_PAWN_ATTACKS,
-            Color::Black => &bitboard_map::BLACK_PAWN_ATTACKS,
+    fn _pawn_captures(&self, plyset: &mut PlySet, promote_to: Option<Piece>) {
+        let tbl = match (self.to_move, promote_to.is_some()) {
+            (Color::White, false) => &bitboard_map::WHITE_PAWN_ATTACKS,
+            (Color::Black, false) => &bitboard_map::BLACK_PAWN_ATTACKS,
+            (Color::White, true) => &bitboard_map::WHITE_PAWN_ATTACKS_PROMOTION,
+            (Color::Black, true) => &bitboard_map::BLACK_PAWN_ATTACKS_PROMOTION,
         };
 
-        self._step_moves_for(plyset, &Piece::Pawn, move_table, CapturePolicy::Must, true)
+        let color = self.to_move;
+        let pawns = self.board.get(&color, &Piece::Pawn);
+        let enemies = self.board.get_color(&color.other());
+        let flag = promote_to.map(|x| SpecialFlag::Promotion(x));
+
+        _combination_moves(plyset, &pawns, &enemies, tbl, flag)
     }
 
     fn _en_passant_captures(&self, plyset: &mut PlySet) {
@@ -360,11 +370,20 @@ impl Game {
     }
 
     fn _pawn_moves(&self, plyset: &mut PlySet, quiescence_moves: bool) {
+        use Piece::*;
         if quiescence_moves {
-            self._pawn_captures(plyset);
+            self._pawn_captures(plyset, None);
+            self._pawn_captures(plyset, Some(Queen));
+            self._pawn_pushes(plyset, Some(Queen));
             self._en_passant_captures(plyset);
         } else {
-            self._pawn_pushes(plyset);
+            // Regular pushes and underpromotions
+            self._pawn_pushes(plyset, None);
+
+            for underpromotion in [Knight, Bishop, Rook] {
+                self._pawn_pushes(plyset, Some(underpromotion));
+                self._pawn_captures(plyset, Some(underpromotion));
+            }
         }
     }
 
@@ -1078,6 +1097,13 @@ mod tests {
         "8/8/1bnknb2/8/3K4/8/8/8 w - - 0 1",
         5,
         82709
+    );
+
+    perft_test!(
+        test_underpromotion_perft,
+        "8/4P1k1/8/8/8/8/8/4K3 w - - 1 5",
+        5,
+        46471
     );
 
     #[test]
