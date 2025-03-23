@@ -6,7 +6,6 @@ pub mod basic_enums;
 pub mod bitboard;
 pub mod bitboard_map;
 pub mod board;
-pub mod byteboard;
 pub mod castlerights;
 pub mod direction;
 pub mod eval;

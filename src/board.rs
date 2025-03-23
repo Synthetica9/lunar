@@ -3,7 +3,6 @@ use std::cmp::Ordering;
 use crate::{
     basic_enums::Color,
     bitboard::Bitboard,
-    byteboard::Byteboard,
     castlerights::CastleRights,
     millipawns::Millipawns,
     piece::Piece,
@@ -273,28 +272,21 @@ impl Board {
     pub fn check_not_corrupt(&self) -> Result<(), String> {
         // Will probably never be complete, however...
         // No overlap in colors
-        let color_coverage = self.get_color(&Color::White).to_byteboard()
-            + self.get_color(&Color::Black).to_byteboard();
-
-        if !color_coverage.is_bitboard() {
-            return Err("Color coverage is not a bitboard".to_string());
+        if !(self.get_color(&Color::White) & self.get_color(&Color::Black)).is_empty() {
+            return Err("Overlap in colors".to_string());
         }
 
-        let piece_counts = {
-            let mut bb = Byteboard::new();
-            for piece in Piece::iter() {
-                bb.add_bitboard_mut(self.get_piece(&piece));
+        let mut pieces = Bitboard::new();
+        for piece in Piece::iter() {
+            let on_board = self.get_piece(&piece);
+            if !(pieces & on_board).is_empty() {
+                return Err("Overlap in pieces".to_string());
             }
-            bb
-        };
-
-        // No overlap in pieces
-        if !piece_counts.is_bitboard() {
-            return Err("Piece coverage is not a bitboard".to_string());
+            pieces |= on_board;
         }
 
         // Pieces and colors cover the same squares
-        if color_coverage != piece_counts {
+        if pieces != self.get_occupied() {
             return Err("Color and piece coverage do not match".to_string());
         }
 

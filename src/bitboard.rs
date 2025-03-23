@@ -1,7 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
 use crate::basic_enums::Color;
-use crate::byteboard::Byteboard;
 use crate::direction::Direction;
 use crate::piece::Piece;
 use crate::square::{files, ranks, Square};
@@ -65,30 +64,6 @@ impl Bitboard {
     pub fn iter(self) -> BitboardSquareIter {
         BitboardSquareIter(self)
     }
-
-    pub fn to_byteboard(self) -> Byteboard {
-        let mut byteboard = Byteboard::new();
-        for i in self.iter() {
-            byteboard[i] = 1;
-        }
-        byteboard
-    }
-
-    pub fn to_byteboard_mask(self) -> Byteboard {
-        let mut byteboard = Byteboard::new();
-        for i in self.iter() {
-            byteboard[i] = !0;
-        }
-        byteboard
-    }
-
-    // pub fn to_byteboard(self) -> Byteboard {
-    //     let mut byteboard = Byteboard::new();
-    //     for i in Square::iter() {
-    //         byteboard[i] = self.get(i) as i8;
-    //     }
-    //     byteboard
-    // }
 
     pub const fn or(self, other: Bitboard) -> Bitboard {
         Bitboard(self.0 | other.0)
