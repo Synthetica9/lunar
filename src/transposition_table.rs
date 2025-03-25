@@ -385,43 +385,6 @@ impl TranspositionTable {
         }
     }
 
-    pub fn update_pv(
-        &self,
-        history: &History,
-        pv_hash: &mut LruCache<ZobristHash, Ply>,
-    ) -> Vec<Ply> {
-        let mut history = history.clone();
-
-        let mut res = Vec::new();
-
-        loop {
-            if history.repetition_count_at_least_3() {
-                break;
-            }
-
-            let game = history.game();
-            let hash = game.hash();
-            let from_tt = self.get(hash).and_then(|tte| tte.best_move());
-            let from_pv = pv_hash.get(&hash).copied();
-
-            let to_play = [from_tt, from_pv]
-                .iter()
-                .copied()
-                .flatten()
-                .find(|ply| game.is_legal(ply));
-
-            if let Some(ply) = to_play {
-                pv_hash.push(hash, ply);
-                history.hard_push(&ply);
-                res.push(ply);
-            } else {
-                break;
-            }
-        }
-
-        res
-    }
-
     pub fn print_cache_stats(&self) {
         let mut empty = 0;
         let mut lower = 0;
@@ -489,20 +452,6 @@ pub fn pv_string(game: &Game, pv: &[Ply]) -> String {
         res.push(' ');
 
         game.apply_ply(ply);
-        is_first = false;
-    }
-
-    res
-}
-
-pub fn pv_uci(pv: &[Ply]) -> String {
-    let mut res = String::new();
-    let mut is_first = true;
-    for ply in pv {
-        if !is_first {
-            res.push(' ');
-        }
-        res.push_str(&ply.long_name());
         is_first = false;
     }
 

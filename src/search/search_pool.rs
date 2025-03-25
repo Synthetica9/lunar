@@ -219,6 +219,10 @@ impl SearchThreadPool {
     }
 
     pub fn update_pv(&mut self, force: bool) {
+        let new = match self.build_pv() {
+            Some(pv) => pv,
+            None => return,
+        };
         if let PoolState::Searching {
             history,
             ref mut pv,
@@ -230,9 +234,6 @@ impl SearchThreadPool {
             let ticks = last_pv_update.elapsed().as_millis() / 10;
 
             if ticks != 0 || force {
-                let new = self
-                    .transposition_table
-                    .update_pv(&history, &mut self.pv_hash);
                 let old = pv.clone();
                 *pv = new;
 
@@ -518,87 +519,111 @@ impl SearchThreadPool {
                 "hashfull {} ",
                 self.transposition_table.occupancy_mil()
             ));
-            info.push_str(&format!("pv {} ", crate::transposition_table::pv_uci(&pv)));
+            info.push_str(&format!("pv {} ", pv_uci(&pv)));
             info
         } else {
             "info string idle".to_string()
         }
     }
 
+    pub fn move_in_state(&mut self, game: &crate::game::Game, force: bool) -> Option<Ply> {
+        let hash = game.hash();
+        let legal = game.legal_moves();
+
+        let from_tt = self
+            .transposition_table
+            .get(hash)
+            .map(|x| x.best_move())
+            .flatten();
+
+        let from_old_pv = self.pv_hash.get(&hash).copied();
+
+        let mut candidates = vec![from_tt, from_old_pv];
+
+        if candidates.len() == 1 || force {
+            candidates.push(legal.get(0).copied());
+        }
+
+        candidates
+            .into_iter()
+            .flatten()
+            .filter(|x| legal.contains(x))
+            .next()
+    }
+
+    pub fn build_pv(&mut self) -> Option<Vec<Ply>> {
+        let mut history = match &self.state {
+            PoolState::Searching { history, .. } => history.clone(),
+            _ => return None,
+        };
+
+        let mut res = Vec::new();
+
+        loop {
+            if history.repetition_count_at_least_3() {
+                break;
+            }
+
+            let game = history.game();
+            let to_play = self.move_in_state(game, false);
+
+            match to_play {
+                Some(ply) => {
+                    self.pv_hash.push(game.hash(), ply);
+                    history.hard_push(&ply);
+                    res.push(ply);
+                }
+                None => break,
+            }
+        }
+
+        Some(res)
+    }
+
+    pub fn correct_instability(&mut self, pv_instability: f64) {
+        const MAX_CORRECT: f64 = 1.25;
+        println!("info string instability correction {}", pv_instability);
+        self.base_instability /= pv_instability.clamp(1. / MAX_CORRECT, MAX_CORRECT);
+        println!("info string new base instability {}", self.base_instability);
+    }
+
     pub fn maybe_end_search(&mut self, force: bool) -> Option<String> {
-        let res = match &self.state {
+        if !(force || self.time_policy_finished()) {
+            return None;
+        };
+
+        let (best_move, mut game, pv_instability) = match &self.state {
             PoolState::Searching {
                 best_move,
                 history,
-                pv,
-                is_pondering,
-                time_policy,
                 pv_instability,
                 ..
-            } => {
-                if force || self.time_policy_finished() {
-                    let best_move = match best_move {
-                        Some(m) => *m,
-                        None => {
-                            let legal_moves = history.game().legal_moves();
-                            if legal_moves.len() == 1 {
-                                // This may not been sent yet.
-                                legal_moves[0]
-                            } else if let Some(from_pv) =
-                                pv.get(0).filter(|x| legal_moves.contains(x))
-                            {
-                                *from_pv
-                            } else if *is_pondering {
-                                // This is ok, we just send any move I guess?
-                                legal_moves[0]
-                            } else {
-                                eprintln!("info string No best move found... this is bad!");
-                                eprintln!("info string {:?}", time_policy);
-                                eprintln!("info string {}", history.game().to_fen());
-
-                                #[cfg(debug_assertions)]
-                                panic!();
-
-                                legal_moves[0]
-                            }
-                        }
-                    };
-
-                    let ponder = self
-                        .transposition_table
-                        .get(history.game().hash_after_ply(&best_move))
-                        .and_then(|x| x.best_move())
-                        .map(|ply| format!("ponder {}", ply.long_name()))
-                        .unwrap_or("".to_string());
-
-                    if !force {
-                        // Our target PV instability upon ending a search is 1. Try to
-                        // approach this value.
-                        const MAX_CORRECT: f64 = 1.25;
-                        // println!(
-                        //     "info string instability: before     {}",
-                        //     self.base_instability
-                        // );
-                        println!("info string instability correction {}", pv_instability);
-                        self.base_instability /=
-                            pv_instability.clamp(1. / MAX_CORRECT, MAX_CORRECT);
-                        // println!(
-                        //     "info string instability: after      {}",
-                        //     self.base_instability
-                        // );
-                    }
-
-                    self.stop();
-
-                    Some(format!("bestmove {} {ponder}", best_move.long_name()))
-                } else {
-                    None
-                }
-            }
-            _ => None,
+            } => (
+                best_move.clone(),
+                history.game().clone(),
+                pv_instability.clone(),
+            ),
+            _ => return None,
         };
 
-        res
+        let best_move = best_move.or(self.move_in_state(&game, true));
+        let ponder = best_move.and_then(|best| {
+            game.apply_ply(&best);
+            self.move_in_state(&game, true)
+        });
+
+        self.correct_instability(pv_instability);
+        self.stop();
+
+        Some(format!(
+            "{} {}",
+            best_move
+                .map(|x| format!("bestmove {}", x.long_name()))
+                .unwrap_or_default(),
+            ponder
+                .map(|x| format!("ponder {}", x.long_name()))
+                .unwrap_or_default(),
+        ))
     }
 
     pub(crate) fn wait_channels_empty(&self) {
@@ -614,6 +639,20 @@ impl Drop for SearchThreadPool {
     fn drop(&mut self) {
         self.kill();
     }
+}
+
+pub fn pv_uci(pv: &[Ply]) -> String {
+    let mut res = String::new();
+    let mut is_first = true;
+    for ply in pv {
+        if !is_first {
+            res.push(' ');
+        }
+        res.push_str(&ply.long_name());
+        is_first = false;
+    }
+
+    res
 }
 
 #[cfg(test)]
