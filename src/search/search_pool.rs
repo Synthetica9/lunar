@@ -129,6 +129,23 @@ impl SearchThreadPool {
         let now = Instant::now();
         let clock_start_time = (!is_pondering).then_some(now);
 
+        if let PoolState::Searching {
+            history: hist,
+            time_policy: ref mut policy,
+            is_pondering: ref mut ponder,
+            clock_start_time: ref mut start_time,
+            ..
+        } = &mut self.state
+        {
+            if hist == history {
+                println!("info string amending running search");
+                *ponder = is_pondering;
+                *policy = time_policy;
+                *start_time = clock_start_time;
+                return;
+            }
+        }
+
         self.transposition_table.inc_age();
         let root_moves = Arc::new({
             history
