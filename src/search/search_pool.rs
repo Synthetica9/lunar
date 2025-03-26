@@ -320,6 +320,7 @@ impl SearchThreadPool {
 
                 _ => {}
             }
+            // TODO: very very inelegant, but seems to be the only way to do this.
             if let PoolState::Searching {
                 ref mut best_depth,
                 ref mut score,
@@ -328,16 +329,22 @@ impl SearchThreadPool {
                 ref mut quiescence_nodes_searched,
                 ref mut depth_increase_nodes,
                 ref mut last_depth_increase,
+                ref history,
                 ..
             } = &mut self.state
             {
-                // TODO: very very inelegant, but seems to be the only way to do this.
+                let hash = history.game().hash();
                 match status {
                     ThreadStatus::SearchFinished {
                         score: new_score,
                         best_move: new_best_move,
                         depth,
+                        root_hash,
                     } => {
+                        if hash != root_hash {
+                            println!("info string Discarding stale info from thread");
+                            return false;
+                        }
                         if *best_depth < depth || *best_depth == depth && new_score > *score {
                             if *best_depth < depth {
                                 res = true;
@@ -355,7 +362,12 @@ impl SearchThreadPool {
                         nodes_searched: extra_nodes_searched,
                         quiescence_nodes_searched: extra_qnodes_searched,
                         tt_puts,
+                        root_hash,
                     } => {
+                        if hash != root_hash {
+                            println!("info string Discarding stale info from thread");
+                            return false;
+                        }
                         *nodes_searched += extra_nodes_searched + extra_qnodes_searched;
                         *quiescence_nodes_searched += extra_qnodes_searched;
                         self.transposition_table.add_occupancy(tt_puts);

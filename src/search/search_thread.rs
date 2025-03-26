@@ -19,6 +19,7 @@ use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
 use crate::transposition_table::TranspositionTable;
+use crate::zobrist_hash::ZobristHash;
 
 const N_KILLER_MOVES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 14;
@@ -42,11 +43,13 @@ pub enum ThreadStatus {
         nodes_searched: usize,
         quiescence_nodes_searched: usize,
         tt_puts: usize,
+        root_hash: ZobristHash,
     },
     SearchFinished {
         score: Millipawns,
         best_move: Option<Ply>,
         depth: usize,
+        root_hash: ZobristHash,
     },
     Idle,
     Quitting,
@@ -115,6 +118,7 @@ pub struct ThreadData {
     tt_puts: usize,
 
     root_move_counts: Arc<LinearMap<Ply, AtomicUsize>>,
+    root_hash: ZobristHash,
     best_move: Option<Ply>,
 
     transposition_table: Arc<TranspositionTable>,
@@ -154,6 +158,7 @@ impl ThreadData {
             quiescence_nodes_searched: 0,
             tt_puts: 0,
             root_move_counts,
+            root_hash: game.hash(),
             best_move: None,
 
             killer_moves: Vec::new(),
@@ -190,6 +195,7 @@ impl ThreadData {
                         self.history = new_history.as_ref().clone();
                         self.searching = true;
                         self.root_move_counts = root_moves;
+                        self.root_hash = new_history.game().hash();
                     }
                 };
             } else {
@@ -204,6 +210,7 @@ impl ThreadData {
                 nodes_searched: self.nodes_searched,
                 quiescence_nodes_searched: self.quiescence_nodes_searched,
                 tt_puts: self.tt_puts,
+                root_hash: self.root_hash,
             };
             self.nodes_searched = 0;
             self.quiescence_nodes_searched = 0;
@@ -241,6 +248,7 @@ impl ThreadData {
                             score,
                             best_move,
                             depth,
+                            root_hash: self.root_hash,
                         })
                         .unwrap();
                     self.best_move = best_move;
