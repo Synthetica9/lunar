@@ -62,3 +62,16 @@ serde_yaml = "0.9"
 [[bench]]
 name = "perft_bench"
 harness = false
+
+[lints.clippy]
+semicolon_if_nothing_returned = "warn"
+map_unwrap_or = "warn"
+match_bool = "warn"
+items_after_statements = "warn"
+match_same_arms = "warn"
+uninlined_format_args = "warn"
+match_wildcard_for_single_variants = "warn"
+manual_let_else = "warn"
+trivially_copy_pass_by_ref = "warn"
+redundant_closure_for_method_calls = "warn"
+return_self_not_must_use = "warn"

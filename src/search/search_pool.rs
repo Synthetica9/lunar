@@ -130,7 +130,7 @@ impl SearchThreadPool {
         let clock_start_time = (!is_pondering).then_some(now);
 
         if let PoolState::Searching {
-            history: hist,
+            history: ref hist,
             time_policy: ref mut policy,
             is_pondering: ref mut ponder,
             clock_start_time: ref mut start_time,
@@ -636,6 +636,12 @@ impl SearchThreadPool {
         };
 
         let best_move = best_move.or(self.move_in_state(&game, true));
+        debug_assert!(
+            best_move.is_some_and(|x| game.is_legal(&x)),
+            "generated best move not legal in position {} {:?}",
+            game.to_fen(),
+            best_move,
+        );
         let ponder = best_move.and_then(|best| {
             game.apply_ply(&best);
             self.move_in_state(&game, true)
