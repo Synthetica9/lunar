@@ -113,6 +113,7 @@ impl Ply {
         val.unwrap_or(Ply::NULL)
     }
 
+    #[must_use]
     pub const fn normalize(self) -> Ply {
         Ply::new(self.src(), self.dst(), self.flag())
     }
@@ -349,7 +350,7 @@ pub(crate) trait ApplyPly {
         }
 
         self.toggle_piece_multi(info.to_move, info.our_piece, &[src, dst]);
-        self.flip_side()
+        self.flip_side();
     }
 
     fn _apply_ply_with_info(&mut self, info: &GameInfoForPly, ply: &Ply, invert: bool) {

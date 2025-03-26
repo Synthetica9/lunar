@@ -178,10 +178,12 @@ impl Square {
             return false;
         }
 
-        use std::cmp::{max, min};
-        let l = min(a.file(), b.file());
-        let r = max(a.file(), b.file());
-        l < self.file() && self.file() < r
+        {
+            use std::cmp::{max, min};
+            let l = min(a.file(), b.file());
+            let r = max(a.file(), b.file());
+            l < self.file() && self.file() < r
+        }
     }
 
     pub fn interposes_straight(&self, a: Square, b: Square) -> bool {
@@ -205,6 +207,7 @@ impl Square {
         self.interposes_diag(a, b) || self.interposes_straight(a, b)
     }
 
+    #[must_use]
     pub const fn flip_vert(&self) -> Square {
         Square::from_u8(self.as_u8() ^ 56)
     }

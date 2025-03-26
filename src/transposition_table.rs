@@ -1,14 +1,11 @@
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
-use std::sync::RwLock;
 
-use lru::LruCache;
 use not_empty::NonEmptySlice;
 use static_assertions::*;
 use std::num::NonZeroUsize;
 
 use crate::game::Game;
-use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
 use crate::zobrist_hash::ZobristHash;
@@ -118,10 +115,9 @@ impl TranspositionEntry {
         use TranspositionEntryType::*;
         let value_type_u8 = self.age_value_type % 4;
         match value_type_u8 {
-            0 => Exact,
+            0 | 3 => Exact,
             1 => LowerBound,
             2 => UpperBound,
-            3 => Exact,
             _ => unreachable!(),
         }
     }
@@ -280,10 +276,10 @@ impl TranspositionTable {
             .iter()
             .map(|p| unsafe { p.get().read() })
             .find(|x| x.hash() == hash)
-            .map(|x| x.value())
+            .map(TranspositionPair::value)
     }
 
-    #[allow(unreachable_code)]
+    #[allow(unreachable_code, clippy::needless_return)]
     pub fn prefetch_read(&self, hash: ZobristHash) {
         let ptr = self.bucket(hash).0[0].get();
 
@@ -302,7 +298,7 @@ impl TranspositionTable {
         }
     }
 
-    #[allow(unreachable_code)]
+    #[allow(unreachable_code, clippy::needless_return)]
     pub fn prefetch_write(&self, hash: ZobristHash) {
         let ptr = self.bucket(hash).0[0].get();
 
@@ -339,19 +335,19 @@ impl TranspositionTable {
         // ------------------- |
         // haaa aaad dddd dddt
 
-        (((hash != new_hash) as u16) << 15) // 1 bit
-            | (((MAX_AGE - self.effective_age(&value)) as u16) << 9) // 6 bits
-            | ((value.depth as u16) << 1) // 8 bits
-            | (((value.value_type() == TranspositionEntryType::Exact) as u16) << 0)
-        // 1 bit
-
-        // TOTAL: 16 bits.
+        #[allow(clippy::identity_op)]
+        {
+            (((hash != new_hash) as u16) << 15) // 1 bit
+                | (((MAX_AGE - self.effective_age(&value)) as u16) << 9) // 6 bits
+                | ((value.depth as u16) << 1) // 8 bits
+                | (((value.value_type() == TranspositionEntryType::Exact) as u16) << 0) // 1 bit
+                | 0
+            // TOTAL: 16 bits.
+        }
     }
 
     pub fn put(&self, hash: ZobristHash, value: TranspositionEntry) -> PutResult {
         self.prefetch_write(hash);
-
-        let value = value;
 
         let bucket = self.bucket(hash);
 
@@ -390,8 +386,8 @@ impl TranspositionTable {
         let mut lower = 0;
         let mut upper = 0;
         let mut exact = 0;
-        let mut slots = [0 as i64; ITEMS_PER_BUCKET];
-        let mut ages = [0 as i64; MAX_AGE as usize];
+        let mut slots = [0_i64; ITEMS_PER_BUCKET];
+        let mut ages = [0_i64; MAX_AGE as usize];
         let mut depths = std::collections::BTreeMap::new();
         for bucket in self.table.as_ref() {
             for (i, slot) in bucket.0.iter().enumerate() {
@@ -399,11 +395,12 @@ impl TranspositionTable {
                 if !slot.value().is_some() {
                     empty += 1;
                 } else {
+                    use TranspositionEntryType::*;
                     let value = slot.value();
                     *depths.entry(value.depth).or_insert(0) += 1;
                     slots[i] += 1;
                     ages[self.effective_age(&value) as usize] += 1;
-                    use TranspositionEntryType::*;
+
                     match value.value_type() {
                         Exact => exact += 1,
                         LowerBound => lower += 1,

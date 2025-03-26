@@ -36,6 +36,7 @@ impl History {
         &self.game
     }
 
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         let res = self.undo_history.len();
         debug_assert_eq!(res, self.hash_history.len());

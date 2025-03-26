@@ -1,5 +1,3 @@
-use crate::basic_enums::Color;
-
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug)]
 pub struct Millipawns(pub i32);
 
@@ -8,14 +6,6 @@ pub const DRAW: Millipawns = Millipawns(0);
 pub const LOSS: Millipawns = Millipawns(-WIN.0);
 
 impl Millipawns {
-    fn for_player(self, player: Color) -> Millipawns {
-        if player == Color::Black {
-            -self
-        } else {
-            self
-        }
-    }
-
     pub fn is_mate_in_n(self) -> Option<i32> {
         let diff = WIN.0 - self.0.abs();
         if diff <= 256 {

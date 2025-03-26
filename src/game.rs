@@ -136,7 +136,7 @@ impl Game {
             // (not just pseudo-legal.) See:
             // 4k3/4p3/8/r2P3K/8/8/8/8 b - - 0 1
             // where after ... e5 the fen doesn't show the en passant
-            self.en_passant.map_or("-".to_string(), |s| s.to_fen_part()),
+            self.en_passant.map_or("-".to_string(), Square::to_fen_part),
             self.half_move,
             self.full_move()
         )
@@ -207,27 +207,28 @@ impl Game {
             !board.get_occupied()
         };
 
-        _combination_moves(plyset, &srcs, &dsts, move_table, None)
+        _combination_moves(plyset, &srcs, &dsts, move_table, None);
     }
 
     fn _knight_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
-        self._step_moves_for::<QUIESCENCE>(plyset, &Piece::Knight, &bitboard_map::KNIGHT_MOVES)
+        self._step_moves_for::<QUIESCENCE>(plyset, &Piece::Knight, &bitboard_map::KNIGHT_MOVES);
     }
 
     // Disregards castling
     fn _simple_king_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
-        self._step_moves_for::<QUIESCENCE>(plyset, &Piece::King, &bitboard_map::KING_MOVES)
+        self._step_moves_for::<QUIESCENCE>(plyset, &Piece::King, &bitboard_map::KING_MOVES);
     }
 
     pub fn _castle_moves(&self, plyset: &mut PlySet) {
         use CastleDirection::*;
         let color = self.to_move;
         for direction in [Kingside, Queenside] {
+            use crate::square::files::*;
+
             if !self.castle_rights.get(color, direction) {
                 continue;
             }
 
-            use crate::square::files::*;
             let empty_files: &[File] = match direction {
                 Kingside => &[F, G],
                 Queenside => &[B, C, D],
@@ -306,17 +307,14 @@ impl Game {
         let color = self.to_move;
         let srcs = self.board.get(&color, &Piece::Pawn);
         let dsts = self.board.get_color(&color.other());
-        let flag = promote_to.map(|x| SpecialFlag::Promotion(x));
+        let flag = promote_to.map(SpecialFlag::Promotion);
 
-        _combination_moves(plyset, &srcs, &dsts, move_table, flag)
+        _combination_moves(plyset, &srcs, &dsts, move_table, flag);
     }
 
     fn _en_passant_captures(&self, plyset: &mut PlySet) {
         // println!("Checking en passant captures");
-        let ep = match self.en_passant {
-            Some(ep) => ep,
-            None => return,
-        };
+        let Some(ep) = self.en_passant else { return };
 
         let color = self.to_move;
         let rev_move_table = match color {
@@ -673,6 +671,7 @@ impl Game {
         Ok(())
     }
 
+    #[must_use]
     pub fn mirror(&self) -> Game {
         Game {
             board: self.board.mirror(),

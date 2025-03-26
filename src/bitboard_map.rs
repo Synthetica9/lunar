@@ -55,6 +55,7 @@ impl BitboardMap {
         res
     }
 
+    #[must_use]
     pub const fn or(&self, other: &BitboardMap) -> BitboardMap {
         let mut res = BitboardMap::new();
 
@@ -68,6 +69,7 @@ impl BitboardMap {
         res
     }
 
+    #[must_use]
     pub const fn and(&self, other: &BitboardMap) -> BitboardMap {
         let mut res = BitboardMap::new();
 
@@ -85,6 +87,7 @@ impl BitboardMap {
         BitboardMap([val; 64])
     }
 
+    #[must_use]
     pub const fn not(&self) -> BitboardMap {
         let mut res = BitboardMap::new();
 
@@ -113,7 +116,7 @@ impl BitboardMap {
                 let sq_j = Square::from_index(j as u8);
 
                 if self.get_const(&sq_i).get(sq_j) {
-                    res.0[j] = res.0[j].or(other.0[j])
+                    res.0[j] = res.0[j].or(other.0[j]);
                 }
             }
         }

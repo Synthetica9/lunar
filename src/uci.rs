@@ -42,7 +42,7 @@ impl UCIState {
     }
 
     pub fn info(&self, message: &str) {
-        println!("info string {message}")
+        println!("info string {message}");
     }
 
     pub fn log(&mut self, message: &str) {
@@ -145,7 +145,7 @@ impl UCIState {
                         break;
                     }
                     name.push_str(part);
-                    name.push(' ')
+                    name.push(' ');
                 }
 
                 let name = name.trim();
@@ -223,7 +223,7 @@ impl UCIState {
                                 .ok_or("depth not specified")?
                                 .parse::<usize>()
                                 .map_err(|x| x.to_string())?;
-                            time_policy = Depth(depth)
+                            time_policy = Depth(depth);
                         }
                         "movetime" => {
                             let move_time = parts
@@ -231,7 +231,7 @@ impl UCIState {
                                 .ok_or("time not specified")?
                                 .parse::<u64>()
                                 .map_err(|x| x.to_string())?;
-                            time_policy = MoveTime(Duration::from_millis(move_time))
+                            time_policy = MoveTime(Duration::from_millis(move_time));
                         }
                         "infinite" => time_policy = Infinite,
                         "wtime" | "btime" | "winc" | "binc" | "movestogo" => {
@@ -281,7 +281,7 @@ impl UCIState {
                 let success = self.search_thread_pool.ponderhit();
 
                 if !success {
-                    self.info("Ponderhit sent but no ponder in progress?")
+                    self.info("Ponderhit sent but no ponder in progress?");
                 }
             }
             "d" => {
@@ -331,6 +331,7 @@ impl Default for UCIState {
     }
 }
 
+#[allow(dead_code)]
 enum UCIOptionType<'a> {
     Button,
     Spin {
@@ -472,7 +473,7 @@ struct AvailableOptions(&'static [UCIOption<'static>]);
 impl<'a> AvailableOptions {
     fn print_uci_options(&self, state: &mut UCIState) {
         use UCIOptionType::*;
-        for line in self.0.iter() {
+        for line in self.0 {
             let content = match line.typ {
                 Button => "type button".to_string(),
                 Spin { min, max, default } => {
@@ -493,7 +494,7 @@ impl<'a> AvailableOptions {
     }
 
     fn get(&self, name: &str) -> Result<&'a UCIOption, String> {
-        for line in self.0.iter() {
+        for line in self.0 {
             if line.name == name {
                 return Ok(line);
             }
@@ -533,10 +534,10 @@ fn spawn_reader_thread() -> crossbeam_channel::Receiver<String> {
             rl
         };
         #[cfg(feature = "readline")]
-        let lines = editor.iter(&"[🌑] ");
+        let lines = editor.iter("[🌑] ");
 
         for line in lines {
-            tx.send(line.unwrap_or("".to_string()).trim().to_string())
+            tx.send(line.unwrap_or_default().trim().to_string())
                 .unwrap();
         }
 

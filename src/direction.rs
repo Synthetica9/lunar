@@ -9,6 +9,7 @@ impl Direction {
         Direction { north, east }
     }
 
+    #[must_use]
     pub const fn add_const(self, rhs: Direction) -> Direction {
         Direction {
             north: self.north + rhs.north,
@@ -16,6 +17,7 @@ impl Direction {
         }
     }
 
+    #[must_use]
     pub const fn sub_const(self, rhs: Direction) -> Direction {
         Direction {
             north: self.north - rhs.north,
@@ -23,6 +25,7 @@ impl Direction {
         }
     }
 
+    #[must_use]
     pub const fn neg_const(self) -> Direction {
         Direction {
             north: -self.north,
@@ -30,6 +33,7 @@ impl Direction {
         }
     }
 
+    #[must_use]
     pub const fn mult_const(self, rhs: i8) -> Direction {
         Direction {
             north: (self.north * rhs),
@@ -37,14 +41,17 @@ impl Direction {
         }
     }
 
+    #[must_use]
     pub const fn north_component(self) -> Direction {
         Direction::new(self.north, 0)
     }
 
+    #[must_use]
     pub const fn east_component(self) -> Direction {
         Direction::new(0, self.east)
     }
 
+    #[must_use]
     pub const fn clone_const(self) -> Direction {
         self
     }

@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 
 use crate::bitboard::Bitboard;
 use crate::game::Game;
-use crate::millipawns::{Millipawns, DRAW, LOSS};
+use crate::millipawns::{Millipawns, DRAW};
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
 
@@ -118,10 +118,6 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
     _static_exchange_evaluation(game, ply, false)
 }
 
-pub fn static_exchange_evaluation_winning(game: &Game, ply: Ply) -> bool {
-    _static_exchange_evaluation(game, ply, true) >= Millipawns(0)
-}
-
 #[test]
 fn test_see() {
     use crate::square::Square::*;
@@ -168,16 +164,14 @@ impl SearchCommand {
     pub fn ply(&self) -> Option<Ply> {
         use SearchCommand::*;
 
-        let ply = match self {
-            LosingCapture { ply, .. } => ply,
-            QuietMove { ply, .. } => ply,
-            EqualCapture { ply, .. } => ply,
-            KillerMove { ply, .. } => ply,
-            WinningCapture { ply, .. } => ply,
-            _ => return None,
-        };
-
-        Some(*ply)
+        match self {
+            LosingCapture { ply, .. }
+            | QuietMove { ply, .. }
+            | EqualCapture { ply, .. }
+            | KillerMove { ply, .. }
+            | WinningCapture { ply, .. } => Some(*ply),
+            _ => None,
+        }
     }
 }
 

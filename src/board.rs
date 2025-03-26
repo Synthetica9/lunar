@@ -51,11 +51,12 @@ impl Board {
         self.get_color(color).and(self.get_piece(piece))
     }
 
+    #[must_use]
     pub fn mirror(&self) -> Board {
         let mut cpy = self.clone();
 
         for b in cpy.pieces.iter_mut() {
-            *b = b.flip_vertical()
+            *b = b.flip_vertical();
         }
 
         let [white, black] = self.colors;
@@ -365,7 +366,7 @@ impl Board {
     ) -> Bitboard {
         let mut res = Bitboard::new();
         for sqr in self.get(color, piece).iter() {
-            res |= Bitboard::piece_attacks_from_with_occupancy(piece, sqr, color, occupancy)
+            res |= Bitboard::piece_attacks_from_with_occupancy(piece, sqr, color, occupancy);
         }
         res
     }
@@ -429,7 +430,7 @@ impl Board {
         res |= self.get_piece(&Piece::King) & Bitboard::king_attacks(square);
 
         if let Some(color) = color {
-            res &= self.get_color(color)
+            res &= self.get_color(color);
         };
 
         res
@@ -501,7 +502,7 @@ impl Board {
                 };
                 res.push(char);
             }
-            res.push('\n')
+            res.push('\n');
         }
         res
     }

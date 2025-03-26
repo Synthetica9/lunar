@@ -13,18 +13,22 @@ impl Bitboard {
         self.0.count_ones() as u8
     }
 
+    #[must_use]
     pub const fn is_empty(self) -> bool {
         self.0 == 0
     }
 
+    #[must_use]
     pub const fn new() -> Bitboard {
         Bitboard(0)
     }
 
+    #[must_use]
     pub const fn from_square(square: Square) -> Bitboard {
         Bitboard(1 << square.as_index())
     }
 
+    #[must_use]
     pub fn from_squares(squares: &[Square]) -> Bitboard {
         let mut bitboard = EMPTY;
         for square in squares {
@@ -33,10 +37,12 @@ impl Bitboard {
         bitboard
     }
 
+    #[must_use]
     pub const fn first_occupied_or_a1(self) -> Square {
         Square::from_index(self.0.trailing_zeros() as u8 % 64)
     }
 
+    #[must_use]
     pub const fn first_occupied(self) -> Option<Square> {
         if self.is_empty() {
             None
@@ -53,6 +59,7 @@ impl Bitboard {
         })
     }
 
+    #[must_use]
     pub const fn last_occupied(self) -> Option<Square> {
         if self.is_empty() {
             None
@@ -65,18 +72,22 @@ impl Bitboard {
         BitboardSquareIter(self)
     }
 
+    #[must_use]
     pub const fn or(self, other: Bitboard) -> Bitboard {
         Bitboard(self.0 | other.0)
     }
 
+    #[must_use]
     pub const fn and(self, other: Bitboard) -> Bitboard {
         Bitboard(self.0 & other.0)
     }
 
+    #[must_use]
     pub const fn xor(self, other: Bitboard) -> Bitboard {
         Bitboard(self.0 ^ other.0)
     }
 
+    #[must_use]
     pub const fn not_const(self) -> Bitboard {
         Bitboard(!self.0)
     }
@@ -85,6 +96,7 @@ impl Bitboard {
         !Bitboard::from_square(square).and(self).is_empty()
     }
 
+    #[must_use]
     pub const fn set(self, square: Square) -> Bitboard {
         Bitboard::from_square(square).or(self)
     }
@@ -93,6 +105,7 @@ impl Bitboard {
         *self |= Bitboard::from_square(square);
     }
 
+    #[must_use]
     pub const fn unset(self, square: Square) -> Bitboard {
         Bitboard::from_square(square).not_const().and(self)
     }
@@ -101,6 +114,7 @@ impl Bitboard {
         *self &= !Bitboard::from_square(square);
     }
 
+    #[must_use]
     pub const fn flip(self, square: Square) -> Bitboard {
         Bitboard::from_square(square).xor(self)
     }
@@ -109,6 +123,7 @@ impl Bitboard {
         *self ^= Bitboard::from_square(square);
     }
 
+    #[must_use]
     pub const fn flip_if(&self, cond: bool) -> Bitboard {
         if cond {
             self.not_const()
@@ -130,6 +145,7 @@ impl Bitboard {
         Bitboard(0x0101010101010101 << col)
     }
 
+    #[must_use]
     pub const fn shift_unguarded(self, direction: Direction) -> Bitboard {
         let n = direction.shift_amount();
         if n > 0 {
@@ -139,15 +155,18 @@ impl Bitboard {
         }
     }
 
+    #[must_use]
     pub const fn flip_horizontal(self) -> Bitboard {
         todo!();
     }
 
+    #[must_use]
     pub fn flip_vertical(self) -> Bitboard {
         // https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating#Vertical
         Bitboard(self.0.swap_bytes())
     }
 
+    #[must_use]
     pub fn perspective(self, color: &Color) -> Bitboard {
         match color {
             Color::White => self,
@@ -155,6 +174,7 @@ impl Bitboard {
         }
     }
 
+    #[must_use]
     pub fn transpose(self) -> Bitboard {
         // is this correct?
         self.flip_vertical().flip_horizontal()
@@ -190,6 +210,7 @@ impl Bitboard {
         base.or(Bitboard::n_cols(n - sgn))
     }
 
+    #[must_use]
     pub const fn shift(self, direction: Direction) -> Bitboard {
         let east = direction.clone_const().east;
 
@@ -203,6 +224,7 @@ impl Bitboard {
         covered.shift_unguarded(direction)
     }
 
+    #[must_use]
     pub const fn fill(self, direction: Direction) -> Bitboard {
         let mut val = self;
 
@@ -213,6 +235,7 @@ impl Bitboard {
         val
     }
 
+    #[must_use]
     pub const fn gather(self, direction: Direction) -> Bitboard {
         use crate::direction::directions::*;
 
@@ -227,10 +250,12 @@ impl Bitboard {
         self.fill(direction).and(final_and)
     }
 
+    #[must_use]
     pub const fn gather_south(self) -> Bitboard {
         self.gather(crate::direction::directions::S)
     }
 
+    #[must_use]
     pub const fn fill_north_singular(self) -> Bitboard {
         #[cfg(debug_assertions)]
         {
@@ -242,6 +267,7 @@ impl Bitboard {
         Bitboard(((self.0 as u128) * (COL_A.0 as u128)) as u64)
     }
 
+    #[must_use]
     pub const fn fill_cols(self) -> Bitboard {
         self.gather_south().fill_north_singular()
     }
@@ -258,7 +284,7 @@ impl Bitboard {
                     res.push('.');
                 }
             }
-            res.push('\n')
+            res.push('\n');
         }
 
         res

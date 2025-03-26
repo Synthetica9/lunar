@@ -17,6 +17,7 @@ impl CastleRights {
         self.0 as usize
     }
 
+    #[must_use]
     pub const fn mirror(self) -> CastleRights {
         let black = 0b1100 & self.0;
         let white = 0b0011 & self.0;
@@ -45,19 +46,23 @@ impl CastleRights {
         self.0 & Self::castle_bit(side, direction) != 0
     }
 
+    #[must_use]
     pub const fn set(self, side: Color, direction: CastleDirection) -> CastleRights {
         Self(self.0 | Self::castle_bit(side, direction))
     }
 
+    #[must_use]
     pub const fn unset(self, side: Color, direction: CastleDirection) -> CastleRights {
         CastleRights(self.0 & !Self::castle_bit(side, direction))
     }
 
+    #[must_use]
     pub const fn set_all(self, side: Color) -> CastleRights {
         self.set(side, CastleDirection::Kingside)
             .set(side, CastleDirection::Queenside)
     }
 
+    #[must_use]
     pub const fn unset_all(self, side: Color) -> CastleRights {
         self.unset(side, CastleDirection::Kingside)
             .unset(side, CastleDirection::Queenside)
@@ -107,6 +112,7 @@ impl CastleRights {
         s
     }
 
+    #[must_use]
     pub fn xor(self, other: CastleRights) -> CastleRights {
         CastleRights(self.0 ^ other.0)
     }

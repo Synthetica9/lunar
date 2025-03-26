@@ -241,8 +241,7 @@ pub fn gen_magics_file(file: &mut std::fs::File) -> std::io::Result<()> {
         writeln!(file, "// Magic, premask, postmask, LUT for {name}")?;
         writeln!(
             file,
-            "pub const {}_MAGICS: [(u64, u64, u64, &[u64]); 64] = [",
-            name
+            "pub const {name}_MAGICS: [(u64, u64, u64, &[u64]); 64] = [",
         )?;
 
         // init sharing db

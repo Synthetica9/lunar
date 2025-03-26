@@ -87,7 +87,7 @@ impl CurrentlySearching {
             return;
         }
 
-        self.put(hash)
+        self.put(hash);
     }
 
     pub fn finished_search(&self, hash: ZobristHash, depth: usize) {
@@ -95,6 +95,6 @@ impl CurrentlySearching {
             return;
         }
 
-        self.remove(hash)
+        self.remove(hash);
     }
 }

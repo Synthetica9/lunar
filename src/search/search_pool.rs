@@ -8,7 +8,6 @@ use std::time::Instant;
 
 // TODO: use stock rust channels?
 use crossbeam_channel as channel;
-use linear_map::LinearMap;
 use lru::LruCache;
 
 use super::currently_searching::CurrentlySearching;
@@ -22,6 +21,7 @@ use crate::zobrist_hash::ZobristHash;
 
 pub const PREDICTED_BRANCHING_FACTOR: f64 = 2.1;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
 enum PoolState {
     Idle,
@@ -186,22 +186,19 @@ impl SearchThreadPool {
     }
 
     pub fn ponderhit(&mut self) -> bool {
-        if let PoolState::Searching {
-            ref mut clock_start_time,
-            ref mut is_pondering,
-            ..
-        } = self.state
-        {
-            if !*is_pondering {
-                return false;
+        match self.state {
+            PoolState::Searching {
+                ref mut clock_start_time,
+                ref mut is_pondering,
+                ..
+            } if *is_pondering => {
+                *clock_start_time = Some(Instant::now());
+                *is_pondering = false;
+
+                true
             }
-
-            *clock_start_time = Some(Instant::now());
-            *is_pondering = false;
-
-            return true;
+            _ => false,
         }
-        return false;
     }
 
     pub fn stop(&mut self) {
@@ -236,10 +233,8 @@ impl SearchThreadPool {
     }
 
     pub fn update_pv(&mut self, force: bool) {
-        let new = match self.build_pv() {
-            Some(pv) => pv,
-            None => return,
-        };
+        let Some(new) = self.build_pv() else { return };
+
         if let PoolState::Searching {
             history,
             ref mut pv,
@@ -259,7 +254,7 @@ impl SearchThreadPool {
                 }
 
                 // TODO: real lambda calculation
-                *pv_instability *= (0.999 as f64).powi(ticks as i32);
+                *pv_instability *= (0.999_f64).powi(ticks as i32);
                 *last_pv_update = Instant::now();
 
                 let i = std::iter::zip(pv.iter(), old.iter())
@@ -268,10 +263,10 @@ impl SearchThreadPool {
                     .position(|x| x)
                     .unwrap();
 
-                let is_finishing_sequence = history.is_finishing_sequence(&pv);
+                let is_finishing_sequence = history.is_finishing_sequence(pv);
 
                 if !is_finishing_sequence {
-                    *pv_instability += self.base_instability * (0.5 as f64).powi(i as i32);
+                    *pv_instability += self.base_instability * (0.5_f64).powi(i as i32);
                 }
             }
         }
@@ -318,7 +313,7 @@ impl SearchThreadPool {
                     self.state = PoolState::Quitting;
                 }
 
-                _ => {}
+                ThreadStatus::SearchFinished { .. } => {}
             }
             // TODO: very very inelegant, but seems to be the only way to do this.
             if let PoolState::Searching {
@@ -419,10 +414,10 @@ impl SearchThreadPool {
             ..
         } = &self.state
         {
+            use TimePolicy::*;
             if *is_pondering {
                 return false;
             }
-            use TimePolicy::*;
             match time_policy {
                 Depth(depth) => best_depth >= depth,
                 MoveTime(time) => {
@@ -442,8 +437,9 @@ impl SearchThreadPool {
                     // (things like waiting longer when the opponent has less time,
                     //  when the evaluation swings wildly, pv keeps changing, etc.)
 
-                    let game = history.game();
                     use crate::basic_enums::Color::*;
+
+                    let game = history.game();
 
                     if best_move.is_none() {
                         return false;
@@ -473,8 +469,8 @@ impl SearchThreadPool {
 
                         // If we spent a large percentage of our time, also return.
                         if time <= time_spent * 2 {
-                            return true;
                             println!("info string exiting because large part of time was spent");
+                            return true;
                         }
                     }
 
@@ -500,7 +496,7 @@ impl SearchThreadPool {
 
                     let res = elapsed_then >= time_per_move;
                     if res {
-                        let discarded = *nodes_searched - *nodes_searched;
+                        let discarded = *nodes_searched - *last_depth_increase;
                         println!("info string normal dynamic quit, nodes discarded {discarded}");
                     }
                     res
@@ -540,15 +536,15 @@ impl SearchThreadPool {
                 format!("score cp {} ", score.0 / 10)
             });
             info.push_str(&format!("nodes {nodes_searched} "));
-            info.push_str(&format!("nps {} ", nodes_per_second as usize));
+            info.push_str(&format!("nps {} ", nodes_per_second as isize));
             info.push_str(&format!("qnodes {quiescence_nodes_searched} "));
-            info.push_str(&format!("qnps {} ", quiescence_nodes_per_second as usize));
-            info.push_str(&format!("time {} ", (elapsed * 1000.0) as usize));
+            info.push_str(&format!("qnps {} ", quiescence_nodes_per_second as isize));
+            info.push_str(&format!("time {} ", (elapsed * 1000.0) as isize));
             info.push_str(&format!(
                 "hashfull {} ",
                 self.transposition_table.occupancy_mil()
             ));
-            info.push_str(&format!("pv {} ", pv_uci(&pv)));
+            info.push_str(&format!("pv {} ", pv_uci(pv)));
             info
         } else {
             "info string idle".to_string()
@@ -562,8 +558,7 @@ impl SearchThreadPool {
         let from_tt = self
             .transposition_table
             .get(hash)
-            .map(|x| x.best_move())
-            .flatten();
+            .and_then(|x| x.best_move());
 
         let from_old_pv = self.pv_hash.get(&hash).copied();
 
@@ -573,11 +568,7 @@ impl SearchThreadPool {
             candidates.push(legal.get(0).copied());
         }
 
-        candidates
-            .into_iter()
-            .flatten()
-            .filter(|x| legal.contains(x))
-            .next()
+        candidates.into_iter().flatten().find(|x| legal.contains(x))
     }
 
     pub fn build_pv(&mut self) -> Option<Vec<Ply>> {
@@ -611,7 +602,7 @@ impl SearchThreadPool {
 
     pub fn correct_instability(&mut self, pv_instability: f64) {
         const MAX_CORRECT: f64 = 1.25;
-        println!("info string instability correction {}", pv_instability);
+        println!("info string instability correction {pv_instability}");
         self.base_instability /= pv_instability.clamp(1. / MAX_CORRECT, MAX_CORRECT);
         println!("info string new base instability {}", self.base_instability);
     }
@@ -627,11 +618,7 @@ impl SearchThreadPool {
                 history,
                 pv_instability,
                 ..
-            } => (
-                best_move.clone(),
-                history.game().clone(),
-                pv_instability.clone(),
-            ),
+            } => (*best_move, history.game().clone(), *pv_instability),
             _ => return None,
         };
 

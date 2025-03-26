@@ -167,16 +167,16 @@ impl ThreadData {
 
     pub fn run(&mut self) {
         loop {
-            let command = match self.searching {
-                true => Some(self.search()),
-                false => self
-                    .command_channel
+            let command = if self.searching {
+                Some(self.search())
+            } else {
+                self.command_channel
                     .recv_timeout(Duration::from_millis(1000))
-                    .ok(),
+                    .ok()
             };
 
-            use ThreadCommand::*;
             if let Some(command) = command {
+                use ThreadCommand::*;
                 match command {
                     Quit => {
                         // Explicitly ignore result, we are tearing down so the status_channel
@@ -378,13 +378,13 @@ impl ThreadData {
             let iid_depth = depth / 2;
             let do_iid = N::IS_PV
                 && depth > 5
-                && (best_move.is_none() || from_tt.map(|x| x.depth).unwrap_or(0) < iid_depth as u8);
+                && (best_move.is_none() || from_tt.map_or(0, |x| x.depth) < iid_depth as u8);
             if do_iid {
                 // Internal iterative deepening
                 // TODO: Should this use FirstSuccessor? What are other engines doing?
                 best_move = self
                     .alpha_beta_search::<N::FirstSuccessor>(alpha, beta, iid_depth)?
-                    .1
+                    .1;
             };
 
             let mut deferred_moves = VecDeque::new();
@@ -432,7 +432,7 @@ impl ThreadData {
 
                     #[cfg(not(debug_assert))]
                     unsafe {
-                        std::intrinsics::assume(matches!(guarantee, Legal) || !N::IS_ROOT)
+                        std::intrinsics::assume(matches!(guarantee, Legal) || !N::IS_ROOT);
                     };
 
                     let game = self.game();
@@ -572,8 +572,7 @@ impl ThreadData {
 
             match self.transposition_table.put(self.game().hash(), tte) {
                 PutResult::ValueAdded => self.tt_puts += 1,
-                PutResult::ValueReplaced => {}
-                PutResult::Noop => {}
+                PutResult::ValueReplaced | PutResult::Noop => {}
             }
         }
 

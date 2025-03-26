@@ -7,7 +7,7 @@ use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::Ply;
-use crate::square::{files, ranks, File};
+use crate::square::{files, ranks};
 
 pub use crate::generated::parameters::STATIC_PARAMETERS;
 pub use parameters::*;
@@ -20,12 +20,10 @@ pub struct Evaluator(pub Parameters);
 const fn gamephase_inc(piece: &Piece) -> i32 {
     use Piece::*;
     match piece {
-        Pawn => 0,
-        Knight => 1,
-        Bishop => 1,
+        Pawn | King => 0,
+        Bishop | Knight => 1,
         Rook => 2,
         Queen => 4,
-        King => 0,
     }
 }
 
@@ -401,7 +399,7 @@ mod tests {
         game.flip_side();
         let from_black = evaluation(&game);
         game.flip_side();
-        game.mirror();
+        let game = game.mirror();
 
         let mirrored = evaluation(&game);
 

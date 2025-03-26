@@ -31,10 +31,12 @@ impl Color {
         Self::COLORS.iter().copied()
     }
 
+    #[must_use]
     pub const fn as_index(self) -> usize {
         self as usize
     }
 
+    #[must_use]
     pub const fn other(self) -> Color {
         use Color::*;
         match self {
@@ -43,6 +45,7 @@ impl Color {
         }
     }
 
+    #[must_use]
     pub const fn home_rank(self) -> Rank {
         match self {
             Color::White => ranks::ONE,
