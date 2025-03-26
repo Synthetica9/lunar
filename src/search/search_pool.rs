@@ -235,40 +235,44 @@ impl SearchThreadPool {
     pub fn update_pv(&mut self, force: bool) {
         let Some(new) = self.build_pv() else { return };
 
-        if let PoolState::Searching {
+        let PoolState::Searching {
             history,
             ref mut pv,
             ref mut pv_instability,
             ref mut last_pv_update,
             ..
         } = &mut self.state
-        {
-            let ticks = last_pv_update.elapsed().as_millis() / 10;
+        else {
+            return;
+        };
 
-            if ticks != 0 || force {
-                let old = pv.clone();
-                *pv = new;
+        let ticks = last_pv_update.elapsed().as_millis() / 10;
 
-                if force && ticks == 0 {
-                    return;
-                }
+        if ticks == 0 && !force {
+            return;
+        };
 
-                // TODO: real lambda calculation
-                *pv_instability *= (0.999_f64).powi(ticks as i32);
-                *last_pv_update = Instant::now();
+        let old = pv.clone();
+        *pv = new;
 
-                let i = std::iter::zip(pv.iter(), old.iter())
-                    .map(|(x, y)| x != y)
-                    .chain([true])
-                    .position(|x| x)
-                    .unwrap();
+        if force && ticks == 0 {
+            return;
+        }
 
-                let is_finishing_sequence = history.is_finishing_sequence(pv);
+        // TODO: real lambda calculation
+        *pv_instability *= (0.999_f64).powi(ticks as i32);
+        *last_pv_update = Instant::now();
 
-                if !is_finishing_sequence {
-                    *pv_instability += self.base_instability * (0.5_f64).powi(i as i32);
-                }
-            }
+        let i = std::iter::zip(pv.iter(), old.iter())
+            .map(|(x, y)| x != y)
+            .chain([true])
+            .position(|x| x)
+            .unwrap();
+
+        let is_finishing_sequence = history.is_finishing_sequence(pv);
+
+        if !is_finishing_sequence {
+            *pv_instability += self.base_instability * (0.5_f64).powi(i as i32);
         }
     }
 
@@ -294,86 +298,99 @@ impl SearchThreadPool {
         }
     }
 
+    // TODO: returns true when depth has increased but this is super opaque
     pub fn communicate(&mut self) -> bool {
-        let mut res = false;
+        let Some((i, status)) = self.recv_any_thread(Duration::from_millis(10)) else {
+            return false;
+        };
 
-        if let Some((i, status)) = self.recv_any_thread(Duration::from_millis(10)) {
-            self.update_pv(false);
-            let thread = &mut self.threads[i];
-            match status {
-                ThreadStatus::StatusUpdate { .. } => {
-                    thread.is_searching = true;
-                }
+        self.update_pv(false);
 
-                ThreadStatus::Idle => {
-                    thread.is_searching = false;
-                }
+        let thread = &mut self.threads[i];
 
-                ThreadStatus::Quitting => {
-                    self.state = PoolState::Quitting;
-                }
-
-                ThreadStatus::SearchFinished { .. } => {}
+        match status {
+            ThreadStatus::StatusUpdate { .. } => {
+                thread.is_searching = true;
             }
-            // TODO: very very inelegant, but seems to be the only way to do this.
-            if let PoolState::Searching {
-                ref mut best_depth,
-                ref mut score,
-                ref mut best_move,
-                ref mut nodes_searched,
-                ref mut quiescence_nodes_searched,
-                ref mut depth_increase_nodes,
-                ref mut last_depth_increase,
-                ref history,
-                ..
-            } = &mut self.state
-            {
-                let hash = history.game().hash();
-                match status {
-                    ThreadStatus::SearchFinished {
-                        score: new_score,
-                        best_move: new_best_move,
-                        depth,
-                        root_hash,
-                    } => {
-                        if hash != root_hash {
-                            println!("info string Discarding stale info from thread");
-                            return false;
-                        }
-                        if *best_depth < depth || *best_depth == depth && new_score > *score {
-                            if *best_depth < depth {
-                                res = true;
-                                *depth_increase_nodes = *nodes_searched - *depth_increase_nodes;
-                                *last_depth_increase = *nodes_searched;
-                            }
-                            *score = new_score;
-                            *best_move = new_best_move;
-                            *best_depth = depth;
-                        }
-                        // *searching = false;
-                    }
 
-                    ThreadStatus::StatusUpdate {
-                        nodes_searched: extra_nodes_searched,
-                        quiescence_nodes_searched: extra_qnodes_searched,
-                        tt_puts,
-                        root_hash,
-                    } => {
-                        if hash != root_hash {
-                            println!("info string Discarding stale info from thread");
-                            return false;
-                        }
-                        *nodes_searched += extra_nodes_searched + extra_qnodes_searched;
-                        *quiescence_nodes_searched += extra_qnodes_searched;
-                        self.transposition_table.add_occupancy(tt_puts);
-                        thread.is_searching = true;
-                    }
-
-                    _ => {}
-                }
+            ThreadStatus::Idle => {
+                thread.is_searching = false;
             }
+
+            ThreadStatus::Quitting => {
+                self.state = PoolState::Quitting;
+            }
+
+            ThreadStatus::SearchFinished { .. } => {}
         }
-        res
+
+        let PoolState::Searching {
+            ref mut best_depth,
+            ref mut score,
+            ref mut best_move,
+            ref mut nodes_searched,
+            ref mut quiescence_nodes_searched,
+            ref mut depth_increase_nodes,
+            ref mut last_depth_increase,
+            ref history,
+            ..
+        } = &mut self.state
+        else {
+            return false;
+        };
+
+        let hash = history.game().hash();
+        match status {
+            ThreadStatus::SearchFinished { root_hash, .. }
+            | ThreadStatus::StatusUpdate { root_hash, .. }
+                if root_hash != hash =>
+            {
+                println!("info string Discarding stale info from thread {i}");
+                return false;
+            }
+            _ => {}
+        }
+
+        match status {
+            ThreadStatus::SearchFinished {
+                score: new_score,
+                best_move: new_best_move,
+                depth,
+                ..
+            } if *best_depth < depth || (*best_depth == depth && new_score > *score) => {
+                let depth_increase = *best_depth < depth;
+                if depth_increase {
+                    *depth_increase_nodes = *nodes_searched - *depth_increase_nodes;
+                    *last_depth_increase = *nodes_searched;
+                }
+                if !depth_increase && *best_move != new_best_move {
+                    println!(
+                        "info string replacing best node despite no depth increase {} => {}",
+                        best_move.unwrap_or(Ply::NULL).long_name(),
+                        new_best_move.unwrap_or(Ply::NULL).long_name(),
+                    )
+                }
+                *score = new_score;
+                *best_move = new_best_move;
+                *best_depth = depth;
+                depth_increase
+            }
+
+            ThreadStatus::StatusUpdate {
+                nodes_searched: extra_nodes_searched,
+                quiescence_nodes_searched: extra_qnodes_searched,
+                tt_puts,
+                ..
+            } => {
+                *nodes_searched += extra_nodes_searched + extra_qnodes_searched;
+                *quiescence_nodes_searched += extra_qnodes_searched;
+                self.transposition_table.add_occupancy(tt_puts);
+                thread.is_searching = true;
+                false
+            }
+
+            _ => false,
+        }
     }
 
     fn broadcast(&self, command: &ThreadCommand) -> Result<(), channel::SendError<ThreadCommand>> {
