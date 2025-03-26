@@ -65,6 +65,8 @@ impl CurrentlySearching {
                 return;
             }
         }
+
+        unsafe { bucket[0].get().write_volatile(hash) };
     }
 
     fn remove(&self, hash: ZobristHash) {
