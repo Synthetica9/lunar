@@ -22,6 +22,7 @@ pub struct UCIState {
     debug: bool,
     // repetition_table: RepetitionTable,
     last_info_string: Instant,
+    auto_ponder: bool,
 }
 
 impl UCIState {
@@ -36,6 +37,7 @@ impl UCIState {
             debug: false,
 
             last_info_string: Instant::now(),
+            auto_ponder: false,
         }
     }
 
@@ -199,6 +201,12 @@ impl UCIState {
                 let fen = self.history.game().to_fen();
                 self.info(&format!("Setting position {fen}"));
                 self.info(&format!("History len: {}", self.history.len()));
+
+                if self.auto_ponder {
+                    self.info("auto ponder on: starting search");
+                    self.search_thread_pool
+                        .start_search(&self.history, TimePolicy::Infinite, true);
+                }
             }
             "go" => {
                 use TimePolicy::*;
@@ -348,7 +356,7 @@ struct UCIOption<'a> {
     setter: &'a dyn Fn(&str, &mut UCIState) -> Result<(), String>,
 }
 
-const AVAILABLE_OPTIONS: &AvailableOptions = &AvailableOptions({
+const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
     use UCIOptionType::*;
     fn parse_spin(value: &str) -> Result<i64, String> {
         value.parse::<i64>().map_err(|x| x.to_string())
@@ -384,7 +392,7 @@ const AVAILABLE_OPTIONS: &AvailableOptions = &AvailableOptions({
         Ok(())
     }
 
-    [
+    &[
         UCIOption {
             name: "Hash",
             typ: &Spin {
@@ -414,11 +422,23 @@ const AVAILABLE_OPTIONS: &AvailableOptions = &AvailableOptions({
                 Ok(())
             },
         },
+        // Required to get GUI's to recognise ponder:
         UCIOption {
             name: "Ponder",
             typ: &Check { default: false },
             setter: &|value, state| {
                 state.search_thread_pool.set_ponder(parse_bool(value)?);
+                Ok(())
+            },
+        },
+        // Search immediately when receiving a position (competitive option.)
+        // Intended to warm up hash table while still in book. Requires UI to send
+        // position updates while in book, CuteChess does this for example.
+        UCIOption {
+            name: "AutoPonder",
+            typ: &Check { default: false },
+            setter: &|value, state| {
+                state.auto_ponder = parse_bool(value)?;
                 Ok(())
             },
         },
@@ -447,9 +467,9 @@ const NEW_FREE_TIME: TimePolicy = TimePolicy::FreeTime {
     movestogo: None,
 };
 
-struct AvailableOptions<'a>([UCIOption<'a>; 4]);
+struct AvailableOptions(&'static [UCIOption<'static>]);
 
-impl<'a> AvailableOptions<'a> {
+impl<'a> AvailableOptions {
     fn print_uci_options(&self, state: &mut UCIState) {
         use UCIOptionType::*;
         for line in self.0.iter() {

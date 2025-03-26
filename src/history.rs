@@ -16,7 +16,7 @@ pub struct History {
 impl PartialEq for History {
     fn eq(&self, other: &History) -> bool {
         // TODO: technically not accurate, but eh
-        self.hash_history == other.hash_history
+        self.hash_history == other.hash_history && self.game.hash() == other.game().hash()
     }
 }
 
