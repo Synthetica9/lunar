@@ -367,13 +367,6 @@ impl SearchThreadPool {
                     *depth_increase_nodes = *nodes_searched - *depth_increase_nodes;
                     *last_depth_increase = *nodes_searched;
                 }
-                if !depth_increase && *best_move != new_best_move {
-                    println!(
-                        "info string replacing best node despite no depth increase {} => {}",
-                        best_move.unwrap_or(Ply::NULL).long_name(),
-                        new_best_move.unwrap_or(Ply::NULL).long_name(),
-                    )
-                }
                 *score = new_score;
                 *best_move = new_best_move;
                 *best_depth = depth;
