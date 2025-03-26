@@ -28,6 +28,14 @@ impl CurrentlySearching {
         CurrentlySearching(cs.into())
     }
 
+    pub fn clear(&self) {
+        for bucket in self.0.iter() {
+            for slot in bucket {
+                unsafe { *slot.get() = ZobristHash(0) };
+            }
+        }
+    }
+
     fn get_bucket(&self, hash: ZobristHash) -> &[UnsafeCell<ZobristHash>; CS_BUCKET_SIZE] {
         &self.0[hash.to_usize() % CS_SIZE]
     }
@@ -96,5 +104,22 @@ impl CurrentlySearching {
         }
 
         self.remove(hash);
+    }
+
+    pub fn num_buckets_filled(&self) -> usize {
+        let mut set = std::collections::HashSet::new();
+
+        for bucket in self.0.iter() {
+            for hash in bucket {
+                let hash = unsafe { *hash.get() };
+                if hash == ZobristHash(0) {
+                    continue;
+                }
+
+                set.insert(hash);
+            }
+        }
+
+        set.len()
     }
 }

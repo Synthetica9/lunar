@@ -67,6 +67,7 @@ pub struct SearchThreadPool {
 
     state: PoolState,
     pv_hash: LruCache<ZobristHash, Ply>,
+    pub currently_searching: CurrentlySearching,
 }
 
 impl SearchThreadPool {
@@ -111,6 +112,7 @@ impl SearchThreadPool {
 
             ponder: false,
             state: PoolState::Idle,
+            currently_searching,
 
             pv_hash: LruCache::new(NonZeroUsize::new(1024).unwrap()),
         }
@@ -161,6 +163,8 @@ impl SearchThreadPool {
             root_moves,
         ))
         .unwrap();
+
+        self.currently_searching.clear();
 
         self.state = PoolState::Searching {
             history: history.clone(),

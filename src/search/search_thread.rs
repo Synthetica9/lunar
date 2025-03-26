@@ -501,6 +501,12 @@ impl ThreadData {
                         .0;
 
                     if x > alpha && x < beta {
+                        // TODO: unregegister node as being deferrable from other threads:
+                        // > Simplified ABDADA also makes it easy to do a novel optimization:
+                        // > if a move fails a null-window search, it's removed from the hash
+                        // > table of moves that are currently being searched. This makes it
+                        // > more likely that other threads will search the move sooner.
+                        // > (Note 5.2 in the pseudocode.)
                         x = -self
                             .alpha_beta_search::<N::OtherSuccessors>(-beta, -alpha, next_depth)?
                             .0;

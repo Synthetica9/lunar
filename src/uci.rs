@@ -294,6 +294,12 @@ impl UCIState {
                 println!("{}", game.to_fen());
                 println!();
                 self.transposition_table.print_cache_stats();
+                println!(
+                    "Coordination buckets: {}",
+                    self.search_thread_pool
+                        .currently_searching
+                        .num_buckets_filled()
+                );
             }
             "stop" => {
                 if let Some(msg) = self.search_thread_pool.maybe_end_search(true) {
