@@ -6,7 +6,6 @@ use crate::bitboard_map;
 use crate::bitboard_map::BitboardMap;
 use crate::board::Board;
 use crate::castlerights::CastleRights;
-use crate::eval::quiet_move_order;
 use crate::legality::LegalityChecker;
 
 use crate::piece::Piece;
@@ -429,8 +428,8 @@ impl Game {
         let mut quiescence_moves = self.quiescence_pseudo_legal_moves();
         quiescence_moves.sort_by_key(|x| static_exchange_evaluation(self, *x));
 
-        let mut quiet_moves = self.quiet_pseudo_legal_moves();
-        quiet_moves.sort_by_key(|x| quiet_move_order(self, *x));
+        let quiet_moves = self.quiet_pseudo_legal_moves();
+        // quiet_moves.sort_by_key(|x| quiet_move_order(self, *x));
 
         let legality_checker = LegalityChecker::new(self);
 

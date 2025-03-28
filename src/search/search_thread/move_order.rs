@@ -1,13 +1,16 @@
 use smallvec::SmallVec;
 
 use std::collections::BinaryHeap;
+use std::rc::Rc;
 use std::sync::atomic::Ordering;
 
 use crate::bitboard::Bitboard;
+use crate::eval::ByPiece;
 use crate::game::Game;
 use crate::millipawns::{Millipawns, DRAW};
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
+use crate::search::history_heuristic::HistoryTable;
 
 use super::ThreadData;
 
@@ -240,13 +243,17 @@ impl MoveGenerator for RootMoveGenerator {
 
 pub struct StandardMoveGenerator {
     commands: BinaryHeap<SearchCommand>,
+    history_table: Rc<HistoryTable>,
 }
 
 impl MoveGenerator for StandardMoveGenerator {
-    fn init(_thread: &ThreadData) -> Self {
+    fn init(thread: &ThreadData) -> Self {
         let mut commands = BinaryHeap::with_capacity(32);
         commands.extend(INITIAL_SEARCH_COMMANDS);
-        Self { commands }
+        Self {
+            commands,
+            history_table: thread.history_table(),
+        }
     }
 
     fn next(&mut self, thread: &mut ThreadData) -> Option<Generated> {
@@ -288,7 +295,7 @@ impl MoveGenerator for StandardMoveGenerator {
                 GenQuietMoves => {
                     let game = thread.game();
                     for ply in thread.game().quiet_pseudo_legal_moves() {
-                        let value = crate::eval::quiet_move_order(game, ply);
+                        let value = self.quiet_move_order(game, ply);
                         let is_check = thread.game().is_check(&ply);
                         self.commands.push(QuietMove {
                             ply,
@@ -316,5 +323,28 @@ impl MoveGenerator for StandardMoveGenerator {
             // Also: what would the guarantee be in this case?
         }
         None
+    }
+}
+
+impl StandardMoveGenerator {
+    pub fn quiet_move_order(&self, game: &Game, ply: Ply) -> Millipawns {
+        // http://www.talkchess.com/forum3/viewtopic.php?t=66312
+        // Based on Andrew Grant's idea.
+        let piece = ply.moved_piece(game);
+        let square_table = &crate::eval::STATIC_PARAMETERS
+            .piece_square_table
+            .mg
+            .get(&piece)
+            .values;
+
+        let color = game.to_move();
+        let square = ply.dst();
+        let piece = game.board().occupant_piece(ply.src()).unwrap();
+
+        let value = self.history_table.score(color, piece, square)
+            + square_table[ply.dst().as_index()] as i32
+            - square_table[ply.src().as_index()] as i32;
+
+        Millipawns(value)
     }
 }

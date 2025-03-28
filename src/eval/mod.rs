@@ -6,7 +6,6 @@ use crate::board::Board;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
-use crate::ply::Ply;
 use crate::square::{files, ranks};
 
 pub use crate::generated::parameters::STATIC_PARAMETERS;
@@ -268,16 +267,6 @@ pub fn evaluation(game: &Game) -> Millipawns {
     STATIC_EVALUATOR.evaluate(game, true)
 }
 
-pub fn quiet_move_order(game: &Game, ply: Ply) -> Millipawns {
-    // http://www.talkchess.com/forum3/viewtopic.php?t=66312
-    // Based on Andrew Grant's idea.
-    let piece = ply.moved_piece(game);
-    let square_table = &STATIC_PARAMETERS.piece_square_table.mg.get(&piece).values;
-
-    let value = square_table[ply.dst().as_index()] - square_table[ply.src().as_index()];
-    Millipawns(value as i32)
-}
-
 pub trait DotProduct {
     type Output;
 
@@ -362,7 +351,7 @@ impl DotProduct for SparseBoardParameter {
     }
 }
 
-trait ByPiece<'a> {
+pub trait ByPiece<'a> {
     type Output;
 
     fn get(&'a self, piece: &Piece) -> &'a Self::Output;

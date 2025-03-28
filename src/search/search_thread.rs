@@ -2,6 +2,7 @@
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
 use std::collections::VecDeque;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,6 +14,7 @@ use smallvec::SmallVec;
 use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::currently_searching::CurrentlySearching;
+use super::history_heuristic::HistoryTable;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -125,8 +127,7 @@ pub struct ThreadData {
     currently_searching: CurrentlySearching,
 
     killer_moves: Vec<[Option<Ply>; N_KILLER_MOVES]>,
-    // TODO: implement
-    // repetition_table: RwLock<TranspositionTable>,
+    history_table: std::rc::Rc<HistoryTable>,
 }
 
 impl ThreadData {
@@ -162,6 +163,7 @@ impl ThreadData {
             best_move: None,
 
             killer_moves: Vec::new(),
+            history_table: Rc::new(HistoryTable::new()),
         }
     }
 
@@ -190,6 +192,7 @@ impl ThreadData {
                         self.searching = false;
                         // Send idle message:
                         self.send_status_update();
+                        // self.history_table.print_debug();
                     }
                     SearchThis(new_history, root_moves) => {
                         self.history = new_history.as_ref().clone();
@@ -541,6 +544,12 @@ impl ThreadData {
                         undo.ply.flag() == Some(SpecialFlag::Promotion(Piece::Queen));
                     if undo.info.captured_piece.is_none() && !is_queen_promo {
                         self.insert_killer_move(ply, self.game().half_move_total() as usize);
+                        self.history_table.update(
+                            self.game().to_move(),
+                            undo.info.our_piece,
+                            undo.ply.dst(),
+                            (depth * depth) as i32 * 10,
+                        );
                     }
                     break;
                 }
@@ -648,5 +657,9 @@ impl ThreadData {
             this[1] = this[0];
             this[0] = Some(ply);
         }
+    }
+
+    pub fn history_table(&self) -> Rc<HistoryTable> {
+        self.history_table.clone()
     }
 }
