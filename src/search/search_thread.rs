@@ -353,13 +353,14 @@ impl ThreadData {
             let mut r = NULL_MOVE_REDUCTION + 1;
             let game = self.game();
             let board = game.board();
-            let bb = board.get_color(&game.to_move());
-            if depth > 7 && bb.popcount() >= 4 {
+            let friendly_pieces = board.get_color(&game.to_move());
+            if depth > 7 && friendly_pieces.popcount() >= 4 {
                 r += 1;
             }
 
-            let side_to_move_only_kp =
-                bb == board.get_piece(&Piece::Pawn) | board.get_piece(&Piece::King);
+            let side_to_move_only_kp = friendly_pieces
+                == (board.get_piece(&Piece::Pawn) | board.get_piece(&Piece::King))
+                    & friendly_pieces;
 
             if !N::IS_PV
                 && !side_to_move_only_kp
