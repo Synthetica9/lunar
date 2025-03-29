@@ -11,7 +11,7 @@ pub struct HistoryTable([Cell<i32>; HISTORY_SIZE]);
 impl HistoryTable {
     #[must_use]
     pub fn new() -> Self {
-        Self(unsafe { std::mem::zeroed() })
+        Self(std::array::from_fn(|_| Cell::new(0)))
     }
 
     pub fn print_debug(&self) {

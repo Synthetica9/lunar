@@ -17,14 +17,6 @@ impl CastleRights {
         self.0 as usize
     }
 
-    #[must_use]
-    pub const fn mirror(self) -> CastleRights {
-        let black = 0b1100 & self.0;
-        let white = 0b0011 & self.0;
-
-        CastleRights((black >> 2) | (white << 2))
-    }
-
     pub const fn as_u8(self) -> u8 {
         self.0
     }

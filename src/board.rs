@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use crate::{
     basic_enums::Color,
-    bitboard::Bitboard,
+    bitboard::{Bitboard, DARK_SQUARES},
     castlerights::CastleRights,
     millipawns::Millipawns,
     piece::Piece,
@@ -49,19 +49,6 @@ impl Board {
     pub const fn get(&self, color: &Color, piece: &Piece) -> Bitboard {
         // TODO: const
         self.get_color(color).and(self.get_piece(piece))
-    }
-
-    #[must_use]
-    pub fn mirror(&self) -> Board {
-        let mut cpy = self.clone();
-
-        for b in cpy.pieces.iter_mut() {
-            *b = b.flip_vertical();
-        }
-
-        let [white, black] = self.colors;
-        cpy.colors = [black.flip_vertical(), white.flip_vertical()];
-        cpy
     }
 
     pub const fn king_square(&self, color: &Color) -> Square {
@@ -471,6 +458,50 @@ impl Board {
         // knights.popcount() >= min_knights
     }
 
+    pub fn major_piece_or_pawn_present(&self) -> bool {
+        use Piece::*;
+
+        for piece in [Pawn, Rook, Queen] {
+            if !self.get_piece(&piece).is_empty() {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn is_fide_draw(&self) -> bool {
+        use Color::*;
+        use Piece::*;
+
+        if self.major_piece_or_pawn_present() {
+            return false;
+        };
+
+        let bishops = self.get_piece(&Bishop);
+        let knights = self.get_piece(&Knight);
+        let minors = bishops | knights;
+        let white = self.get_color(&White);
+        let black = self.get_color(&White);
+
+        // Both Sides have a bare King
+        // One Side has a King and a Minor Piece against a bare King
+        if minors.popcount() <= 1 {
+            return true;
+        }
+
+        // Both Sides have a King and a Bishop, the Bishops being the same Color
+        let dark_sq_bishops = DARK_SQUARES & bishops;
+        if (bishops & white).popcount() == 1
+            && (bishops & black).popcount() == 1
+            && (dark_sq_bishops.is_empty() || dark_sq_bishops.popcount() == 2)
+            && knights.is_empty()
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     pub fn is_insufficient_to_force_mate(&self) -> bool {
         // Basically implements USCF "insufficient losing chances" rules
 
@@ -479,9 +510,64 @@ impl Board {
         !self.may_be_able_to_force_mate(&White) && !self.may_be_able_to_force_mate(&Black)
     }
 
-    pub fn fide_can_claim_draw(&self) -> bool {
-        // implements FIDE draw rules
-        todo!()
+    pub fn is_likely_draw(&self) -> bool {
+        use Color::*;
+        use Piece::*;
+
+        if self.major_piece_or_pawn_present() {
+            return false;
+        }
+
+        if self.is_fide_draw() {
+            return true;
+        }
+
+        let knights = self.get_piece(&Knight);
+        let bishops = self.get_piece(&Bishop);
+        let minors = knights | bishops;
+
+        let perspective = move |color| {
+            // https://www.chessprogramming.org/Draw_Evaluation
+
+            let own = self.get_color(&color);
+            let opponent = self.get_color(&color.other());
+
+            // Two Knights against the bare King [1]
+            if (own & bishops).is_empty() && opponent.is_empty() && (own & knights).popcount() <= 2
+            {
+                return true;
+            }
+
+            // Both Sides have a King and a Minor Piece each
+            if (own & minors).popcount() == 1 && (opponent & minors).popcount() == 1 {
+                return true;
+            }
+
+            // The Weaker Side has a Minor Piece against two Knights
+            if (own & bishops).is_empty()
+                && (own & knights).popcount() == 2
+                && (opponent & minors).popcount() == 1
+            {
+                return true;
+            }
+
+            // Two Bishops draw against a Bishop
+            if (own & bishops).popcount() == 1 && (opponent & bishops).popcount() == 1 {
+                return true;
+            }
+
+            // Two Minor Pieces against one draw, except when the Stronger Side has a Bishop Pair
+            if (own & minors).popcount() == 2
+                && (opponent & minors).popcount() == 1
+                && !self.has_bishop_pair(&color)
+            {
+                return true;
+            }
+
+            return false;
+        };
+
+        return perspective(White) || perspective(Black);
     }
 
     pub fn simple_render(&self) -> String {
