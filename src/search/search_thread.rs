@@ -192,6 +192,7 @@ impl ThreadData {
                         self.searching = false;
                         // Send idle message:
                         self.send_status_update();
+                        self.history_table = Rc::new(HistoryTable::new());
                         // self.history_table.print_debug();
                     }
                     SearchThis(new_history, root_moves) => {
