@@ -112,7 +112,7 @@ impl History {
         self.repetition_count_at_least_3()
             || game.is_in_mate()
             || game.half_move() >= 100
-            || game.board().is_insufficient_to_force_mate()
+            || game.board().is_fide_draw()
     }
 
     pub fn is_finishing_sequence(&self, moves: &[Ply]) -> bool {

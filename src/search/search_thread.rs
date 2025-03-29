@@ -305,7 +305,7 @@ impl ThreadData {
 
         if self.game().half_move() >= 100
             || self.history.repetition_count_at_least_3()
-            || self.game().board().is_insufficient_to_force_mate()
+            || self.game().board().is_fide_draw()
         {
             return Ok((self.draw_value(), None));
         }

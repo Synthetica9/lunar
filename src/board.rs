@@ -423,41 +423,6 @@ impl Board {
         res
     }
 
-    pub fn may_be_able_to_force_mate(&self, color: &Color) -> bool {
-        use Piece::*;
-
-        for piece in [Pawn, Rook, Queen] {
-            if !self.get(color, &piece).is_empty() {
-                return true;
-            }
-        }
-
-        if self.has_bishop_pair(color) {
-            return true;
-        }
-
-        // At this points, if we have any bishops, they are on the same color.
-        let knights = self.get(color, &Knight);
-        let bishops = self.get(color, &Bishop);
-
-        if !bishops.is_empty() && !knights.is_empty() {
-            // We have at least one bishop and at least one knight.
-            return true;
-        }
-
-        // Three knights maybe?
-        if knights.popcount() >= 3 {
-            return true;
-        }
-
-        false
-
-        // // Need 1 knight if we have a bishop, 3 otherwise
-        // let min_knights = if !bishops.is_empty() { 1 } else { 3 };
-
-        // knights.popcount() >= min_knights
-    }
-
     pub fn major_piece_or_pawn_present(&self) -> bool {
         use Piece::*;
 
@@ -466,7 +431,7 @@ impl Board {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     pub fn is_fide_draw(&self) -> bool {
@@ -499,15 +464,7 @@ impl Board {
             return true;
         }
 
-        return false;
-    }
-
-    pub fn is_insufficient_to_force_mate(&self) -> bool {
-        // Basically implements USCF "insufficient losing chances" rules
-
-        use Color::*;
-
-        !self.may_be_able_to_force_mate(&White) && !self.may_be_able_to_force_mate(&Black)
+        false
     }
 
     pub fn is_likely_draw(&self) -> bool {
@@ -564,10 +521,10 @@ impl Board {
                 return true;
             }
 
-            return false;
+            false
         };
 
-        return perspective(White) || perspective(Black);
+        perspective(White) || perspective(Black)
     }
 
     pub fn simple_render(&self) -> String {
