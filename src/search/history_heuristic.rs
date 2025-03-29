@@ -40,7 +40,7 @@ impl HistoryTable {
 
         // History
         let delta = delta.clamp(-MAX_HISTORY, MAX_HISTORY);
-        let new_val = cur + delta - cur * delta / MAX_HISTORY;
+        let new_val = cur + delta - cur * delta.abs() / MAX_HISTORY;
 
         cell.set(new_val);
     }

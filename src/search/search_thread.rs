@@ -399,6 +399,7 @@ impl ThreadData {
             let mut i = 0;
 
             let mut any_moves_seen = false;
+            let mut bad_quiet_moves: SmallVec<[_; 16]> = SmallVec::new();
 
             while let Some(Generated { ply, guarantee }) = generator.next(self).or_else(|| {
                 deferred_moves.pop_front().map(|ply| Generated {
@@ -540,19 +541,31 @@ impl ThreadData {
                     best_move = Some(ply);
                 }
 
+                let is_queen_promo = undo.ply.flag() == Some(SpecialFlag::Promotion(Piece::Queen));
+                let is_quiet = undo.info.captured_piece.is_none() && !is_queen_promo;
+
                 if alpha >= beta {
-                    let is_queen_promo =
-                        undo.ply.flag() == Some(SpecialFlag::Promotion(Piece::Queen));
-                    if undo.info.captured_piece.is_none() && !is_queen_promo {
+                    if is_quiet {
                         self.insert_killer_move(ply, self.game().half_move_total() as usize);
+
+                        let bonus = (depth * depth) as i32 * 10;
+                        let to_move = self.game().to_move();
                         self.history_table.update(
-                            self.game().to_move(),
+                            to_move,
                             undo.info.our_piece,
                             undo.ply.dst(),
-                            (depth * depth) as i32 * 10,
+                            bonus,
                         );
+
+                        for (piece, square) in bad_quiet_moves {
+                            self.history_table.update(to_move, piece, square, -bonus);
+                        }
                     }
                     break;
+                }
+
+                if is_quiet {
+                    bad_quiet_moves.push((undo.info.our_piece, undo.ply.dst()));
                 }
 
                 i += 1;
