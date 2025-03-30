@@ -111,12 +111,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "281e452d3bad4005426416cdba5ccfd4f5c1280e10099e21db27f7c1c28347fc"
 
 [[package]]
-name = "fallthrough"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82697a150e6215b2236884f00b0e967ddba4e92efa37cab807d9184534d7b8cb"
-
-[[package]]
 name = "fd-lock"
 version = "4.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -215,7 +209,6 @@ version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
  "csv",
- "fallthrough",
  "linear-map",
  "lru",
  "nix",

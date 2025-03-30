@@ -127,15 +127,18 @@ fn test_see() {
     let ply = Ply::simple(F4, F5);
     assert_eq!(static_exchange_evaluation(&game, ply), Millipawns(4000));
 }
-pub enum GeneratorPhase {
+
+#[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
+enum GeneratorPhase {
     GetHashMove,
     GenQuiescenceMoves,
     YieldWinningCaptures,
     GenKillerMoves,
     YieldKillerMoves,
     YieldEqualCaptures,
-    GenOtherMoves,
+    GenQuietMoves,
     YieldOtherMoves,
+    Finished,
 }
 
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Clone, Copy)]
@@ -168,13 +171,43 @@ impl QueuedPly {
     // TODO: reference?
     pub fn ply(&self) -> Ply {
         use QueuedPly::*;
-
         match self {
             LosingCapture { ply, .. }
             | QuietMove { ply, .. }
             | EqualCapture { ply, .. }
             | KillerMove { ply, .. }
             | WinningCapture { ply, .. } => *ply,
+        }
+    }
+
+    fn guarantee(self) -> GuaranteeLevel {
+        use QueuedPly::*;
+        match self {
+            LosingCapture { .. }
+            | EqualCapture { .. }
+            | WinningCapture { .. }
+            | QuietMove { .. } => GuaranteeLevel::PseudoLegal,
+            KillerMove { ply } => GuaranteeLevel::HashLike,
+        }
+    }
+
+    fn to_generated(self) -> Generated {
+        Generated {
+            ply: GeneratedMove::Ply(self.ply()),
+            guarantee: self.guarantee(),
+        }
+    }
+
+    fn min_phase(self) -> GeneratorPhase {
+        use GeneratorPhase::*;
+        use QueuedPly::*;
+
+        match self {
+            LosingCapture { .. } => YieldOtherMoves,
+            QuietMove { .. } => YieldOtherMoves,
+            EqualCapture { .. } => YieldEqualCaptures,
+            KillerMove { .. } => YieldKillerMoves,
+            WinningCapture { .. } => YieldWinningCaptures,
         }
     }
 }
@@ -246,23 +279,28 @@ impl MoveGenerator for StandardMoveGenerator {
     }
 
     fn next(&mut self, thread: &mut ThreadData) -> Option<Generated> {
-        use fallthrough::fallthrough;
         use GeneratorPhase::*;
         use GuaranteeLevel::*;
         use QueuedPly::*;
 
-        let guarantee;
-        let res_ply;
+        match self.queue.last().copied() {
+            Some(x) if x.min_phase() <= self.phase => {
+                self.queue.pop();
+                return Some(x.to_generated());
+            }
+            _ => {}
+        }
 
-        fallthrough!(self.phase,
+        match self.phase {
             GetHashMove => {
                 self.phase = GenQuiescenceMoves;
                 return Some(Generated {
                     ply: GeneratedMove::HashMove,
                     guarantee: HashLike,
-                })
-            },
-            'gqm: GenQuiescenceMoves => {
+                });
+            }
+            GenQuiescenceMoves => {
+                self.phase = GenKillerMoves;
                 for ply in thread.game().quiescence_pseudo_legal_moves() {
                     let value = static_exchange_evaluation(thread.game(), ply);
 
@@ -271,54 +309,26 @@ impl MoveGenerator for StandardMoveGenerator {
                         match value.cmp(&DRAW) {
                             Greater => WinningCapture { ply, value },
                             Less => LosingCapture { ply, value },
-                            Equal => EqualCapture { ply, value },
+                            Equal => EqualCapture { value, ply },
                         }
                     };
+
                     self.queue.push(command);
                 }
-                self.queue.sort();
-                self.phase = YieldWinningCaptures;
-            },
-            'ywc: YieldWinningCaptures => {
-                let Some(WinningCapture { ply, .. }) = self.queue.last() else {
-                    self.phase = GenKillerMoves;
-                    break 'gkm;
-                };
-                res_ply = *ply;
-                guarantee = PseudoLegal;
-                self.queue.pop();
-                break 'end;
-            },
-            'gkm: GenKillerMoves => {
+                self.queue.sort_unstable();
+            }
+            GenKillerMoves => {
+                self.phase = GenQuietMoves;
                 let move_total = thread.game().half_move_total() as usize;
                 if let Some(killer_moves) = thread.killer_moves.get(move_total) {
                     for ply in killer_moves.iter().flatten() {
                         self.queue.push(KillerMove { ply: *ply });
                     }
                 }
-                self.phase = YieldKillerMoves;
-            },
-            'ykm: YieldKillerMoves => {
-                let Some(KillerMove { ply, .. }) = self.queue.last() else {
-                    self.phase = YieldEqualCaptures;
-                    break 'yec;
-                };
-                res_ply = *ply;
-                guarantee = HashLike;
-                self.queue.pop();
-                break 'end;
-            },
-            'yec: YieldEqualCaptures => {
-                let Some(EqualCapture { ply, .. }) = self.queue.last() else {
-                    self.phase = GenOtherMoves;
-                    break 'gom;
-                };
-                res_ply = *ply;
-                guarantee = PseudoLegal;
-                self.queue.pop();
-                break 'end;
-            },
-            'gom: GenOtherMoves => {
+                // No need to sort.
+            }
+            GenQuietMoves => {
+                self.phase = YieldOtherMoves;
                 let game = thread.game();
                 for ply in game.quiet_pseudo_legal_moves() {
                     let value = quiet_move_order(thread, ply);
@@ -329,26 +339,18 @@ impl MoveGenerator for StandardMoveGenerator {
                         is_check,
                     });
                 }
-                self.queue.sort();
+                self.queue.sort_unstable();
                 self.phase = YieldOtherMoves;
-            },
-            'yom: YieldOtherMoves => {
-                match self.queue.pop() {
-                    Some(QuietMove {ply, .. }) | Some(LosingCapture { ply, .. }) => {
-                        res_ply = ply;
-                        guarantee = PseudoLegal;
-                    },
-                    _ => return None,
-                }
-                break 'end;
-            },
-            'end
-        );
+            }
+            YieldOtherMoves => {
+                self.phase = Finished;
+            }
+            Finished => return None,
+            phase => panic!("unexpected phase {phase:?}"),
+        };
 
-        Some(Generated {
-            ply: GeneratedMove::Ply(res_ply),
-            guarantee,
-        })
+        // Tail recursive call
+        self.next(thread)
     }
     // Also: what would the guarantee be in this case?
 }
