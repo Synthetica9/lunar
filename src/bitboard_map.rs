@@ -195,33 +195,35 @@ const BLACK_PAWN_ATTACK_DIRECTIONS: [Direction; 2] = [directions::SE, directions
 const BLACK_PAWN_PROMOTIONS_RANK: BitboardMap = BitboardMap::smear(crate::bitboard::ROW_1);
 pub const BLACK_PAWN_ATTACKS_ALL: BitboardMap =
     BitboardMap::step_moves(&BLACK_PAWN_ATTACK_DIRECTIONS);
-const BLACK_PAWN_MOVES_ALL: BitboardMap = BitboardMap::pawn_moves(Color::Black);
+const BLACK_PAWN_SINGLE_MOVES: BitboardMap = BitboardMap::pawn_moves(Color::Black);
 
 pub const BLACK_PAWN_ATTACKS: BitboardMap =
     BLACK_PAWN_ATTACKS_ALL.and(&BLACK_PAWN_PROMOTIONS_RANK.not());
 pub const BLACK_PAWN_MOVES: BitboardMap =
-    BLACK_PAWN_MOVES_ALL.and(&BLACK_PAWN_PROMOTIONS_RANK.not());
+    BLACK_PAWN_SINGLE_MOVES.and(&BLACK_PAWN_PROMOTIONS_RANK.not());
 pub const BLACK_PAWN_ATTACKS_PROMOTION: BitboardMap =
     BLACK_PAWN_ATTACKS_ALL.and(&BLACK_PAWN_PROMOTIONS_RANK);
 pub const BLACK_PAWN_MOVES_PROMOTION: BitboardMap =
-    BLACK_PAWN_MOVES_ALL.and(&BLACK_PAWN_PROMOTIONS_RANK);
+    BLACK_PAWN_SINGLE_MOVES.and(&BLACK_PAWN_PROMOTIONS_RANK);
 pub const BLACK_PAWN_DOUBLE_MOVES: BitboardMap = BitboardMap::pawn_double_moves(Color::Black);
+pub const BLACK_PAWN_MOVES_ALL: BitboardMap = BLACK_PAWN_SINGLE_MOVES.or(&BLACK_PAWN_DOUBLE_MOVES);
 
 const WHITE_PAWN_ATTACK_DIRECTIONS: [Direction; 2] = [directions::NE, directions::NW];
 const WHITE_PAWN_PROMOTIONS_RANK: BitboardMap = BitboardMap::smear(crate::bitboard::ROW_8);
 pub const WHITE_PAWN_ATTACKS_ALL: BitboardMap =
     BitboardMap::step_moves(&WHITE_PAWN_ATTACK_DIRECTIONS);
-const WHITE_PAWN_MOVES_ALL: BitboardMap = BitboardMap::pawn_moves(Color::White);
+const WHITE_PAWN_SINGLE_MOVES: BitboardMap = BitboardMap::pawn_moves(Color::White);
 
 pub const WHITE_PAWN_ATTACKS: BitboardMap =
     WHITE_PAWN_ATTACKS_ALL.and(&WHITE_PAWN_PROMOTIONS_RANK.not());
 pub const WHITE_PAWN_MOVES: BitboardMap =
-    WHITE_PAWN_MOVES_ALL.and(&WHITE_PAWN_PROMOTIONS_RANK.not());
+    WHITE_PAWN_SINGLE_MOVES.and(&WHITE_PAWN_PROMOTIONS_RANK.not());
 pub const WHITE_PAWN_ATTACKS_PROMOTION: BitboardMap =
     WHITE_PAWN_ATTACKS_ALL.and(&WHITE_PAWN_PROMOTIONS_RANK);
 pub const WHITE_PAWN_MOVES_PROMOTION: BitboardMap =
-    WHITE_PAWN_MOVES_ALL.and(&WHITE_PAWN_PROMOTIONS_RANK);
+    WHITE_PAWN_SINGLE_MOVES.and(&WHITE_PAWN_PROMOTIONS_RANK);
 pub const WHITE_PAWN_DOUBLE_MOVES: BitboardMap = BitboardMap::pawn_double_moves(Color::White);
+pub const WHITE_PAWN_MOVES_ALL: BitboardMap = WHITE_PAWN_SINGLE_MOVES.or(&WHITE_PAWN_DOUBLE_MOVES);
 
 #[cfg(test)]
 mod tests {

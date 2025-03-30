@@ -138,7 +138,6 @@ pub enum GeneratorPhase {
     YieldOtherMoves,
 }
 
-// You can re-order these to change the search order that is used by alpha-beta.
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub enum QueuedPly {
     // Should be searched _last_

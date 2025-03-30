@@ -2,8 +2,7 @@ use smallvec::SmallVec;
 
 use crate::basic_enums::{CastleDirection, Color};
 use crate::bitboard::Bitboard;
-use crate::bitboard_map;
-use crate::bitboard_map::BitboardMap;
+use crate::bitboard_map::{self, BitboardMap};
 use crate::board::Board;
 use crate::castlerights::CastleRights;
 use crate::legality::LegalityChecker;
@@ -146,7 +145,11 @@ impl Game {
 
         let half_move_clock_before = self.half_move;
 
-        self.half_move = (self.half_move + 1) * (!ply.resets_halfmove_clock(self)) as i16;
+        if ply.resets_halfmove_clock(self) {
+            self.half_move = 0;
+        } else {
+            self.half_move += 1;
+        };
 
         self.half_move_total += 1;
 
@@ -214,33 +217,43 @@ impl Game {
         self._step_moves_for::<QUIESCENCE>(plyset, &Piece::King, &bitboard_map::KING_MOVES);
     }
 
+    pub fn can_castle(&self, direction: CastleDirection) -> bool {
+        use crate::square::files::*;
+        use CastleDirection::*;
+
+        let color = self.to_move;
+
+        if !self.castle_rights.get(color, direction) {
+            return false;
+        }
+
+        let empty_files: &[File] = match direction {
+            Kingside => &[F, G],
+            Queenside => &[B, C, D],
+        };
+
+        let empty_squares = Bitboard::from_squares(
+            &empty_files
+                .iter()
+                .map(|f| Square::new(*f, color.home_rank()))
+                .collect::<Vec<_>>(),
+        );
+
+        if self.board.get_occupied().intersects(empty_squares) {
+            return false;
+        }
+
+        true
+    }
+
     pub fn _castle_moves(&self, plyset: &mut PlySet) {
         use CastleDirection::*;
-        let color = self.to_move;
         for direction in [Kingside, Queenside] {
-            use crate::square::files::*;
-
-            if !self.castle_rights.get(color, direction) {
+            if !self.can_castle(direction) {
                 continue;
             }
 
-            let empty_files: &[File] = match direction {
-                Kingside => &[F, G],
-                Queenside => &[B, C, D],
-            };
-
-            let empty_squares = Bitboard::from_squares(
-                &empty_files
-                    .iter()
-                    .map(|f| Square::new(*f, color.home_rank()))
-                    .collect::<Vec<_>>(),
-            );
-
-            if self.board.get_occupied().intersects(empty_squares) {
-                continue;
-            }
-
-            plyset.push(direction.to_ply(&color));
+            plyset.push(direction.to_ply(&self.to_move));
         }
     }
 
@@ -406,9 +419,105 @@ impl Game {
         self.is_pseudo_legal(ply) && LegalityChecker::new(self).is_legal(ply, self)
     }
 
-    pub fn is_pseudo_legal(&self, ply: &Ply) -> bool {
+    pub fn is_pseudo_legal_naive(&self, ply: &Ply) -> bool {
         let pseudo_legal_moves = self.pseudo_legal_moves();
         pseudo_legal_moves.iter().any(|x| x == ply)
+    }
+
+    pub fn is_pseudo_legal(&self, ply: &Ply) -> bool {
+        let fast = self._is_pseudo_legal(ply);
+
+        #[cfg(debug_assertions)]
+        {
+            let naive = self.is_pseudo_legal_naive(ply);
+
+            debug_assert!(
+                fast == naive,
+                "inconsistent is_pseudo_legal found. naive: {naive} fast: {fast}\n{ply:?} {}",
+                self.to_fen()
+            );
+        }
+        fast
+    }
+
+    fn _is_pseudo_legal(&self, ply: &Ply) -> bool {
+        use bitboard_map::*;
+        use Piece::*;
+        use SpecialFlag::*;
+
+        let src = ply.src();
+        let dst = ply.dst();
+
+        // Just not friendly pieces:
+        let availble_dsts = !self.board.get_color(&self.to_move);
+        if !availble_dsts.get(dst) {
+            return false;
+        }
+
+        let Some((color, piece)) = self.board.square(src) else {
+            return false;
+        };
+
+        if color != self.to_move {
+            return false;
+        }
+
+        let mut is_attack = self.board.get_color(&self.to_move.other()).get(dst);
+
+        match ply.flag() {
+            Some(Castling) => {
+                let direction = if dst.file() < src.file() {
+                    CastleDirection::Queenside
+                } else {
+                    CastleDirection::Kingside
+                };
+                let res = self.can_castle(direction) && direction.to_ply(&color) == *ply;
+
+                // Should also be evident from the castle rights, in theory.
+                debug_assert!(piece == King || !res, "what? {ply:?} {}", self.to_fen());
+                return res;
+            }
+            Some(EnPassant) => {
+                if piece != Pawn || Some(dst) != self.en_passant {
+                    return false;
+                }
+                is_attack = true;
+            }
+            Some(Promotion(_)) => {
+                if piece != Pawn || color.pawn_promotion_rank() != dst.rank() {
+                    return false;
+                }
+            }
+            None => {}
+        }
+
+        let for_magic =
+            move |x| Bitboard::magic_attacks(src, x, self.board.get_occupied()).get(dst);
+        let for_step = move |x: &'static BitboardMap| x[src].get(dst);
+        match piece {
+            Pawn => {
+                let occupied = self.board.get_occupied();
+                let is_double_move =
+                    (dst.rank().as_u8() as i8 - src.rank().as_u8() as i8).abs() == 2;
+                let blocker =
+                    Bitboard::from_square(src).shift(color.pawn_move_direction()) & occupied;
+                if is_double_move && !blocker.is_empty() {
+                    return false;
+                }
+
+                match (self.to_move, is_attack) {
+                    (Color::Black, false) => for_step(&BLACK_PAWN_MOVES_ALL),
+                    (Color::Black, true) => for_step(&BLACK_PAWN_ATTACKS_ALL),
+                    (Color::White, false) => for_step(&WHITE_PAWN_MOVES_ALL),
+                    (Color::White, true) => for_step(&WHITE_PAWN_ATTACKS_ALL),
+                }
+            }
+            Knight => for_step(&KNIGHT_MOVES),
+            Bishop => for_magic(Bishop),
+            Rook => for_magic(Rook),
+            Queen => for_magic(Bishop) || for_magic(Rook),
+            King => for_step(&KING_MOVES),
+        }
     }
 
     pub fn legal_moves(&self) -> Vec<Ply> {
@@ -676,7 +785,21 @@ impl Game {
         }
         let mut count = 0;
         for ply in self.legal_moves() {
+            let pseudo_legal_naive = self.is_pseudo_legal_naive(&ply);
+            let pseudo_legal_real = self.is_pseudo_legal(&ply);
+
             let mut game = self.clone();
+            debug_assert!(
+                pseudo_legal_real,
+                "move not legal: {ply:?} in {}",
+                game.to_fen()
+            );
+            debug_assert!(
+                pseudo_legal_naive == pseudo_legal_real,
+                "mismatch in legality: {pseudo_legal_naive} != {pseudo_legal_real}, {ply:?} in {}",
+                game.to_fen()
+            );
+
             game.apply_ply(&ply);
             if print {
                 print!("{}: ", ply.long_name());

@@ -430,6 +430,12 @@ impl ThreadData {
                     let legal = is_deferred || matches!(guarantee, Deferred);
                     let pseudo_legal = legal || matches!(guarantee, PseudoLegal);
 
+                    let game = self.game();
+
+                    // Check that our guarantees are fulfilled:
+                    debug_assert!(!pseudo_legal || game.is_pseudo_legal(&ply));
+                    debug_assert!(!legal || legality_checker.is_legal(&ply, game));
+
                     // TODO: this pattern should probably be a library function somewhere
                     debug_assert!(
                         matches!(guarantee, Legal) || !N::IS_ROOT,
@@ -441,8 +447,6 @@ impl ThreadData {
                         std::intrinsics::assume(matches!(guarantee, Legal) || !N::IS_ROOT);
                     };
 
-                    let game = self.game();
-
                     if hash_moves_played.contains(&ply)
                         || !(pseudo_legal || game.is_pseudo_legal(&ply))
                         || !(legal || legality_checker.is_legal(&ply, game))
@@ -450,6 +454,7 @@ impl ThreadData {
                         continue;
                     }
 
+                    // At this point the moves need to be okay:
                     debug_assert!(game.is_pseudo_legal(&ply));
                     debug_assert!(legality_checker.is_legal(&ply, game));
 
