@@ -57,23 +57,22 @@ impl Board {
         king.first_occupied_or_a1()
     }
 
-    const PIECE_OPTION_ARRAY: [Option<Piece>; 8] = {
-        use crate::piece::Piece::*;
-
-        [
-            None,
-            Some(Pawn),
-            Some(Knight),
-            Some(Bishop),
-            Some(Rook),
-            Some(Queen),
-            Some(King),
-            None,
-        ]
-    };
-
     pub const fn occupant_piece(&self, square: Square) -> Option<Piece> {
         use crate::piece::Piece::*;
+        const PIECE_OPTION_ARRAY: [Option<Piece>; 8] = {
+            use crate::piece::Piece::*;
+
+            [
+                None,
+                Some(Pawn),
+                Some(Knight),
+                Some(Bishop),
+                Some(Rook),
+                Some(Queen),
+                Some(King),
+                None,
+            ]
+        };
 
         // Binary search. (with bit fiddling)
         // let empty = self.get_occupied().not_const();
@@ -92,7 +91,7 @@ impl Board {
 
         let idx = (bit_0 as usize) | (bit_1 as usize) << 1 | (bit_3 as usize) << 2;
 
-        Board::PIECE_OPTION_ARRAY[idx]
+        PIECE_OPTION_ARRAY[idx]
     }
 
     pub const fn occupant_color(&self, square: Square) -> Option<Color> {

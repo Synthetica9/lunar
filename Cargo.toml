@@ -33,6 +33,7 @@ opt-level = 3
 
 [dependencies]
 crossbeam-channel = "0.5"
+fallthrough = "=0.1.2"
 smallvec = { version = "1.11", features = ["union"] }
 static_assertions = "1.1"
 parameters = { path = "./parameters" }
