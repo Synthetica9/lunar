@@ -62,13 +62,11 @@ impl SpecialFlag {
 // No, I don't _like_ the name "Ply" either. I would prefer "Move", but
 // "move" is a keyword in Rust.
 impl Ply {
-    const fn new(src: Square, dst: Square, flag: Option<SpecialFlag>) -> Ply {
+    fn new(src: Square, dst: Square, flag: Option<SpecialFlag>) -> Ply {
         let mut val = 0;
-        val |= src.as_index() as u16;
-        val |= (dst.as_index() as u16) << 6;
-        if let Some(flag) = flag {
-            val |= (flag.as_u8() as u16) << 12;
-        }
+        val |= dst.as_index() as u16;
+        val |= (src.as_index() as u16) << 6;
+        val |= (flag.map_or(0, SpecialFlag::as_u8) as u16) << 12;
 
         Ply(val)
     }
@@ -77,20 +75,20 @@ impl Ply {
         self.0
     }
 
-    pub const fn simple(src: Square, dst: Square) -> Ply {
+    pub fn simple(src: Square, dst: Square) -> Ply {
         Ply::new(src, dst, None)
     }
 
-    pub const fn promotion(src: Square, dst: Square, piece: Piece) -> Ply {
+    pub fn promotion(src: Square, dst: Square, piece: Piece) -> Ply {
         debug_assert!(piece.is_promotable());
         Ply::new(src, dst, Some(SpecialFlag::Promotion(piece)))
     }
 
-    pub const fn castling(src: Square, dst: Square) -> Ply {
+    pub fn castling(src: Square, dst: Square) -> Ply {
         Ply::new(src, dst, Some(SpecialFlag::Castling))
     }
 
-    pub const fn en_passant(src: Square, dst: Square) -> Ply {
+    pub fn en_passant(src: Square, dst: Square) -> Ply {
         Ply::new(src, dst, Some(SpecialFlag::EnPassant))
     }
 
@@ -114,15 +112,15 @@ impl Ply {
     }
 
     #[must_use]
-    pub const fn normalize(self) -> Ply {
+    pub fn normalize(self) -> Ply {
         Ply::new(self.src(), self.dst(), self.flag())
     }
 
-    pub const fn src(&self) -> Square {
+    pub const fn dst(&self) -> Square {
         Square::from_index(self.0 as u8 & 0x3F)
     }
 
-    pub const fn dst(&self) -> Square {
+    pub const fn src(&self) -> Square {
         Square::from_index((self.0 >> 6) as u8 & 0x3F)
     }
 
@@ -228,16 +226,7 @@ pub fn _combination_moves(
 
     // srcs is typically where pieces/pawns are
     // dsts is empty/enemy squares
-    // can_promote determines whether we can promote.
-
-    let to_reserve = srcs
-        .iter()
-        .map(|src| (move_table[src] & *dsts).popcount() as usize)
-        .sum::<usize>();
-
-    let len_after = plyset.len() + to_reserve;
-
-    plyset.reserve(to_reserve);
+    // flag is a flag to apply to each move.
 
     for src in srcs.iter() {
         let potential = move_table[src];
@@ -246,13 +235,6 @@ pub fn _combination_moves(
             plyset.push(Ply::new(src, dst, flag));
         }
     }
-
-    debug_assert!(
-        plyset.len() == len_after,
-        "{} != {}, miscalculated plyset reservation (should be exact!)",
-        plyset.len(),
-        len_after,
-    );
 }
 
 impl PartialEq for Ply {

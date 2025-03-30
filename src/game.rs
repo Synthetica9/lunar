@@ -146,11 +146,7 @@ impl Game {
 
         let half_move_clock_before = self.half_move;
 
-        if ply.resets_halfmove_clock(self) {
-            self.half_move = 0;
-        } else {
-            self.half_move += 1;
-        };
+        self.half_move = (self.half_move + 1) * (!ply.resets_halfmove_clock(self)) as i16;
 
         self.half_move_total += 1;
 

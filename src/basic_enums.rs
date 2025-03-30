@@ -108,7 +108,7 @@ impl CastleDirection {
         Self::DIRECTIONS.iter().copied()
     }
 
-    pub const fn to_ply(self, color: &Color) -> Ply {
+    pub fn to_ply(self, color: &Color) -> Ply {
         use CastleDirection::*;
 
         let src = color.king_home_square();
