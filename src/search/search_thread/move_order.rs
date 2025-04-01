@@ -318,11 +318,16 @@ impl MoveGenerator for StandardMoveGenerator {
             }
             GenKillerMoves => {
                 self.phase = GenQuietMoves;
+
                 let move_total = thread.game().half_move_total() as usize;
                 if let Some(killer_moves) = thread.killer_moves.get(move_total) {
-                    for ply in killer_moves.iter().flatten() {
-                        self.queue.push(KillerMove { ply: *ply });
+                    for ply in killer_moves.iter().flatten().copied() {
+                        self.queue.push(KillerMove { ply });
                     }
+                }
+
+                if let Some(ply) = thread.countermove_cell().and_then(|x| x.get().wrap_null()) {
+                    self.queue.push(KillerMove { ply });
                 }
                 // No need to sort.
             }

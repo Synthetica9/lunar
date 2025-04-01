@@ -125,4 +125,8 @@ impl History {
         }
         cpy.game_is_finished()
     }
+
+    pub(crate) fn peek(&self) -> Option<&UndoPly> {
+        self.undo_history.last()
+    }
 }

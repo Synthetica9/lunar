@@ -1,6 +1,7 @@
 // Simplified ABDADA.
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
+use std::cell::Cell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -13,6 +14,7 @@ use smallvec::SmallVec;
 
 use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
+use super::countermove::CounterMove;
 use super::currently_searching::CurrentlySearching;
 use super::history_heuristic::HistoryTable;
 use crate::game::Game;
@@ -128,6 +130,7 @@ pub struct ThreadData {
 
     killer_moves: Vec<[Option<Ply>; N_KILLER_MOVES]>,
     history_table: std::rc::Rc<HistoryTable>,
+    countermove: Box<CounterMove>,
 }
 
 impl ThreadData {
@@ -164,6 +167,7 @@ impl ThreadData {
 
             killer_moves: Vec::new(),
             history_table: Rc::new(HistoryTable::new()),
+            countermove: Box::new(CounterMove::splat(Ply::NULL)),
         }
     }
 
@@ -193,6 +197,7 @@ impl ThreadData {
                         // Send idle message:
                         self.send_status_update();
                         self.history_table = Rc::new(HistoryTable::new());
+                        self.countermove = Box::new(CounterMove::splat(Ply::NULL))
                         // self.history_table.print_debug();
                     }
                     SearchThis(new_history, root_moves) => {
@@ -562,6 +567,10 @@ impl ThreadData {
                             bonus,
                         );
 
+                        if let Some(c) = self.countermove_cell() {
+                            c.set(ply);
+                        }
+
                         for (piece, square) in bad_quiet_moves {
                             self.history_table.update(to_move, piece, square, -bonus);
                         }
@@ -676,5 +685,16 @@ impl ThreadData {
             this[1] = this[0];
             this[0] = Some(ply);
         }
+    }
+
+    fn countermove_cell(&self) -> Option<&Cell<Ply>> {
+        let Some(last_info) = self.history.peek() else {
+            return None;
+        };
+        Some(self.countermove.get_cell((
+            self.game().to_move(),
+            last_info.info.our_piece,
+            last_info.ply.dst(),
+        )))
     }
 }
