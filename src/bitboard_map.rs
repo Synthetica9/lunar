@@ -31,14 +31,14 @@ impl BitboardMap {
         BitboardMap(self.0)
     }
 
-    const fn set_const(&self, square: &Square, value: Bitboard) -> BitboardMap {
+    const fn set_const(&self, square: Square, value: Bitboard) -> BitboardMap {
         let mut res = self.clone_const();
         res.0[square.as_index()] = value;
         res
     }
 
-    const fn get_const(&self, square: &Square) -> &Bitboard {
-        &self.0[square.as_index()]
+    const fn get_const(&self, square: Square) -> Bitboard {
+        self.0[square.as_index()]
     }
 
     const fn step_moves(directions: &[Direction]) -> BitboardMap {
@@ -48,8 +48,8 @@ impl BitboardMap {
         let mut i = 64;
         while i > 0 {
             i -= 1;
-            let sq = Square::from_index(i);
-            res = res.set_const(&sq, step_moves(sq, directions));
+            let square = Square::from_index(i);
+            res = res.set_const(square, step_moves(square, directions));
         }
 
         res
@@ -115,7 +115,7 @@ impl BitboardMap {
                 let sq_i = Square::from_index(i as u8);
                 let sq_j = Square::from_index(j as u8);
 
-                if self.get_const(&sq_i).get(sq_j) {
+                if self.get_const(sq_i).get(sq_j) {
                     res.0[j] = res.0[j].or(other.0[j]);
                 }
             }
@@ -143,7 +143,7 @@ impl BitboardMap {
                 continue;
             }
 
-            res = res.set_const(&sq, Bitboard::from_square(sq).shift(double_directions));
+            res = res.set_const(sq, Bitboard::from_square(sq).shift(double_directions));
         }
 
         res
@@ -154,7 +154,7 @@ impl std::ops::Index<Square> for BitboardMap {
     type Output = Bitboard;
 
     fn index(&self, index: Square) -> &Self::Output {
-        self.get_const(&index)
+        &self.0[index as usize]
     }
 }
 

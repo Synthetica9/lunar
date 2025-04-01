@@ -44,7 +44,7 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
                 continue;
             }
 
-            let piece_attackers = attackers & board.get_piece(&piece);
+            let piece_attackers = attackers & board.get_piece(piece);
             for _i in 0..piece_attackers.popcount() {
                 // TODO: use PESTO midgame/endgame tables?
                 res.push(piece.base_value());
@@ -69,8 +69,8 @@ fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns
 
     let to_move = game.to_move();
     let to_move_other = to_move.other();
-    let mut attackers = get_attackers(&to_move, true);
-    let mut defenders = get_attackers(&to_move_other, false);
+    let mut attackers = get_attackers(to_move, true);
+    let mut defenders = get_attackers(to_move_other, false);
 
     debug_assert!(!attackers.is_empty());
     debug_assert!(!defenders.is_empty());
@@ -169,14 +169,14 @@ pub enum QueuedPly {
 
 impl QueuedPly {
     // TODO: reference?
-    pub fn ply(&self) -> Ply {
+    pub fn ply(self) -> Ply {
         use QueuedPly::*;
         match self {
             LosingCapture { ply, .. }
             | QuietMove { ply, .. }
             | EqualCapture { ply, .. }
             | KillerMove { ply, .. }
-            | WinningCapture { ply, .. } => *ply,
+            | WinningCapture { ply, .. } => ply,
         }
     }
 
@@ -331,7 +331,7 @@ impl MoveGenerator for StandardMoveGenerator {
                 let game = thread.game();
                 for ply in game.quiet_pseudo_legal_moves() {
                     let value = quiet_move_order(thread, ply);
-                    let is_check = game.is_check(&ply);
+                    let is_check = game.is_check(ply);
                     self.queue.push(QuietMove {
                         ply,
                         value,

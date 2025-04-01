@@ -16,7 +16,7 @@ use pawn_hash_table::PHTEntry;
 
 pub struct Evaluator(pub Parameters);
 
-const fn gamephase_inc(piece: &Piece) -> i32 {
+const fn gamephase_inc(piece: Piece) -> i32 {
     use Piece::*;
     match piece {
         Pawn | King => 0,
@@ -28,14 +28,14 @@ const fn gamephase_inc(piece: &Piece) -> i32 {
 
 fn game_phase(board: &Board) -> i32 {
     let res = Piece::iter()
-        .map(|piece| board.get_piece(&piece).popcount() as i32 * gamephase_inc(&piece))
+        .map(|piece| board.get_piece(piece).popcount() as i32 * gamephase_inc(piece))
         .sum();
 
     // Cap in case of early promotion.
     std::cmp::min(res, 24)
 }
 
-type Term = fn(&Evaluator, &Color, &Game, &PHTEntry) -> parameters::PhaseParameter<Millipawns>;
+type Term = fn(&Evaluator, Color, &Game, &PHTEntry) -> parameters::PhaseParameter<Millipawns>;
 impl Evaluator {
     pub const GENERAL_TERMS: &'static [Term] = &[
         Evaluator::pesto,
@@ -86,7 +86,7 @@ impl Evaluator {
 
         for color in [Color::White, Color::Black] {
             for term in terms {
-                let x = term(self, &color, game, pht_entry);
+                let x = term(self, color, game, pht_entry);
                 mg += x.mg * color.multiplier();
                 eg += x.eg * color.multiplier();
             }
@@ -95,12 +95,12 @@ impl Evaluator {
         (mg, eg)
     }
 
-    fn pesto(&self, color: &Color, game: &Game, _: &PHTEntry) -> PhaseParameter<Millipawns> {
+    fn pesto(&self, color: Color, game: &Game, _: &PHTEntry) -> PhaseParameter<Millipawns> {
         let pesto = &self.0.piece_square_table;
         pesto.map(|x| {
             Piece::iter()
                 .map(|piece| {
-                    let mut pieces = game.board().get(color, &piece);
+                    let mut pieces = game.board().get(color, piece);
 
                     if piece == Piece::Pawn {
                         // Only "kingside" pawns
@@ -110,7 +110,7 @@ impl Evaluator {
 
                     pieces = pieces.perspective(color);
 
-                    x.get(&piece).dot_product(&pieces)
+                    x.get(&piece).dot_product(pieces)
                         + piece.base_value() * (pieces.popcount() as i32)
                 })
                 .sum()
@@ -119,7 +119,7 @@ impl Evaluator {
 
     fn queenside_pawns(
         &self,
-        color: &Color,
+        color: Color,
         game: &Game,
         _: &PHTEntry,
     ) -> PhaseParameter<Millipawns> {
@@ -127,17 +127,17 @@ impl Evaluator {
 
         queenside_pesto.map(|x| {
             let queenside = !game.board().effective_king_side(color);
-            let pawns = game.board().get(color, &Piece::Pawn);
+            let pawns = game.board().get(color, Piece::Pawn);
 
             let queenside_pawns = queenside & pawns;
 
-            x.dot_product(&queenside_pawns.perspective(color))
+            x.dot_product(queenside_pawns.perspective(color))
         })
     }
 
     fn isolated_pawn(
         &self,
-        color: &Color,
+        color: Color,
         _game: &Game,
         pht_entry: &PHTEntry,
     ) -> PhaseParameter<Millipawns> {
@@ -145,12 +145,12 @@ impl Evaluator {
 
         self.0
             .isolated_pawns
-            .map(|phase| phase.dot_product(&isolated_pawns))
+            .map(|phase| phase.dot_product(isolated_pawns))
     }
 
     fn protected_pawn(
         &self,
-        color: &Color,
+        color: Color,
         _game: &Game,
         pht_entry: &PHTEntry,
     ) -> PhaseParameter<Millipawns> {
@@ -158,7 +158,7 @@ impl Evaluator {
 
         self.0
             .protected_pawns
-            .map(|x| x.dot_product(&protected_pawns))
+            .map(|x| x.dot_product(protected_pawns))
     }
 
     // fn connected_rook(
@@ -237,22 +237,22 @@ impl Evaluator {
 
     fn doubled_pawn(
         &self,
-        color: &Color,
+        color: Color,
         _game: &Game,
         pht_entry: &PHTEntry,
     ) -> PhaseParameter<Millipawns> {
         let doubled = pht_entry.get(color).doubled();
-        self.0.doubled_pawns.map(|x| x.dot_product(&doubled))
+        self.0.doubled_pawns.map(|x| x.dot_product(doubled))
     }
 
     fn passed_pawn(
         &self,
-        color: &Color,
+        color: Color,
         _game: &Game,
         pht_entry: &PHTEntry,
     ) -> PhaseParameter<Millipawns> {
         let passed = pht_entry.get(color).passed() & !bitboard::ROW_7;
-        self.0.passed_pawns.map(|x| x.dot_product(&passed))
+        self.0.passed_pawns.map(|x| x.dot_product(passed))
     }
 }
 
@@ -275,13 +275,13 @@ pub fn evaluation(game: &Game) -> Millipawns {
 pub trait DotProduct {
     type Output;
 
-    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output;
+    fn dot_product(&self, bitboard: Bitboard) -> Self::Output;
 }
 
 impl DotProduct for BoardParameter {
     type Output = Millipawns;
 
-    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
         // let mut result = Millipawns(0);
         // for idx in 0..64 {
         //     let square = Square::from_u8(idx as u8);
@@ -300,7 +300,7 @@ impl DotProduct for BoardParameter {
 impl DotProduct for ScalarParameter {
     type Output = Millipawns;
 
-    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
         Millipawns(self.0) * (bitboard.popcount() as i32)
     }
 }
@@ -311,7 +311,7 @@ where
 {
     type Output = T::Output;
 
-    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
         self.0.dot_product(bitboard)
     }
 }
@@ -323,11 +323,11 @@ where
 {
     type Output = T::Output;
 
-    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
         files::ALL
             .iter()
             .zip(self.0.iter())
-            .map(|(file, val)| val.dot_product(&(file.as_bitboard() & *bitboard)))
+            .map(|(file, val)| val.dot_product(file.as_bitboard() & bitboard))
             .sum()
     }
 }
@@ -339,11 +339,11 @@ where
 {
     type Output = T::Output;
 
-    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
         ranks::ALL
             .iter()
             .zip(self.0.iter())
-            .map(|(rank, val)| val.dot_product(&(rank.as_bitboard() & *bitboard)))
+            .map(|(rank, val)| val.dot_product(rank.as_bitboard() & bitboard))
             .sum()
     }
 }
@@ -351,7 +351,7 @@ where
 impl DotProduct for SparseBoardParameter {
     type Output = Millipawns;
 
-    fn dot_product(&self, bitboard: &Bitboard) -> Self::Output {
+    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
         self.files.dot_product(bitboard) + self.ranks.dot_product(bitboard)
     }
 }

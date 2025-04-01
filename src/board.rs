@@ -25,34 +25,34 @@ impl Board {
     }
 
     // Extracting various information
-    pub const fn get_color(&self, color: &Color) -> Bitboard {
-        self.colors[*color as usize]
+    pub const fn get_color(&self, color: Color) -> Bitboard {
+        self.colors[color as usize]
     }
 
-    pub fn get_color_mut<'a>(&'a mut self, color: &Color) -> &'a mut Bitboard {
-        &mut self.colors[*color as usize]
+    pub fn get_color_mut(&mut self, color: Color) -> &mut Bitboard {
+        &mut self.colors[color as usize]
     }
 
-    pub const fn get_piece(&self, piece: &Piece) -> Bitboard {
-        self.pieces[*piece as usize]
+    pub const fn get_piece(&self, piece: Piece) -> Bitboard {
+        self.pieces[piece as usize]
     }
 
-    pub fn get_piece_mut<'a>(&'a mut self, piece: &Piece) -> &'a mut Bitboard {
-        &mut self.pieces[*piece as usize]
+    pub fn get_piece_mut(&mut self, piece: Piece) -> &mut Bitboard {
+        &mut self.pieces[piece as usize]
     }
 
     pub const fn get_occupied(&self) -> Bitboard {
-        self.get_color(&Color::White)
-            .or(self.get_color(&Color::Black))
+        self.get_color(Color::White)
+            .or(self.get_color(Color::Black))
     }
 
-    pub const fn get(&self, color: &Color, piece: &Piece) -> Bitboard {
+    pub const fn get(&self, color: Color, piece: Piece) -> Bitboard {
         // TODO: const
         self.get_color(color).and(self.get_piece(piece))
     }
 
-    pub const fn king_square(&self, color: &Color) -> Square {
-        let king = self.get(color, &Piece::King);
+    pub const fn king_square(&self, color: Color) -> Square {
+        let king = self.get(color, Piece::King);
         debug_assert!(!king.is_empty());
         king.first_occupied_or_a1()
     }
@@ -76,13 +76,13 @@ impl Board {
 
         // Binary search. (with bit fiddling)
         // let empty = self.get_occupied().not_const();
-        let pawn = self.get_piece(&Pawn);
-        let knight = self.get_piece(&Knight);
-        let bishop = self.get_piece(&Bishop);
+        let pawn = self.get_piece(Pawn);
+        let knight = self.get_piece(Knight);
+        let bishop = self.get_piece(Bishop);
 
-        let rook = self.get_piece(&Rook);
-        let queen = self.get_piece(&Queen);
-        let king = self.get_piece(&King);
+        let rook = self.get_piece(Rook);
+        let queen = self.get_piece(Queen);
+        let king = self.get_piece(King);
 
         let sq_bb = Bitboard::from_square(square);
         let bit_0 = pawn.or(bishop).or(queen).intersects(sq_bb);
@@ -97,8 +97,8 @@ impl Board {
     pub const fn occupant_color(&self, square: Square) -> Option<Color> {
         // debug_assert!(self.is_not_corrupt());
 
-        let white = self.get_color(&Color::White).get(square);
-        let black = self.get_color(&Color::Black).get(square);
+        let white = self.get_color(Color::White).get(square);
+        let black = self.get_color(Color::Black).get(square);
 
         // debug_assert!(!(white && black));
 
@@ -259,13 +259,13 @@ impl Board {
     pub fn check_not_corrupt(&self) -> Result<(), String> {
         // Will probably never be complete, however...
         // No overlap in colors
-        if !(self.get_color(&Color::White) & self.get_color(&Color::Black)).is_empty() {
+        if !(self.get_color(Color::White) & self.get_color(Color::Black)).is_empty() {
             return Err("Overlap in colors".to_string());
         }
 
         let mut pieces = Bitboard::new();
         for piece in Piece::iter() {
-            let on_board = self.get_piece(&piece);
+            let on_board = self.get_piece(piece);
             if !(pieces & on_board).is_empty() {
                 return Err("Overlap in pieces".to_string());
             }
@@ -287,7 +287,7 @@ impl Board {
     pub fn check_valid(&self) -> Result<(), String> {
         // Both sides should have one and only one king
         for color in Color::iter() {
-            match self.get(&color, &Piece::King).popcount().cmp(&1) {
+            match self.get(color, Piece::King).popcount().cmp(&1) {
                 Ordering::Less => return Err(format!("{color:?} has no king")),
                 Ordering::Greater => return Err(format!("{color:?} has more than one king")),
                 Ordering::Equal => (),
@@ -298,7 +298,7 @@ impl Board {
         // TODO: make this optional. (some variants allow this)
         {
             use crate::bitboard::*;
-            let pawns = self.get_piece(&Piece::Pawn);
+            let pawns = self.get_piece(Piece::Pawn);
             let back_ranks = ROW_1 | ROW_8;
             if pawns.intersects(back_ranks) {
                 return Err("Pawns on back rank".to_string());
@@ -320,34 +320,34 @@ impl Board {
         let mut result = Millipawns(0);
 
         for piece in Piece::iter() {
-            result += piece.value() * self.get(&color, &piece).popcount() as i32;
+            result += piece.value() * self.get(color, piece).popcount() as i32;
         }
 
         result
     }
 
-    pub const fn has_bishop_pair(&self, color: &Color) -> bool {
+    pub const fn has_bishop_pair(&self, color: Color) -> bool {
         // Too slow? Just use popcount and accept the rare
         // instance where we have two same colored bishops after promotion?
         use crate::bitboard::*;
 
-        let bishops = self.get(color, &Piece::Bishop);
+        let bishops = self.get(color, Piece::Bishop);
         let has_black_bishop = !(bishops.and(LIGHT_SQUARES)).is_empty();
         let has_white_bishop = !(bishops.and(DARK_SQUARES)).is_empty();
         has_black_bishop && has_white_bishop
     }
 
-    pub const fn knights_in_central_16(&self, color: &Color) -> u8 {
+    pub const fn knights_in_central_16(&self, color: Color) -> u8 {
         use crate::bitboard::*;
 
-        let knights = self.get(color, &Piece::Knight);
+        let knights = self.get(color, Piece::Knight);
         (knights.and(CENTRAL_16)).popcount()
     }
 
     fn attacked_squares_by_piece_with_occupancy(
         &self,
-        color: &Color,
-        piece: &Piece,
+        color: Color,
+        piece: Piece,
         occupancy: Bitboard,
     ) -> Bitboard {
         let mut res = Bitboard::new();
@@ -357,20 +357,20 @@ impl Board {
         res
     }
 
-    pub fn attacked_squares_with_occupancy(&self, color: &Color, occupancy: Bitboard) -> Bitboard {
+    pub fn attacked_squares_with_occupancy(&self, color: Color, occupancy: Bitboard) -> Bitboard {
         let mut res = Bitboard::new();
         for piece in Piece::iter() {
-            res |= self.attacked_squares_by_piece_with_occupancy(color, &piece, occupancy);
+            res |= self.attacked_squares_by_piece_with_occupancy(color, piece, occupancy);
         }
         res
     }
 
-    pub fn attacked_squares(&self, color: &Color) -> Bitboard {
+    pub fn attacked_squares(&self, color: Color) -> Bitboard {
         let occupancy = self.get_occupied();
         self.attacked_squares_with_occupancy(color, occupancy)
     }
 
-    pub fn squares_attacking(&self, color: &Color, square: Square) -> Bitboard {
+    pub fn squares_attacking(&self, color: Color, square: Square) -> Bitboard {
         // Color is the color doing the attacking.
         self._squares_attacking_defending(Some(color), square)
     }
@@ -380,10 +380,10 @@ impl Board {
         self._squares_attacking_defending(None, square)
     }
 
-    pub fn effective_king_side(&self, color: &Color) -> Bitboard {
+    pub fn effective_king_side(&self, color: Color) -> Bitboard {
         use crate::bitboard::{KINGSIDE, QUEENSIDE};
 
-        let king = self.get(color, &Piece::King);
+        let king = self.get(color, Piece::King);
 
         if king.intersects(KINGSIDE) {
             KINGSIDE
@@ -392,14 +392,14 @@ impl Board {
         }
     }
 
-    fn _squares_attacking_defending(&self, color: Option<&Color>, square: Square) -> Bitboard {
+    fn _squares_attacking_defending(&self, color: Option<Color>, square: Square) -> Bitboard {
         // Color is the color doing the attacking.
         let occupied = self.get_occupied();
-        let queens = self.get_piece(&Piece::Queen);
+        let queens = self.get_piece(Piece::Queen);
 
         let mut res = Bitboard::new();
 
-        res |= self.get_piece(&Piece::Pawn)
+        res |= self.get_piece(Piece::Pawn)
             & if let Some(color) = color {
                 // Single direction, seen from opponent due to reverse view.
                 Bitboard::pawn_attacks(square, color.other())
@@ -409,11 +409,11 @@ impl Board {
                     | Bitboard::pawn_attacks(square, Color::Black)
             };
 
-        res |= self.get_piece(&Piece::Knight) & Bitboard::knight_attacks(square);
+        res |= self.get_piece(Piece::Knight) & Bitboard::knight_attacks(square);
         res |=
-            (self.get_piece(&Piece::Bishop) | queens) & Bitboard::bishop_attacks(square, occupied);
-        res |= (self.get_piece(&Piece::Rook) | queens) & Bitboard::rook_attacks(square, occupied);
-        res |= self.get_piece(&Piece::King) & Bitboard::king_attacks(square);
+            (self.get_piece(Piece::Bishop) | queens) & Bitboard::bishop_attacks(square, occupied);
+        res |= (self.get_piece(Piece::Rook) | queens) & Bitboard::rook_attacks(square, occupied);
+        res |= self.get_piece(Piece::King) & Bitboard::king_attacks(square);
 
         if let Some(color) = color {
             res &= self.get_color(color);
@@ -426,7 +426,7 @@ impl Board {
         use Piece::*;
 
         for piece in [Pawn, Rook, Queen] {
-            if !self.get_piece(&piece).is_empty() {
+            if !self.get_piece(piece).is_empty() {
                 return true;
             }
         }
@@ -441,11 +441,11 @@ impl Board {
             return false;
         };
 
-        let bishops = self.get_piece(&Bishop);
-        let knights = self.get_piece(&Knight);
+        let bishops = self.get_piece(Bishop);
+        let knights = self.get_piece(Knight);
         let minors = bishops | knights;
-        let white = self.get_color(&White);
-        let black = self.get_color(&Black);
+        let white = self.get_color(White);
+        let black = self.get_color(Black);
 
         // Both Sides have a bare King
         // One Side has a King and a Minor Piece against a bare King
@@ -478,15 +478,15 @@ impl Board {
             return true;
         }
 
-        let knights = self.get_piece(&Knight);
-        let bishops = self.get_piece(&Bishop);
+        let knights = self.get_piece(Knight);
+        let bishops = self.get_piece(Bishop);
         let minors = knights | bishops;
 
         let perspective = move |color| {
             // https://www.chessprogramming.org/Draw_Evaluation
 
-            let own = self.get_color(&color);
-            let opponent = self.get_color(&color.other());
+            let own = self.get_color(color);
+            let opponent = self.get_color(color.other());
 
             // Two Knights against the bare King [1]
             if (own & bishops).is_empty() && opponent.is_empty() && (own & knights).popcount() <= 2
@@ -515,7 +515,7 @@ impl Board {
             // Two Minor Pieces against one draw, except when the Stronger Side has a Bishop Pair
             if (own & minors).popcount() == 2
                 && (opponent & minors).popcount() == 1
-                && !self.has_bishop_pair(&color)
+                && !self.has_bishop_pair(color)
             {
                 return true;
             }
@@ -558,8 +558,8 @@ impl ApplyPly for Board {
 
     fn toggle_piece_multi(&mut self, color: Color, piece: Piece, squares: &[Square]) {
         let bb = Bitboard::from_squares(squares);
-        *self.get_color_mut(&color) ^= bb;
-        *self.get_piece_mut(&piece) ^= bb;
+        *self.get_color_mut(color) ^= bb;
+        *self.get_piece_mut(piece) ^= bb;
     }
 
     fn toggle_castle_rights(&mut self, _rights: CastleRights) {}

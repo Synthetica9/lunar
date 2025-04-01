@@ -167,7 +167,7 @@ impl Bitboard {
     }
 
     #[must_use]
-    pub fn perspective(self, color: &Color) -> Bitboard {
+    pub fn perspective(self, color: Color) -> Bitboard {
         match color {
             Color::White => self,
             Color::Black => self.flip_vertical(),
@@ -371,19 +371,19 @@ impl Bitboard {
     }
 
     pub fn piece_attacks_from_with_occupancy(
-        piece: &Piece,
-        sqr: Square,
-        color: &Color,
+        piece: Piece,
+        square: Square,
+        color: Color,
         occupancy: Bitboard,
     ) -> Bitboard {
         use Piece::*;
         match piece {
-            Pawn => Bitboard::pawn_attacks(sqr, *color),
-            Knight => Bitboard::knight_attacks(sqr),
-            Bishop => Bitboard::bishop_attacks(sqr, occupancy),
-            Rook => Bitboard::rook_attacks(sqr, occupancy),
-            Queen => Bitboard::queen_attacks(sqr, occupancy),
-            King => Bitboard::king_attacks(sqr),
+            Pawn => Bitboard::pawn_attacks(square, color),
+            Knight => Bitboard::knight_attacks(square),
+            Bishop => Bitboard::bishop_attacks(square, occupancy),
+            Rook => Bitboard::rook_attacks(square, occupancy),
+            Queen => Bitboard::queen_attacks(square, occupancy),
+            King => Bitboard::king_attacks(square),
         }
     }
 }

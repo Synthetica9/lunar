@@ -260,7 +260,7 @@ pub struct UndoPly {
 }
 
 impl GameInfoForPly {
-    pub fn new(game: &Game, ply: &Ply) -> GameInfoForPly {
+    pub fn new(game: &Game, ply: Ply) -> GameInfoForPly {
         debug_assert!(
             game.is_pseudo_legal(ply) || ply.is_null(),
             "{ply:?} is not pseudo-legal or null! FEN:\n{}",
@@ -310,17 +310,17 @@ pub(crate) trait ApplyPly {
         }
     }
 
-    fn _apply_ply(&mut self, game: &Game, ply: &Ply) {
+    fn _apply_ply(&mut self, game: &Game, ply: Ply) {
         let info = GameInfoForPly::new(game, ply);
-        self._apply_ply_with_info(&info, ply, false);
+        self._apply_ply_with_info(info, ply, false);
     }
 
-    fn _rough_apply(&mut self, game: &Game, ply: &Ply) {
+    fn _rough_apply(&mut self, game: &Game, ply: Ply) {
         let info = GameInfoForPly::new(game, ply);
         self._rough_apply_with_info(info, ply);
     }
 
-    fn _rough_apply_with_info(&mut self, info: GameInfoForPly, ply: &Ply) {
+    fn _rough_apply_with_info(&mut self, info: GameInfoForPly, ply: Ply) {
         // Apply in a way that doesn't strictly follow the rules, but should be ok in most cases.
         // Used for speculative prefetching on hashes.
 
@@ -335,7 +335,7 @@ pub(crate) trait ApplyPly {
         self.flip_side();
     }
 
-    fn _apply_ply_with_info(&mut self, info: &GameInfoForPly, ply: &Ply, invert: bool) {
+    fn _apply_ply_with_info(&mut self, info: GameInfoForPly, ply: Ply, invert: bool) {
         // ToDo: should probably return an error type
         use Piece::*;
 
@@ -560,7 +560,7 @@ mod tests {
         let bongcloud = Ply::simple(E1, E2);
         let h6 = Ply::simple(H7, H6);
 
-        for ply in &[&d4, &d5, &e4, &e5, &bongcloud, &h6] {
+        for ply in [d4, d5, e4, e5, bongcloud, h6] {
             println!("ply: {:?} {:?}", ply.src(), ply.dst());
             let pre = game.hash_after_ply(ply);
             game.apply_ply(ply);

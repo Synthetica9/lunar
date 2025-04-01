@@ -140,7 +140,7 @@ impl Game {
         )
     }
 
-    pub fn apply_ply(&mut self, ply: &Ply) -> UndoPly {
+    pub fn apply_ply(&mut self, ply: Ply) -> UndoPly {
         debug_assert!(self.board.is_valid());
 
         let half_move_clock_before = self.half_move;
@@ -156,13 +156,13 @@ impl Game {
         let info = crate::ply::GameInfoForPly::new(self, ply);
 
         // self.hash.apply_ply(&cln, ply);
-        self._apply_ply_with_info(&info, ply, false);
+        self._apply_ply_with_info(info, ply, false);
 
         debug_assert!(self.board.is_valid(), "board got hecked. {ply:?}");
 
         UndoPly {
             info,
-            ply: *ply,
+            ply,
             half_move_clock_before,
         }
     }
@@ -172,17 +172,17 @@ impl Game {
         self.half_move_total -= 1;
         self.half_move = undo_info.half_move_clock_before;
 
-        self._apply_ply_with_info(&undo_info.info, &undo_info.ply, true);
+        self._apply_ply_with_info(undo_info.info, undo_info.ply, true);
         debug_assert!(self.board.is_not_corrupt());
     }
 
-    pub fn hash_after_ply(&self, ply: &Ply) -> ZobristHash {
+    pub fn hash_after_ply(&self, ply: Ply) -> ZobristHash {
         let mut res = self.hash();
         res._apply_ply(self, ply);
         res
     }
 
-    pub fn speculative_hash_after_ply(&self, ply: &Ply) -> ZobristHash {
+    pub fn speculative_hash_after_ply(&self, ply: Ply) -> ZobristHash {
         let mut res = self.hash();
         res._rough_apply(self, ply);
         res
@@ -192,15 +192,15 @@ impl Game {
     fn _step_moves_for<const QUIESCENCE: bool>(
         &self,
         plyset: &mut PlySet,
-        piece_type: &Piece,
+        piece_type: Piece,
         move_table: &BitboardMap,
     ) {
-        debug_assert!(piece_type == &Piece::King || piece_type == &Piece::Knight);
+        debug_assert!(piece_type == Piece::King || piece_type == Piece::Knight);
         let board = &self.board;
-        let color = &self.to_move;
+        let color = self.to_move;
         let srcs = board.get(color, piece_type);
         let dsts = if QUIESCENCE {
-            board.get_color(&color.other())
+            board.get_color(color.other())
         } else {
             !board.get_occupied()
         };
@@ -209,12 +209,12 @@ impl Game {
     }
 
     fn _knight_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
-        self._step_moves_for::<QUIESCENCE>(plyset, &Piece::Knight, &bitboard_map::KNIGHT_MOVES);
+        self._step_moves_for::<QUIESCENCE>(plyset, Piece::Knight, &bitboard_map::KNIGHT_MOVES);
     }
 
     // Disregards castling
     fn _simple_king_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
-        self._step_moves_for::<QUIESCENCE>(plyset, &Piece::King, &bitboard_map::KING_MOVES);
+        self._step_moves_for::<QUIESCENCE>(plyset, Piece::King, &bitboard_map::KING_MOVES);
     }
 
     pub fn can_castle(&self, direction: CastleDirection) -> bool {
@@ -267,7 +267,7 @@ impl Game {
 
     fn _pawn_pushes(&self, plyset: &mut PlySet, promote_to: Option<Piece>) {
         let color = self.to_move;
-        let srcs = self.board.get(&color, &Piece::Pawn);
+        let srcs = self.board.get(color, Piece::Pawn);
         let occupied = self.board.get_occupied();
 
         // Single pushes
@@ -288,7 +288,7 @@ impl Game {
         use bitboard_map::*;
 
         let color = self.to_move;
-        let pawns = self.board.get(&color, &Piece::Pawn);
+        let pawns = self.board.get(color, Piece::Pawn);
         let direction = color.pawn_move_direction();
         let occupied = self.board.get_occupied();
 
@@ -313,8 +313,8 @@ impl Game {
         };
 
         let color = self.to_move;
-        let srcs = self.board.get(&color, &Piece::Pawn);
-        let dsts = self.board.get_color(&color.other());
+        let srcs = self.board.get(color, Piece::Pawn);
+        let dsts = self.board.get_color(color.other());
         let flag = promote_to.map(SpecialFlag::Promotion);
 
         _combination_moves(plyset, &srcs, &dsts, move_table, flag);
@@ -330,7 +330,7 @@ impl Game {
             Color::Black => &bitboard_map::WHITE_PAWN_ATTACKS,
         };
 
-        let friendly_pawns = self.board.get(&color, &Piece::Pawn);
+        let friendly_pawns = self.board.get(color, Piece::Pawn);
         let attacking_squares = rev_move_table[ep];
         let eligible_pawns = friendly_pawns & attacking_squares;
 
@@ -361,11 +361,11 @@ impl Game {
     }
 
     fn _magic_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet, piece: Piece) {
-        let friends = self.board.get_color(&self.to_move);
-        let enemies = self.board.get_color(&self.to_move.other());
+        let friends = self.board.get_color(self.to_move);
+        let enemies = self.board.get_color(self.to_move.other());
         let occupied = friends | enemies;
-        let selected_piece = self.board.get_piece(&piece);
-        let queens = self.board.get_piece(&Piece::Queen);
+        let selected_piece = self.board.get_piece(piece);
+        let queens = self.board.get_piece(Piece::Queen);
         let srcs = (selected_piece | queens) & friends;
 
         let postmask = if QUIESCENCE { enemies } else { !occupied };
@@ -415,17 +415,17 @@ impl Game {
         plyset
     }
 
-    pub fn is_legal(&self, ply: &Ply) -> bool {
+    pub fn is_legal(&self, ply: Ply) -> bool {
         self.is_pseudo_legal(ply) && LegalityChecker::new(self).is_legal(ply, self)
     }
 
-    pub fn is_pseudo_legal_naive(&self, ply: &Ply) -> bool {
+    pub fn is_pseudo_legal_naive(&self, ply: Ply) -> bool {
         let pseudo_legal_moves = self.pseudo_legal_moves();
-        pseudo_legal_moves.iter().any(|x| x == ply)
+        pseudo_legal_moves.iter().any(|x| *x == ply)
     }
 
     #[allow(clippy::let_and_return)]
-    pub fn is_pseudo_legal(&self, ply: &Ply) -> bool {
+    pub fn is_pseudo_legal(&self, ply: Ply) -> bool {
         let fast = self._is_pseudo_legal(ply);
 
         #[cfg(debug_assertions)]
@@ -441,7 +441,7 @@ impl Game {
         fast
     }
 
-    fn _is_pseudo_legal(&self, ply: &Ply) -> bool {
+    fn _is_pseudo_legal(&self, ply: Ply) -> bool {
         use bitboard_map::*;
         use Piece::*;
         use SpecialFlag::*;
@@ -450,7 +450,7 @@ impl Game {
         let dst = ply.dst();
 
         // Just not friendly pieces:
-        let availble_dsts = !self.board.get_color(&self.to_move);
+        let availble_dsts = !self.board.get_color(self.to_move);
         if !availble_dsts.get(dst) {
             return false;
         }
@@ -463,7 +463,7 @@ impl Game {
             return false;
         }
 
-        let mut is_attack = self.board.get_color(&self.to_move.other()).get(dst);
+        let mut is_attack = self.board.get_color(self.to_move.other()).get(dst);
 
         match ply.flag() {
             Some(Castling) => {
@@ -472,7 +472,7 @@ impl Game {
                 } else {
                     CastleDirection::Kingside
                 };
-                let res = self.can_castle(direction) && direction.to_ply(&color) == *ply;
+                let res = self.can_castle(direction) && direction.to_ply(&color) == ply;
 
                 // Should also be evident from the castle rights, in theory.
                 debug_assert!(piece == King || !res, "what? {ply:?} {}", self.to_fen());
@@ -524,9 +524,8 @@ impl Game {
     pub fn legal_moves(&self) -> Vec<Ply> {
         let legality_checker = LegalityChecker::new(self);
         self.pseudo_legal_moves()
-            .iter()
-            .filter(|ply| legality_checker.is_legal(ply, self))
-            .copied()
+            .into_iter()
+            .filter(|ply| legality_checker.is_legal(*ply, self))
             .collect()
     }
 
@@ -542,7 +541,7 @@ impl Game {
         quiet_moves
             .into_iter()
             .chain(quiescence_moves)
-            .filter(|x| legality_checker.is_legal(x, self))
+            .filter(|ply| legality_checker.is_legal(*ply, self))
             .collect()
     }
 
@@ -550,7 +549,7 @@ impl Game {
         let legality_checker = LegalityChecker::new(self);
         self.quiescence_pseudo_legal_moves()
             .iter()
-            .filter(|ply| legality_checker.is_legal(ply, self))
+            .filter(|ply| legality_checker.is_legal(**ply, self))
             .copied()
             .collect()
     }
@@ -561,20 +560,20 @@ impl Game {
 
         let board = &self.board;
         let occupied = board.get_occupied();
-        let queen = board.get_piece(&Piece::Queen);
+        let queen = board.get_piece(Piece::Queen);
         for other in [Piece::Rook, Piece::Bishop] {
             // First, we do a reverse look from the king to see which pieces it
             // sees first along every ray.
             let candidates = Bitboard::magic_attacks(to, other, occupied);
 
             // Only friendly pieces can be pinned.
-            let candidates = candidates & board.get_color(&self.to_move);
+            let candidates = candidates & board.get_color(self.to_move);
 
             // remove them and check if a relevant piece is behind them.
             let occupied = occupied & !candidates;
             let pinners = Bitboard::magic_attacks(to, other, occupied)
-                & board.get_color(&self.to_move.other())
-                & (board.get_piece(&other) | queen);
+                & board.get_color(self.to_move.other())
+                & (board.get_piece(other) | queen);
             // TODO: up to here can be split out into a "pinners" function.
 
             // Now we have a bitboard of pieces pinning something to the square.
@@ -596,18 +595,18 @@ impl Game {
     pub fn absolute_pins(&self) -> SmallVec<[(Square, Square); 4]> {
         let king = self
             .board
-            .get(&self.to_move, &Piece::King)
+            .get(self.to_move, Piece::King)
             .first_occupied_or_a1();
         self.pins(king)
     }
 
     pub fn check_count(&self) -> u8 {
         // TODO: split out to function "is_attacked" for board
-        let king = self.board.get(&self.to_move, &Piece::King);
+        let king = self.board.get(self.to_move, Piece::King);
         let king_square = king.first_occupied_or_a1();
         let attackers = self
             .board
-            .squares_attacking(&self.to_move.other(), king_square);
+            .squares_attacking(self.to_move.other(), king_square);
 
         attackers.popcount()
     }
@@ -620,7 +619,7 @@ impl Game {
         self.check_count() >= 2
     }
 
-    pub fn is_check(&self, ply: &Ply) -> bool {
+    pub fn is_check(&self, ply: Ply) -> bool {
         let mut cpy = self.clone();
         cpy.apply_ply(ply);
         cpy.is_in_check()
@@ -638,21 +637,21 @@ impl Game {
         !self.is_in_check() && self.is_in_mate()
     }
 
-    pub fn is_mate(&self, ply: &Ply) -> bool {
+    pub fn is_mate(&self, ply: Ply) -> bool {
         let mut cpy = self.clone();
         cpy.apply_ply(ply);
         cpy.is_in_mate()
     }
 
-    pub fn is_checkmate(&self, ply: &Ply) -> bool {
+    pub fn is_checkmate(&self, ply: Ply) -> bool {
         self.is_check(ply) && self.is_mate(ply)
     }
 
-    pub fn is_stalemate(&self, ply: &Ply) -> bool {
+    pub fn is_stalemate(&self, ply: Ply) -> bool {
         !self.is_check(ply) && self.is_mate(ply)
     }
 
-    pub fn ply_name(&self, ply: &Ply) -> String {
+    pub fn ply_name(&self, ply: Ply) -> String {
         use CastleDirection::*;
 
         let dst = ply.dst();
@@ -720,13 +719,13 @@ impl Game {
         // TODO: should parse from first principles.
         let legal_moves = self.legal_moves();
         let res = legal_moves
-            .iter()
-            .filter(|x| self.ply_name(x) == name)
-            .collect::<Vec<&Ply>>();
+            .into_iter()
+            .filter(|x| self.ply_name(*x) == name)
+            .collect::<Vec<Ply>>();
 
         assert!(res.len() <= 1);
         if res.len() == 1 {
-            Some(*res[0])
+            Some(res[0])
         } else {
             None
         }
@@ -762,7 +761,7 @@ impl Game {
 
     pub fn make_move_uci(&mut self, uci: &str) -> Result<(), String> {
         let ply = self.parse_uci_long_name(uci)?;
-        self.apply_ply(&ply);
+        self.apply_ply(ply);
         Ok(())
     }
 
@@ -771,7 +770,7 @@ impl Game {
         let ply = self
             .ply_from_name(name)
             .ok_or(format!("Invalid move: {name}"))?;
-        self.apply_ply(&ply);
+        self.apply_ply(ply);
 
         Ok(())
     }
@@ -786,8 +785,8 @@ impl Game {
         }
         let mut count = 0;
         for ply in self.legal_moves() {
-            let pseudo_legal_naive = self.is_pseudo_legal_naive(&ply);
-            let pseudo_legal_real = self.is_pseudo_legal(&ply);
+            let pseudo_legal_naive = self.is_pseudo_legal_naive(ply);
+            let pseudo_legal_real = self.is_pseudo_legal(ply);
 
             let mut game = self.clone();
             debug_assert!(
@@ -801,7 +800,7 @@ impl Game {
                 game.to_fen()
             );
 
-            game.apply_ply(&ply);
+            game.apply_ply(ply);
             if print {
                 print!("{}: ", ply.long_name());
             }
@@ -925,7 +924,7 @@ mod tests {
                 println!("Starting fen: {}", $fen);
 
                 for ply in game.legal_moves() {
-                    println!("Legal move: {} ({:?})", game.ply_name(&ply), ply);
+                    println!("Legal move: {} ({:?})", game.ply_name(ply), ply);
                 }
                 print!("{}", game.simple_render());
 
@@ -934,7 +933,7 @@ mod tests {
                     None => panic!("Invalid ply: {}", $ply),
                 };
 
-                let undo_info = game.apply_ply(&ply);
+                let undo_info = game.apply_ply(ply);
 
                 println!("Applied ply: {}", $ply);
                 println!("Ending fen: {}", game.to_fen());
@@ -969,12 +968,12 @@ mod tests {
             println!("Starting fen: {}", $fen);
 
             for ply in game.legal_moves() {
-                println!("Legal move: {} ({:?})", game.ply_name(&ply), ply);
+                println!("Legal move: {} ({:?})", game.ply_name(ply), ply);
             }
             print!("{}", game.simple_render());
 
             if let Some(ply) = game.ply_from_name($ply) {
-                game.apply_ply(&ply);
+                game.apply_ply(ply);
                 println!("Fen after applying (illegal) ply: {}", game.to_fen());
                 print!("{}", game.simple_render());
                 panic!("Ply {} was legal!", $ply);
@@ -1168,13 +1167,13 @@ mod tests {
     #[test]
     fn test_blocked_check() {
         let game = Game::from_fen("3k4/8/8/8/3P4/8/8/3QK3 w - - 0 4").unwrap();
-        assert!(!game.is_check(&Ply::simple(D4, D5)));
+        assert!(!game.is_check(Ply::simple(D4, D5)));
     }
 
     #[test]
     fn test_discovered_check() {
         let game = Game::from_fen("3k4/8/8/8/8/3B4/8/3QK3 w - - 4 7").unwrap();
-        assert!(game.is_check(&Ply::simple(D3, F1)));
+        assert!(game.is_check(Ply::simple(D3, F1)));
     }
 
     illegal_move_test!(

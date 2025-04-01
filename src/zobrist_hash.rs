@@ -46,7 +46,7 @@ impl ZobristHash {
 
         for color in Color::iter() {
             for piece in Piece::iter() {
-                for square in game.board().get(&color, &piece).iter() {
+                for square in game.board().get(color, piece).iter() {
                     hash.toggle_piece(color, piece, square);
                 }
             }

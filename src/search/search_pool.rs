@@ -604,7 +604,7 @@ impl SearchThreadPool {
             match to_play {
                 Some(ply) => {
                     self.pv_hash.push(game.hash(), ply);
-                    history.hard_push(&ply);
+                    history.hard_push(ply);
                     res.push(ply);
                 }
                 None => break,
@@ -638,13 +638,13 @@ impl SearchThreadPool {
 
         let best_move = best_move.or(self.move_in_state(&game, true));
         debug_assert!(
-            best_move.is_some_and(|x| game.is_legal(&x)),
+            best_move.is_some_and(|x| game.is_legal(x)),
             "generated best move not legal in position {} {:?}",
             game.to_fen(),
             best_move,
         );
         let ponder = best_move.and_then(|best| {
-            game.apply_ply(&best);
+            game.apply_ply(best);
             self.move_in_state(&game, true)
         });
 

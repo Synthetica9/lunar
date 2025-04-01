@@ -48,10 +48,9 @@ struct PawnHashTable([PHTEntry; PHT_SIZE]);
 impl PHTEntry {
     pub fn new(game: &Game, evaluator: &eval::Evaluator) -> PHTEntry {
         use Color::*;
-        use Piece::*;
 
         let [white_pawns, black_pawns] =
-            [White, Black].map(|color| game.board().get(&color, &Pawn));
+            [White, Black].map(|color| game.board().get(color, Piece::Pawn));
 
         let white = SidedPHTEntry::new(white_pawns, black_pawns);
         let black = SidedPHTEntry::new(black_pawns.flip_vertical(), white_pawns.flip_vertical());
@@ -79,7 +78,7 @@ impl PHTEntry {
         res
     }
 
-    pub fn get(&self, color: &Color) -> &SidedPHTEntry {
+    pub fn get(&self, color: Color) -> &SidedPHTEntry {
         match color {
             Color::White => &self.white,
             Color::Black => &self.black,

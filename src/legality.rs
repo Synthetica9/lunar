@@ -18,17 +18,17 @@ pub struct LegalityChecker {
 impl LegalityChecker {
     pub fn new(game: &Game) -> LegalityChecker {
         let board = game.board();
-        let king_square = board.king_square(&game.to_move());
+        let king_square = board.king_square(game.to_move());
         let king = Bitboard::from_square(king_square);
 
-        let king_attackers = board.squares_attacking(&game.to_move().other(), king_square);
+        let king_attackers = board.squares_attacking(game.to_move().other(), king_square);
         let check_count = king_attackers.popcount();
 
         let occupied = board.get_occupied();
 
         // If the king wasn't there, which squares would be attacked?
         let attackers_without_king =
-            board.attacked_squares_with_occupancy(&game.to_move().other(), occupied & !king);
+            board.attacked_squares_with_occupancy(game.to_move().other(), occupied & !king);
 
         let absolute_pin_pairs = game.absolute_pins();
         let absolute_pins = {
@@ -49,7 +49,7 @@ impl LegalityChecker {
         }
     }
 
-    fn leaves_king_in_check(&self, ply: &Ply, game: &Game) -> bool {
+    fn leaves_king_in_check(&self, ply: Ply, game: &Game) -> bool {
         // Explicit check that is only used in asserts and for en passant.
         let mut cpy = game.clone();
         cpy.apply_ply(ply);
@@ -57,12 +57,12 @@ impl LegalityChecker {
         let to_move = cpy.to_move();
         let attackers = cpy
             .board()
-            .squares_attacking(&to_move, cpy.board().king_square(&to_move.other()));
+            .squares_attacking(to_move, cpy.board().king_square(to_move.other()));
 
         !attackers.is_empty()
     }
 
-    pub fn is_legal(&self, ply: &Ply, game: &Game) -> bool {
+    pub fn is_legal(&self, ply: Ply, game: &Game) -> bool {
         debug_assert!(
             game.is_pseudo_legal(ply),
             "{} had illegal move: {ply:?}",
@@ -114,7 +114,7 @@ impl LegalityChecker {
 
                 let home_rank = self.king_square.rank();
                 let intermediate_square = Square::new(intermediate_file, home_rank);
-                self.is_legal(&Ply::simple(self.king_square, intermediate_square), game)
+                self.is_legal(Ply::simple(self.king_square, intermediate_square), game)
             } else {
                 true
             }

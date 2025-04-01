@@ -353,14 +353,13 @@ impl ThreadData {
             let mut r = NULL_MOVE_REDUCTION + 1;
             let game = self.game();
             let board = game.board();
-            let friendly_pieces = board.get_color(&game.to_move());
+            let friendly_pieces = board.get_color(game.to_move());
             if depth > 7 && friendly_pieces.popcount() >= 4 {
                 r += 1;
             }
 
             let side_to_move_only_kp = friendly_pieces
-                == (board.get_piece(&Piece::Pawn) | board.get_piece(&Piece::King))
-                    & friendly_pieces;
+                == (board.get_piece(Piece::Pawn) | board.get_piece(Piece::King)) & friendly_pieces;
 
             if !N::IS_PV
                 && !side_to_move_only_kp
@@ -368,7 +367,7 @@ impl ThreadData {
                 && !is_in_check
                 && !self.history.last_is_null()
             {
-                self.history.push(&Ply::NULL);
+                self.history.push(Ply::NULL);
                 let null_value = -self
                     .alpha_beta_search::<N::OtherSuccessors>(-beta, -(beta - ONE_MP), depth - r)?
                     .0;
@@ -433,8 +432,8 @@ impl ThreadData {
                     let game = self.game();
 
                     // Check that our guarantees are fulfilled:
-                    debug_assert!(!pseudo_legal || game.is_pseudo_legal(&ply));
-                    debug_assert!(!legal || legality_checker.is_legal(&ply, game));
+                    debug_assert!(!pseudo_legal || game.is_pseudo_legal(ply));
+                    debug_assert!(!legal || legality_checker.is_legal(ply, game));
 
                     // TODO: this pattern should probably be a library function somewhere
                     debug_assert!(
@@ -448,15 +447,15 @@ impl ThreadData {
                     };
 
                     if hash_moves_played.contains(&ply)
-                        || !(pseudo_legal || game.is_pseudo_legal(&ply))
-                        || !(legal || legality_checker.is_legal(&ply, game))
+                        || !(pseudo_legal || game.is_pseudo_legal(ply))
+                        || !(legal || legality_checker.is_legal(ply, game))
                     {
                         continue;
                     }
 
                     // At this point the moves need to be okay:
-                    debug_assert!(game.is_pseudo_legal(&ply));
-                    debug_assert!(legality_checker.is_legal(&ply, game));
+                    debug_assert!(game.is_pseudo_legal(ply));
+                    debug_assert!(legality_checker.is_legal(ply, game));
 
                     if hash_like {
                         hash_moves_played.push(ply);
@@ -464,12 +463,12 @@ impl ThreadData {
                 }
 
                 self.transposition_table
-                    .prefetch_read(self.history.game().speculative_hash_after_ply(&ply));
+                    .prefetch_read(self.history.game().speculative_hash_after_ply(ply));
 
                 any_moves_seen = true;
                 let is_first_move = i == 0;
 
-                self.history.push(&ply);
+                self.history.push(ply);
 
                 let is_check = self.game().is_in_check();
 
@@ -644,11 +643,11 @@ impl ThreadData {
         let legality_checker = crate::legality::LegalityChecker::new(self.game());
 
         for (ply, _millipawns) in candidates {
-            if !legality_checker.is_legal(&ply, self.game()) {
+            if !legality_checker.is_legal(ply, self.game()) {
                 continue;
             }
 
-            self.history.push(&ply);
+            self.history.push(ply);
             let score = -self.quiescence_search(-beta, -alpha);
             self.history.pop();
 

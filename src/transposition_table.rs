@@ -338,7 +338,7 @@ impl TranspositionTable {
         #[allow(clippy::identity_op)]
         {
             (((hash != new_hash) as u16) << 15) // 1 bit
-                | (((MAX_AGE - self.effective_age(&value)) as u16) << 9) // 6 bits
+                | (((MAX_AGE - self.effective_age(value)) as u16) << 9) // 6 bits
                 | ((value.depth as u16) << 1) // 8 bits
                 | (((value.value_type() == TranspositionEntryType::Exact) as u16) << 0) // 1 bit
                 | 0
@@ -399,7 +399,7 @@ impl TranspositionTable {
                     let value = slot.value();
                     *depths.entry(value.depth).or_insert(0) += 1;
                     slots[i] += 1;
-                    ages[self.effective_age(&value) as usize] += 1;
+                    ages[self.effective_age(value) as usize] += 1;
 
                     match value.value_type() {
                         Exact => exact += 1,
@@ -420,7 +420,7 @@ impl TranspositionTable {
         println!("Depth: {depths:?}");
     }
 
-    fn effective_age(&self, entry: &TranspositionEntry) -> u8 {
+    fn effective_age(&self, entry: TranspositionEntry) -> u8 {
         let global_age = self.age();
 
         (global_age - entry.age()) & MAX_AGE
@@ -445,10 +445,10 @@ pub fn pv_string(game: &Game, pv: &[Ply]) -> String {
             res.push_str("... ");
         }
 
-        res.push_str(&game.ply_name(ply));
+        res.push_str(&game.ply_name(*ply));
         res.push(' ');
 
-        game.apply_ply(ply);
+        game.apply_ply(*ply);
         is_first = false;
     }
 

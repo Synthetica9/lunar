@@ -43,14 +43,14 @@ impl History {
         res
     }
 
-    pub fn push(&mut self, ply: &Ply) {
+    pub fn push(&mut self, ply: Ply) {
         self.hash_history.push(self.game.hash());
         let undo = self.game.apply_ply(ply);
         *self.hash_count_mut(self.game.hash()) += 1;
         self.undo_history.push(undo);
     }
 
-    pub fn hard_push(&mut self, ply: &Ply) {
+    pub fn hard_push(&mut self, ply: Ply) {
         self.push(ply);
         if self.game.half_move() == 0 {
             self.hash_history = Vec::new();
@@ -118,10 +118,10 @@ impl History {
     pub fn is_finishing_sequence(&self, moves: &[Ply]) -> bool {
         let mut cpy = self.clone();
         for ply in moves {
-            if !self.game.is_legal(ply) {
+            if !self.game.is_legal(*ply) {
                 return false;
             }
-            cpy.hard_push(ply);
+            cpy.hard_push(*ply);
         }
         cpy.game_is_finished()
     }
