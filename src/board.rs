@@ -445,7 +445,7 @@ impl Board {
         let knights = self.get_piece(&Knight);
         let minors = bishops | knights;
         let white = self.get_color(&White);
-        let black = self.get_color(&White);
+        let black = self.get_color(&Black);
 
         // Both Sides have a bare King
         // One Side has a King and a Minor Piece against a bare King
