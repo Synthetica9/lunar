@@ -187,7 +187,7 @@ impl QueuedPly {
             | EqualCapture { .. }
             | WinningCapture { .. }
             | QuietMove { .. } => GuaranteeLevel::PseudoLegal,
-            KillerMove { ply } => GuaranteeLevel::HashLike,
+            KillerMove { .. } => GuaranteeLevel::HashLike,
         }
     }
 
@@ -203,8 +203,7 @@ impl QueuedPly {
         use QueuedPly::*;
 
         match self {
-            LosingCapture { .. } => YieldOtherMoves,
-            QuietMove { .. } => YieldOtherMoves,
+            LosingCapture { .. } | QuietMove { .. } => YieldOtherMoves,
             EqualCapture { .. } => YieldEqualCaptures,
             KillerMove { .. } => YieldKillerMoves,
             WinningCapture { .. } => YieldWinningCaptures,

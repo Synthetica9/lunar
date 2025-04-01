@@ -678,8 +678,4 @@ impl ThreadData {
             this[0] = Some(ply);
         }
     }
-
-    pub fn history_table(&self) -> Rc<HistoryTable> {
-        self.history_table.clone()
-    }
 }

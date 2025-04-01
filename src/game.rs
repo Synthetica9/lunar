@@ -424,6 +424,7 @@ impl Game {
         pseudo_legal_moves.iter().any(|x| x == ply)
     }
 
+    #[allow(clippy::let_and_return)]
     pub fn is_pseudo_legal(&self, ply: &Ply) -> bool {
         let fast = self._is_pseudo_legal(ply);
 
