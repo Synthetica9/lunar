@@ -343,11 +343,11 @@ impl MoveGenerator for StandardMoveGenerator {
                 let game = thread.game();
                 for ply in game.quiet_pseudo_legal_moves() {
                     let value = quiet_move_order(thread, ply);
-                    let is_check = game.is_check(ply);
+                    // let is_check = game.is_check(ply);
                     self.queue.push(QuietMove {
                         ply,
                         value,
-                        is_check,
+                        is_check: false,
                     });
                 }
                 self.queue.sort_unstable();
