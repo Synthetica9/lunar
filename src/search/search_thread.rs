@@ -26,6 +26,7 @@ use crate::transposition_table::TranspositionTable;
 use crate::zobrist_hash::ZobristHash;
 
 const N_KILLER_MOVES: usize = 2;
+const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 14;
 const NULL_MOVE_REDUCTION: usize = 2;
 const ONE_MP: Millipawns = Millipawns(1);
@@ -131,7 +132,7 @@ pub struct ThreadData {
     killer_moves: Vec<[Option<Ply>; N_KILLER_MOVES]>,
     history_table: std::rc::Rc<HistoryTable>,
     countermove: Box<CounterMove>,
-    counterhistory: Box<L2History>,
+    continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
 }
 
 impl ThreadData {
@@ -149,6 +150,9 @@ impl ThreadData {
             }
             map
         });
+
+        let continuation_histories =
+            std::array::from_fn(|_| Box::new(L2History::splat(Millipawns(0))));
 
         Self {
             command_channel,
@@ -170,7 +174,7 @@ impl ThreadData {
 
             history_table: Rc::new(HistoryTable::new()),
             countermove: Box::new(CounterMove::splat(Ply::NULL)),
-            counterhistory: Box::new(L2History::splat(Millipawns(0))),
+            continuation_histories,
         }
     }
 
@@ -201,7 +205,9 @@ impl ThreadData {
                         self.send_status_update();
                         self.history_table = Rc::new(HistoryTable::new());
                         self.countermove = Box::new(CounterMove::splat(Ply::NULL));
-                        self.counterhistory = Box::new(L2History::splat(Millipawns(0)));
+                        self.continuation_histories =
+                            std::array::from_fn(|_| Box::new(L2History::splat(Millipawns(0))));
+
                         // self.history_table.print_debug();
                     }
                     SearchThis(new_history, root_moves) => {
@@ -265,6 +271,16 @@ impl ThreadData {
                         })
                         .unwrap();
                     self.best_move = best_move;
+
+                    debug_assert!(self.game().hash() == self.root_hash);
+                    // Debugging move order.
+                    // let mut move_gen = StandardMoveGenerator::init(self);
+                    // let mut plies = Vec::new();
+                    // while let Some(ply) = move_gen.next(self) {
+                    //     plies.push(ply);
+                    // }
+
+                    // println!("{plies:?}")
                 }
                 Err(command) => return command,
             }
@@ -563,26 +579,28 @@ impl ThreadData {
                     if is_quiet {
                         self.insert_killer_move(ply, self.game().half_move_total() as usize);
 
-                        let own_last = self.history.peek_two();
-                        let oppt_last = self.history.peek();
                         let our_piece = undo.info.our_piece;
 
-                        let bonus = (depth * depth) as i32 * 10;
+                        let bonus = (depth * depth) as i32;
                         let to_move = self.game().to_move();
 
-                        let counterhistory = |our_dst, our_piece, delta| {
-                            if let Some(oppt_info) = oppt_last {
-                                let oppt_piece = oppt_info.info.our_piece;
-                                let oppt_dst = oppt_info.ply.dst();
-                                let index = (to_move, oppt_piece, oppt_dst, our_piece, our_dst);
-                                self.counterhistory.gravity_history(index, delta);
+                        let continuation_history = |idx: usize, our_dst, our_piece, delta| {
+                            if let Some(oppt_info) = self.history.peek_n(idx + 1) {
+                                let index: (
+                                    crate::basic_enums::Color,
+                                    (Piece, crate::square::Square),
+                                    (Piece, crate::square::Square),
+                                ) = (to_move, oppt_info.piece_dst(), (our_piece, our_dst));
+                                self.continuation_histories[idx].gravity_history(index, delta);
                             }
                         };
 
                         self.history_table
                             .update(to_move, our_piece, ply.dst(), bonus);
 
-                        counterhistory(ply.dst(), undo.info.our_piece, bonus);
+                        for i in 0..N_CONTINUATION_HISTORIES {
+                            continuation_history(i, ply.dst(), undo.info.our_piece, bonus);
+                        }
 
                         if let Some(c) = self.countermove_cell() {
                             c.set(ply);
@@ -590,7 +608,9 @@ impl ThreadData {
 
                         for (piece, square) in bad_quiet_moves {
                             self.history_table.update(to_move, piece, square, -bonus);
-                            counterhistory(square, our_piece, -bonus)
+                            for i in 0..N_CONTINUATION_HISTORIES {
+                                continuation_history(i, square, our_piece, -bonus);
+                            }
                         }
                     }
                     break;

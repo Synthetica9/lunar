@@ -259,6 +259,13 @@ pub struct UndoPly {
     pub half_move_clock_before: i16,
 }
 
+impl UndoPly {
+    pub fn piece_dst(&self) -> (Piece, Square) {
+        // Used for a lot of history heuristic stuffs.
+        (self.info.our_piece, self.ply.dst())
+    }
+}
+
 impl GameInfoForPly {
     pub fn new(game: &Game, ply: Ply) -> GameInfoForPly {
         debug_assert!(

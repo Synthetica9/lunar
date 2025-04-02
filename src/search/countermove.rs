@@ -129,7 +129,7 @@ where
 pub type CounterMove = Stats<(Color, Piece, Square), Ply>;
 
 // L2 history for both countermove history and follow-up history
-pub type L2History = Stats<(Color, Piece, Square, Piece, Square), Millipawns>;
+pub type L2History = Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>;
 
 impl<Index> Stats<Index, Millipawns>
 where

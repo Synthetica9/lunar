@@ -9,7 +9,10 @@ use crate::millipawns::{Millipawns, DRAW};
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
 
-use super::ThreadData;
+use super::{ThreadData, N_CONTINUATION_HISTORIES};
+
+const CONTINUATION_WEIGHTS: [i32; N_CONTINUATION_HISTORIES] = [10, 7];
+const DIRECT_HISTORY_WEIGHT: i32 = 10;
 
 fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns {
     // @first specifies whether to immediately quit after finding a plausible advantage.
@@ -211,15 +214,19 @@ impl QueuedPly {
     }
 }
 
+#[derive(Debug)]
 pub enum GeneratedMove {
     HashMove,
     Ply(Ply),
 }
 
+#[derive(Debug)]
 pub struct Generated {
     pub ply: GeneratedMove,
     pub guarantee: GuaranteeLevel,
 }
+
+#[derive(Debug)]
 
 pub enum GuaranteeLevel {
     HashLike,
@@ -344,7 +351,7 @@ impl MoveGenerator for StandardMoveGenerator {
                     });
                 }
                 self.queue.sort_unstable();
-                // println!("{}, {:?}", thread.game().to_fen(), self.queue);
+
                 self.phase = YieldOtherMoves;
             }
             YieldOtherMoves => {
@@ -372,20 +379,21 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
         .values;
 
     let color = game.to_move();
-    let square = ply.dst();
+    let dst = ply.dst();
+    let src = ply.src();
     let piece = game.board().occupant_piece(ply.src()).unwrap();
 
-    let mut value = thread.history_table.score(color, piece, square)
-        + square_table[ply.dst().as_index()] as i32
-        - square_table[ply.src().as_index()] as i32;
+    let mut value = thread.history_table.score(color, piece, dst) * DIRECT_HISTORY_WEIGHT
+        + square_table[dst as usize] as i32
+        - square_table[src as usize] as i32;
 
-    if let Some(oppt_info) = thread.history.peek() {
-        let oppt_piece = oppt_info.info.our_piece;
-        let oppt_dst = oppt_info.ply.dst();
-        value += thread
-            .counterhistory
-            .get((color, oppt_piece, oppt_dst, piece, square))
-            .0
+    for i in 0..N_CONTINUATION_HISTORIES {
+        if let Some(cont_hist) = thread.history.peek_n(i + 1) {
+            value += thread.continuation_histories[i]
+                .get((color, cont_hist.piece_dst(), (piece, dst)))
+                .0
+                * CONTINUATION_WEIGHTS[i]
+        }
     }
     Millipawns(value)
 }
