@@ -344,6 +344,7 @@ impl MoveGenerator for StandardMoveGenerator {
                     });
                 }
                 self.queue.sort_unstable();
+                // println!("{}, {:?}", thread.game().to_fen(), self.queue);
                 self.phase = YieldOtherMoves;
             }
             YieldOtherMoves => {
@@ -374,9 +375,17 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let square = ply.dst();
     let piece = game.board().occupant_piece(ply.src()).unwrap();
 
-    let value = thread.history_table.score(color, piece, square)
+    let mut value = thread.history_table.score(color, piece, square)
         + square_table[ply.dst().as_index()] as i32
         - square_table[ply.src().as_index()] as i32;
 
+    if let Some(oppt_info) = thread.history.peek() {
+        let oppt_piece = oppt_info.info.our_piece;
+        let oppt_dst = oppt_info.ply.dst();
+        value += thread
+            .counterhistory
+            .get((color, oppt_piece, oppt_dst, piece, square))
+            .0
+    }
     Millipawns(value)
 }

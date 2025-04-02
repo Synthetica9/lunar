@@ -129,4 +129,14 @@ impl History {
     pub(crate) fn peek(&self) -> Option<&UndoPly> {
         self.undo_history.last()
     }
+
+    pub(crate) fn peek_two(&self) -> Option<&UndoPly> {
+        let len = self.undo_history.len();
+
+        if len >= 2 {
+            self.undo_history.get(len - 2)
+        } else {
+            None
+        }
+    }
 }

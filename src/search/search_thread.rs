@@ -14,7 +14,7 @@ use smallvec::SmallVec;
 
 use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
-use super::countermove::CounterMove;
+use super::countermove::{CounterMove, L2History};
 use super::currently_searching::CurrentlySearching;
 use super::history_heuristic::HistoryTable;
 use crate::game::Game;
@@ -131,6 +131,7 @@ pub struct ThreadData {
     killer_moves: Vec<[Option<Ply>; N_KILLER_MOVES]>,
     history_table: std::rc::Rc<HistoryTable>,
     countermove: Box<CounterMove>,
+    counterhistory: Box<L2History>,
 }
 
 impl ThreadData {
@@ -166,8 +167,10 @@ impl ThreadData {
             best_move: None,
 
             killer_moves: Vec::new(),
+
             history_table: Rc::new(HistoryTable::new()),
             countermove: Box::new(CounterMove::splat(Ply::NULL)),
+            counterhistory: Box::new(L2History::splat(Millipawns(0))),
         }
     }
 
@@ -197,7 +200,8 @@ impl ThreadData {
                         // Send idle message:
                         self.send_status_update();
                         self.history_table = Rc::new(HistoryTable::new());
-                        self.countermove = Box::new(CounterMove::splat(Ply::NULL))
+                        self.countermove = Box::new(CounterMove::splat(Ply::NULL));
+                        self.counterhistory = Box::new(L2History::splat(Millipawns(0)));
                         // self.history_table.print_debug();
                     }
                     SearchThis(new_history, root_moves) => {
@@ -494,6 +498,7 @@ impl ThreadData {
                 } else {
                     // late move reduction
                     // https://www.chessprogramming.org/Late_Move_Reductions
+                    // TODO: deferred moves should be searched as if they were being searched in-order
 
                     let next_depth = if N::IS_PV || i < 5 || depth <= 3 || is_in_check || is_check {
                         depth - 1
@@ -558,14 +563,26 @@ impl ThreadData {
                     if is_quiet {
                         self.insert_killer_move(ply, self.game().half_move_total() as usize);
 
+                        let own_last = self.history.peek_two();
+                        let oppt_last = self.history.peek();
+                        let our_piece = undo.info.our_piece;
+
                         let bonus = (depth * depth) as i32 * 10;
                         let to_move = self.game().to_move();
-                        self.history_table.update(
-                            to_move,
-                            undo.info.our_piece,
-                            undo.ply.dst(),
-                            bonus,
-                        );
+
+                        let counterhistory = |our_dst, our_piece, delta| {
+                            if let Some(oppt_info) = oppt_last {
+                                let oppt_piece = oppt_info.info.our_piece;
+                                let oppt_dst = oppt_info.ply.dst();
+                                let index = (to_move, oppt_piece, oppt_dst, our_piece, our_dst);
+                                self.counterhistory.gravity_history(index, delta);
+                            }
+                        };
+
+                        self.history_table
+                            .update(to_move, our_piece, ply.dst(), bonus);
+
+                        counterhistory(ply.dst(), undo.info.our_piece, bonus);
 
                         if let Some(c) = self.countermove_cell() {
                             c.set(ply);
@@ -573,6 +590,7 @@ impl ThreadData {
 
                         for (piece, square) in bad_quiet_moves {
                             self.history_table.update(to_move, piece, square, -bonus);
+                            counterhistory(square, our_piece, -bonus)
                         }
                     }
                     break;
