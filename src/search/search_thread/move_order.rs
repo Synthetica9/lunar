@@ -11,7 +11,7 @@ use crate::ply::{Ply, SpecialFlag};
 
 use super::{ThreadData, N_CONTINUATION_HISTORIES};
 
-const CONTINUATION_WEIGHTS: [i32; N_CONTINUATION_HISTORIES] = [10, 7];
+const CONTINUATION_WEIGHTS: [i32; N_CONTINUATION_HISTORIES] = [40, 30];
 const DIRECT_HISTORY_WEIGHT: i32 = 10;
 
 fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns {
@@ -383,17 +383,19 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let src = ply.src();
     let piece = game.board().occupant_piece(ply.src()).unwrap();
 
-    let mut value = thread.history_table.score(color, piece, dst) * DIRECT_HISTORY_WEIGHT
-        + square_table[dst as usize] as i32
-        - square_table[src as usize] as i32;
+    let from_history = thread.history_table.score(color, piece, dst) * DIRECT_HISTORY_WEIGHT;
+    let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
 
+    let mut val = from_history + from_pesto;
     for i in 0..N_CONTINUATION_HISTORIES {
         if let Some(cont_hist) = thread.history.peek_n(i + 1) {
-            value += thread.continuation_histories[i]
+            let cont = thread.continuation_histories[i]
                 .get((color, cont_hist.piece_dst(), (piece, dst)))
                 .0
-                * CONTINUATION_WEIGHTS[i]
+                * CONTINUATION_WEIGHTS[i];
+            val += cont;
         }
     }
-    Millipawns(value)
+
+    Millipawns(val)
 }

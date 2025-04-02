@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 use crate::{basic_enums::Color, millipawns::Millipawns, piece::Piece, ply::Ply, square::Square};
 
-const MAX_HISTORY: i32 = 400;
+const MAX_HISTORY: i32 = 512;
 
 pub trait SmallFiniteEnum {
     const SIZE: usize;

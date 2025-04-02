@@ -586,11 +586,7 @@ impl ThreadData {
 
                         let continuation_history = |idx: usize, our_dst, our_piece, delta| {
                             if let Some(oppt_info) = self.history.peek_n(idx + 1) {
-                                let index: (
-                                    crate::basic_enums::Color,
-                                    (Piece, crate::square::Square),
-                                    (Piece, crate::square::Square),
-                                ) = (to_move, oppt_info.piece_dst(), (our_piece, our_dst));
+                                let index = (to_move, oppt_info.piece_dst(), (our_piece, our_dst));
                                 self.continuation_histories[idx].gravity_history(index, delta);
                             }
                         };
