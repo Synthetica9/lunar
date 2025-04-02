@@ -12,7 +12,7 @@ use crate::ply::{Ply, SpecialFlag};
 use super::{ThreadData, N_CONTINUATION_HISTORIES};
 
 const CONTINUATION_WEIGHTS: [i32; N_CONTINUATION_HISTORIES] = [40, 30];
-const DIRECT_HISTORY_WEIGHT: i32 = 10;
+const DIRECT_HISTORY_WEIGHT: i32 = 50;
 
 fn _static_exchange_evaluation(game: &Game, ply: Ply, first: bool) -> Millipawns {
     // @first specifies whether to immediately quit after finding a plausible advantage.
