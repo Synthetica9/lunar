@@ -161,7 +161,7 @@ impl ThreadData {
             transposition_table,
 
             searching: false,
-            history: History::new(&Game::new()),
+            history: History::new(Game::new()),
             nodes_searched: 0,
             total_nodes_searched: 0,
             quiescence_nodes_searched: 0,

@@ -29,7 +29,7 @@ impl UCIState {
     pub fn new() -> UCIState {
         let tt = Arc::new(TranspositionTable::new(1024 * 1024 * 16));
         UCIState {
-            history: History::new(&Game::new()),
+            history: History::new(Game::new()),
             transposition_table: tt.clone(),
             search_thread_pool: SearchThreadPool::new(1, tt),
             // stderr is the default log file
@@ -129,7 +129,7 @@ impl UCIState {
                 self.send("readyok");
             }
             "ucinewgame" => {
-                self.history = History::new(&Game::new());
+                self.history = History::new(Game::new());
                 self.search_thread_pool.base_instability = 1.0;
                 // TODO: should we explicitly wait for clear?
                 self.transposition_table.clear();
@@ -192,7 +192,7 @@ impl UCIState {
                     }
                     next = parts.next();
                 }
-                self.history = History::new(&Game::from_fen(&fen)?);
+                self.history = History::new(Game::from_fen(&fen)?);
                 for m in moves {
                     let ply = self.history.game().parse_uci_long_name(&m)?;
                     self.history.hard_push(ply);

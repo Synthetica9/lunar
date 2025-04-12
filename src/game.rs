@@ -15,7 +15,7 @@ use crate::square::Square;
 use crate::zobrist_hash::ZobristHash;
 
 // TODO: merge with board?
-#[derive(Debug, Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Game {
     board: Board,
     to_move: Color,
@@ -28,6 +28,12 @@ pub struct Game {
     half_move_total: i16,
     hash: ZobristHash,
     pawn_hash: ZobristHash,
+}
+
+impl std::fmt::Debug for Game {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Game::from_fen({:?}).unwrap()", self.to_fen())
+    }
 }
 
 pub const STARTING_POSITION: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -78,9 +84,39 @@ impl Game {
         self.hash = ZobristHash::from_game(self);
     }
 
-    pub fn check_valid(self) -> Result<(), String> {
+    pub fn check_valid(&self) -> Result<(), String> {
         self.board.check_valid()?;
-        // TODO: check that if castling is enabled, correct king and rooks are home.
+        for (color, dir) in self.castle_rights.iter() {
+            let home = color.home_rank();
+            let rook_file = dir.rook_col();
+            let rook_sq = Square::new(rook_file, home);
+            let king_sq = Square::new(crate::square::files::E, home);
+
+            if self.board.square(rook_sq) != Some((color, Piece::Rook)) {
+                return Err(format!(
+                    "Expected {color:?} rook on {rook_sq:?} (castling rights)"
+                ));
+            }
+
+            if self.board.square(king_sq) != Some((color, Piece::King)) {
+                return Err(format!(
+                    "Expected {color:?} king on {king_sq:?} (castling rights)"
+                ));
+            }
+        }
+
+        if let Some(square) = self.en_passant {
+            let other = self.to_move().other();
+            let pawn_present = self
+                .board()
+                .get(other, Piece::Pawn)
+                .shift(self.to_move().pawn_move_direction())
+                .get(square);
+
+            if !pawn_present {
+                return Err(format!("Expected {other:?} pawn on {square:?}"));
+            }
+        }
         Ok(())
     }
 
@@ -419,29 +455,7 @@ impl Game {
         self.is_pseudo_legal(ply) && LegalityChecker::new(self).is_legal(ply, self)
     }
 
-    pub fn is_pseudo_legal_naive(&self, ply: Ply) -> bool {
-        let pseudo_legal_moves = self.pseudo_legal_moves();
-        pseudo_legal_moves.iter().any(|x| *x == ply)
-    }
-
-    #[allow(clippy::let_and_return)]
     pub fn is_pseudo_legal(&self, ply: Ply) -> bool {
-        let fast = self._is_pseudo_legal(ply);
-
-        #[cfg(debug_assertions)]
-        {
-            let naive = self.is_pseudo_legal_naive(ply);
-
-            debug_assert!(
-                fast == naive,
-                "inconsistent is_pseudo_legal found. naive: {naive} fast: {fast}\n{ply:?} {}",
-                self.to_fen()
-            );
-        }
-        fast
-    }
-
-    fn _is_pseudo_legal(&self, ply: Ply) -> bool {
         use bitboard_map::*;
         use Piece::*;
         use SpecialFlag::*;
@@ -464,6 +478,7 @@ impl Game {
         }
 
         let mut is_attack = self.board.get_color(self.to_move.other()).get(dst);
+        let mut is_promotion = false;
 
         match ply.flag() {
             Some(Castling) => {
@@ -485,9 +500,10 @@ impl Game {
                 is_attack = true;
             }
             Some(Promotion(_)) => {
-                if piece != Pawn || color.pawn_promotion_rank() != dst.rank() {
+                if piece != Pawn {
                     return false;
                 }
+                is_promotion = true;
             }
             None => {}
         }
@@ -497,6 +513,9 @@ impl Game {
         let for_step = move |x: &'static BitboardMap| x[src].get(dst);
         match piece {
             Pawn => {
+                if is_promotion ^ (color.pawn_promotion_rank() == dst.rank()) {
+                    return false;
+                }
                 let occupied = self.board.get_occupied();
                 let is_double_move =
                     (dst.rank().as_u8() as i8 - src.rank().as_u8() as i8).abs() == 2;
@@ -548,9 +567,8 @@ impl Game {
     pub fn quiescence_moves(&self) -> Vec<Ply> {
         let legality_checker = LegalityChecker::new(self);
         self.quiescence_pseudo_legal_moves()
-            .iter()
-            .filter(|ply| legality_checker.is_legal(**ply, self))
-            .copied()
+            .into_iter()
+            .filter(|ply| legality_checker.is_legal(*ply, self))
             .collect()
     }
 
@@ -785,20 +803,7 @@ impl Game {
         }
         let mut count = 0;
         for ply in self.legal_moves() {
-            let pseudo_legal_naive = self.is_pseudo_legal_naive(ply);
-            let pseudo_legal_real = self.is_pseudo_legal(ply);
-
             let mut game = self.clone();
-            debug_assert!(
-                pseudo_legal_real,
-                "move not legal: {ply:?} in {}",
-                game.to_fen()
-            );
-            debug_assert!(
-                pseudo_legal_naive == pseudo_legal_real,
-                "mismatch in legality: {pseudo_legal_naive} != {pseudo_legal_real}, {ply:?} in {}",
-                game.to_fen()
-            );
 
             game.apply_ply(ply);
             if print {
@@ -866,6 +871,48 @@ impl ApplyPly for Game {
     }
 }
 
+impl quickcheck::Arbitrary for Game {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        let mut game = Game::new();
+        let steps = u32::arbitrary(g) % 150;
+
+        for _ in 0..steps {
+            let plies = game.legal_moves();
+            let Some(&ply) = g.choose(&plies) else {
+                break;
+            };
+            game.apply_ply(ply);
+        }
+        game
+    }
+
+    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+        let game = self.clone();
+
+        let drop_pieces =
+            self.board()
+                .to_piece_list()
+                .into_iter()
+                .filter_map(move |(color, piece, square)| {
+                    let mut game = game.clone();
+                    if matches!(piece, Piece::King) {
+                        return None;
+                    }
+
+                    game.toggle_piece(color, piece, square);
+
+                    if game.check_valid().is_err() {
+                        return None;
+                    }
+
+                    Some(game)
+                });
+
+        // TODO: drop rights that are present (en passant, castle, ...?)
+        Box::new(drop_pieces)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -892,26 +939,6 @@ mod tests {
         let game = Game::from_fen(double_bongcloud).unwrap();
         assert_eq!(game.to_fen(), double_bongcloud);
     }
-
-    // #[test]
-    // fn test_move_generation_basic() {
-    //     use crate::square::squares::*;
-
-    //     let mut game = Game::new();
-
-    //     let start_knight_moves = game.knight_moves();
-    //     println!("{:?}", start_knight_moves);
-    //     assert_eq!(start_knight_moves.len(), 4);
-
-    //     let start_pawn_moves = game.pawn_moves();
-    //     println!("{:?}", start_pawn_moves);
-    //     assert_eq!(start_pawn_moves.len(), 16);
-
-    //     game.apply_ply(&Ply::simple(E2, E4));
-    //     game.apply_ply(&Ply::simple(E7, E5));
-    //     // bongcloud available.
-    //     assert_eq!(game.simple_king_moves().len(), 1);
-    // }
 
     macro_rules! simple_move_test(
         ($name:ident, $fen:expr, $ply:expr, $expected_fen:expr) => {
@@ -1248,4 +1275,60 @@ mod tests {
         "Kf8",
         "5k2/8/8/8/8/8/8/R3K3 w Q - 1 2"
     );
+
+    quickcheck::quickcheck! {
+        fn all_generated_positions_vald(game: Game) -> Result<(), String>  {
+            game.check_valid()
+        }
+
+        fn pseudo_legal_moves_all_possible(game: Game) -> Result<(), String> {
+            let possible_plies = Ply::all_possible_plies();
+
+            for ply in game.pseudo_legal_moves() {
+                if !possible_plies.contains(&ply) {
+                    return Err(format!("found impossible ply: {ply:?}"));
+                }
+            }
+            Ok(())
+        }
+
+        fn is_pseudo_legal_correct(game: Game) -> Result<(), String> {
+            let possible_plies = Ply::all_possible_plies();
+            let pseudo_legal_moves = game.pseudo_legal_moves();
+
+            for ply in possible_plies {
+                let trivial = pseudo_legal_moves.contains(&ply);
+                let fast = game.is_pseudo_legal(ply);
+                if fast != trivial {
+                    return Err(format!(
+                        "Disagreement on {ply:?}. trivial: {trivial}, fast: {fast}"
+                    ));
+                }
+            }
+
+            Ok(())
+        }
+
+        fn hash_correct(game: Game) -> bool {
+            let mut game = game;
+            let hash = game.hash();
+            game.recalc_hash();
+            hash == game.hash
+        }
+
+        fn do_undo_correct(game: Game) -> bool {
+            let plies = game.legal_moves();
+            if game.is_in_mate() {
+                return true;
+            }
+
+            // TODO: replace with GamePlyPair
+            let ply = plies[game.hash.0 as usize % plies.len()];
+            let before = game.clone();
+            let mut after = before.clone();
+            let undo = after.apply_ply(ply);
+            after.undo_ply(&undo);
+            before == after
+        }
+    }
 }

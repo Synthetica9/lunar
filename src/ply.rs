@@ -210,6 +210,55 @@ impl Ply {
         // TODO: move to Game object
         !self.is_null() && (self.is_capture(game) || self.moved_piece(game) == Piece::Pawn)
     }
+
+    pub(crate) fn all_possible_plies() -> Vec<Ply> {
+        use crate::bitboard_map::*;
+
+        const PROMOTIONS: BitboardMap = WHITE_PAWN_ATTACKS_PROMOTION
+            .or(&WHITE_PAWN_MOVES_PROMOTION)
+            .or(&BLACK_PAWN_ATTACKS_PROMOTION)
+            .or(&BLACK_PAWN_MOVES_PROMOTION);
+
+        let mut res = Vec::new();
+        for src in Square::iter() {
+            res.extend(
+                Bitboard::queen_attacks(src, Bitboard::new())
+                    .iter()
+                    .map(|dst| Ply::simple(src, dst)),
+            );
+
+            for (rank, map) in [(3, BLACK_PAWN_ATTACKS), (4, WHITE_PAWN_ATTACKS)] {
+                if src.rank().0 == rank {
+                    res.extend(map[src].iter().map(|dst| Ply::en_passant(src, dst)));
+                }
+            }
+
+            res.extend(
+                crate::bitboard_map::KNIGHT_MOVES[src]
+                    .iter()
+                    .map(|dst| Ply::simple(src, dst)),
+            );
+
+            for piece in [Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
+                res.extend(
+                    PROMOTIONS[src]
+                        .iter()
+                        .map(|dst| Ply::promotion(src, dst, piece)),
+                );
+            }
+        }
+
+        {
+            use Square::*;
+            res.extend(
+                [(E1, C1), (E1, G1), (E8, C8), (E8, G8)]
+                    .into_iter()
+                    .map(|(src, dst)| Ply::castling(src, dst)),
+            );
+        }
+
+        res
+    }
 }
 
 pub fn _combination_moves(

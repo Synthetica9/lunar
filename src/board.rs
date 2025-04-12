@@ -10,7 +10,7 @@ use crate::{
     square::{File, Rank, Square},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Board {
     colors: [Bitboard; 2],
     pieces: [Bitboard; 6],

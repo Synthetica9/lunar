@@ -21,14 +21,15 @@ impl PartialEq for History {
 }
 
 impl History {
-    pub fn new(game: &Game) -> Self {
+    pub fn new(game: Game) -> Self {
+        let hash = game.hash();
         let mut res = Self {
-            game: game.clone(),
+            game,
             undo_history: Vec::new(),
             hash_history: Vec::new(),
             hash_table: Box::new([0; 1 << 14]),
         };
-        *res.hash_count_mut(game.hash()) = 1;
+        *res.hash_count_mut(hash) = 1;
         res
     }
 

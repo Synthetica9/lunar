@@ -43,6 +43,7 @@ nix = { version = "0.27", optional = true, features = [
 not_empty = "0.1"
 lru = { version = "0.12", default-features = false }
 linear-map = "1.2"
+quickcheck = "1.0.3"
 
 [build-dependencies]
 rand = { version = "0.8", features = ["small_rng"], default-features = false }

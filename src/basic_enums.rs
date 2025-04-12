@@ -1,7 +1,7 @@
 use crate::direction::{directions, Direction};
 
 use crate::ply::Ply;
-use crate::square::{files, ranks, Rank, Square};
+use crate::square::{files, ranks, File, Rank, Square};
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Color {
@@ -109,16 +109,29 @@ impl CastleDirection {
     }
 
     pub fn to_ply(self, color: &Color) -> Ply {
-        use CastleDirection::*;
-
         let src = color.king_home_square();
-        let dst_file = match self {
-            Kingside => files::G,
-            Queenside => files::C,
-        };
+        let dst_file = self.dst_file();
 
         let dst = Square::new(dst_file, color.home_rank());
         Ply::castling(src, dst)
+    }
+
+    pub(crate) fn rook_col(&self) -> File {
+        use CastleDirection::*;
+
+        match self {
+            Queenside => files::A,
+            Kingside => files::H,
+        }
+    }
+
+    pub(crate) fn dst_file(&self) -> File {
+        use CastleDirection::*;
+
+        match self {
+            Queenside => files::C,
+            Kingside => files::G,
+        }
     }
 }
 
