@@ -319,12 +319,10 @@ impl MoveGenerator for StandardMoveGenerator {
                 for ply in thread.game().quiescence_pseudo_legal_moves() {
                     let value = static_exchange_evaluation(thread.game(), ply);
 
-                    let command = {
-                        if value >= DRAW {
-                            WinningOrEqualCapture { ply, value }
-                        } else {
-                            LosingCapture { ply, value }
-                        }
+                    let command = if value >= DRAW {
+                        WinningOrEqualCapture { ply, value }
+                    } else {
+                        LosingCapture { ply, value }
                     };
 
                     self.queue.push(command);
@@ -335,11 +333,17 @@ impl MoveGenerator for StandardMoveGenerator {
                 self.phase = GenQuietMoves;
 
                 let move_total = thread.game().half_move_total() as usize;
-                if let Some(killer_moves) = thread.killer_moves.get(move_total) {
-                    for ply in killer_moves.iter().flatten().copied() {
-                        self.queue.push(KillerMove { ply });
-                    }
-                }
+
+                let killers = thread
+                    .killer_moves
+                    .get(move_total)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .copied()
+                    .map(|ply| KillerMove { ply });
+
+                self.queue.extend(killers);
 
                 if let Some(ply) = thread.countermove_cell().and_then(|x| x.get().wrap_null()) {
                     self.queue.push(KillerMove { ply });
