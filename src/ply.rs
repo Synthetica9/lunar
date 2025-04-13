@@ -211,6 +211,7 @@ impl Ply {
         !self.is_null() && (self.is_capture(game) || self.moved_piece(game) == Piece::Pawn)
     }
 
+    #[allow(dead_code)] // Used in tests
     pub(crate) fn all_possible_plies() -> Vec<Ply> {
         use crate::bitboard_map::*;
 

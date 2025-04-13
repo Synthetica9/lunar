@@ -1,3 +1,5 @@
+use quickcheck::Arbitrary;
+
 use crate::basic_enums::{CastleDirection, Color};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -110,6 +112,15 @@ impl CastleRights {
     }
 }
 
+impl IntoIterator for CastleRights {
+    type Item = <Self::IntoIter as Iterator>::Item;
+    type IntoIter = CastleRightsIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        CastleRightsIter(self)
+    }
+}
+
 pub struct CastleRightsIter(CastleRights);
 
 impl Iterator for CastleRightsIter {
@@ -129,5 +140,20 @@ impl Iterator for CastleRightsIter {
             3 => (Color::Black, CastleDirection::Queenside),
             _ => unreachable!(),
         })
+    }
+}
+
+impl Arbitrary for CastleRights {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        CastleRights(u8::arbitrary(g) % 16)
+    }
+
+    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+        let rights = *self;
+        let inner = self.iter().map(move |(color, direction)| {
+            let mask = CastleRights::single(color, direction);
+            mask.xor(rights)
+        });
+        Box::new(inner)
     }
 }

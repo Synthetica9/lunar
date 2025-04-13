@@ -41,25 +41,25 @@ impl ZobristHash {
         Self(0)
     }
 
-    pub fn from_game(game: &Game) -> Self {
+    pub fn from_game(game: &Game, pawns_only: bool) -> Self {
         let mut hash = Self::new();
 
-        for color in Color::iter() {
-            for piece in Piece::iter() {
-                for square in game.board().get(color, piece).iter() {
-                    hash.toggle_piece(color, piece, square);
-                }
+        for (color, piece, square) in game.board().to_piece_list() {
+            if !pawns_only || piece != Piece::Pawn {
+                hash.toggle_piece(color, piece, square);
             }
         }
 
-        hash.toggle_castle_rights(game.castle_rights());
+        if !pawns_only {
+            hash.toggle_castle_rights(game.castle_rights());
 
-        if let Some(square) = game.en_passant() {
-            hash.toggle_en_passant(square);
-        }
+            if let Some(square) = game.en_passant() {
+                hash.toggle_en_passant(square);
+            }
 
-        if game.to_move() == Color::Black {
-            hash.flip_side();
+            if game.to_move() == Color::Black {
+                hash.flip_side();
+            }
         }
 
         hash

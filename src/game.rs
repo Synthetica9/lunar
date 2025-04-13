@@ -81,14 +81,15 @@ impl Game {
 
     pub fn recalc_hash(&mut self) {
         // TODO: pawn hash
-        self.hash = ZobristHash::from_game(self);
+        self.hash = ZobristHash::from_game(self, false);
+        self.pawn_hash = ZobristHash::from_game(self, true);
     }
 
     pub fn check_valid(&self) -> Result<(), String> {
         self.board.check_valid()?;
         for (color, dir) in self.castle_rights.iter() {
             let home = color.home_rank();
-            let rook_file = dir.rook_col();
+            let rook_file = dir.rook_src_file();
             let rook_sq = Square::new(rook_file, home);
             let king_sq = Square::new(crate::square::files::E, home);
 
@@ -221,6 +222,36 @@ impl Game {
     pub fn speculative_hash_after_ply(&self, ply: Ply) -> ZobristHash {
         let mut res = self.hash();
         res._rough_apply(self, ply);
+        res
+    }
+
+    fn occupancy_after_ply(&self, ply: Ply) -> Bitboard {
+        // Should this be a function of Board instead?
+        let mut res = self.board().get_occupied();
+
+        res &= !Bitboard::from_square(ply.src());
+        res |= Bitboard::from_square(ply.dst());
+
+        match ply.flag() {
+            Some(SpecialFlag::Castling) => {
+                let direction = ply
+                    .castling_direction()
+                    .expect("Castling ply must have a valid direction");
+                let home_rank = self.to_move().home_rank();
+                let rook_src = Square::new(direction.rook_src_file(), home_rank);
+                let rook_dst = Square::new(direction.rook_dst_file(), home_rank);
+
+                res &= !Bitboard::from_square(rook_src);
+                res |= Bitboard::from_square(rook_dst);
+            }
+            Some(SpecialFlag::EnPassant) => {
+                let victim = Bitboard::from_square(ply.dst())
+                    .shift_unguarded(self.to_move.other().pawn_move_direction());
+                res &= !victim;
+            }
+            None | Some(SpecialFlag::Promotion(_)) => {}
+        }
+
         res
     }
 
@@ -572,7 +603,12 @@ impl Game {
             .collect()
     }
 
-    pub fn pins(&self, to: Square) -> SmallVec<[(Square, Square); 4]> {
+    pub fn blockers(
+        &self,
+        to: Square,
+        slider_color: Color,
+        blocker_color: Color,
+    ) -> SmallVec<[(Square, Square); 4]> {
         // TODO: move to Board
         let mut res = SmallVec::new();
 
@@ -584,13 +620,12 @@ impl Game {
             // sees first along every ray.
             let candidates = Bitboard::magic_attacks(to, other, occupied);
 
-            // Only friendly pieces can be pinned.
-            let candidates = candidates & board.get_color(self.to_move);
+            let candidates = candidates & board.get_color(blocker_color);
 
             // remove them and check if a relevant piece is behind them.
             let occupied = occupied & !candidates;
             let pinners = Bitboard::magic_attacks(to, other, occupied)
-                & board.get_color(self.to_move.other())
+                & board.get_color(slider_color)
                 & (board.get_piece(other) | queen);
             // TODO: up to here can be split out into a "pinners" function.
 
@@ -615,7 +650,7 @@ impl Game {
             .board
             .get(self.to_move, Piece::King)
             .first_occupied_or_a1();
-        self.pins(king)
+        self.blockers(king, self.to_move().other(), self.to_move())
     }
 
     pub fn check_count(&self) -> u8 {
@@ -638,9 +673,80 @@ impl Game {
     }
 
     pub fn is_check(&self, ply: Ply) -> bool {
-        let mut cpy = self.clone();
-        cpy.apply_ply(ply);
-        cpy.is_in_check()
+        let enemy_king = self.board().king_square(self.to_move().other());
+        let moved_piece = ply.moved_piece(self);
+        let dst = ply.dst();
+        let src = ply.src();
+
+        if let Some(x_ray) = self
+            .blockers(enemy_king, self.to_move, self.to_move)
+            .into_iter()
+            .find(|(block, _)| *block == src)
+            .map(|x| x.1)
+        {
+            let occupancy_after = self.occupancy_after_ply(ply);
+            // This is probably faster? No branch vs less memory
+            let attacks_after_xray = Bitboard::magic_attacks(x_ray, Piece::Queen, occupancy_after);
+            if attacks_after_xray.get(enemy_king) {
+                return true;
+            }
+        }
+
+        if let Some(flag) = ply.flag() {
+            let occupancy_after = self.occupancy_after_ply(ply);
+
+            let extra_attack = match flag {
+                SpecialFlag::Castling => {
+                    let rook_sq_after = Square::new(
+                        ply.castling_direction()
+                            .expect("Castling direction must be set")
+                            .rook_dst_file(),
+                        src.rank(),
+                    );
+                    Bitboard::magic_attacks(rook_sq_after, Piece::Rook, occupancy_after)
+                }
+                SpecialFlag::EnPassant => {
+                    let queens = self.board().get_piece(Piece::Queen);
+                    let friendly = self.board().get_color(self.to_move);
+                    for slider in [Piece::Bishop, Piece::Rook] {
+                        let bb = friendly & (queens | self.board().get_piece(slider));
+                        let ray_from_king =
+                            Bitboard::magic_attacks(enemy_king, slider, occupancy_after);
+                        if ray_from_king.intersects(bb) {
+                            return true;
+                        }
+                    }
+                    Bitboard::new()
+                }
+                SpecialFlag::Promotion(to) => match to {
+                    Piece::Knight => bitboard_map::KNIGHT_MOVES[dst],
+                    Piece::Bishop | Piece::Rook | Piece::Queen => {
+                        Bitboard::magic_attacks(dst, to, occupancy_after)
+                    }
+                    _ => unreachable!(),
+                },
+            };
+
+            if extra_attack.get(enemy_king) {
+                return true;
+            }
+        }
+        let occupancy = self.board().get_occupied();
+        let attacks = match moved_piece {
+            Piece::Pawn => {
+                let tbl = match self.to_move() {
+                    Color::White => bitboard_map::WHITE_PAWN_ATTACKS_ALL,
+                    Color::Black => bitboard_map::BLACK_PAWN_ATTACKS_ALL,
+                };
+                tbl[dst]
+            }
+            Piece::Knight => bitboard_map::KNIGHT_MOVES[dst],
+            Piece::Bishop | Piece::Rook | Piece::Queen => {
+                Bitboard::magic_attacks(dst, moved_piece, occupancy)
+            }
+            Piece::King => Bitboard::new(),
+        };
+        attacks.get(enemy_king)
     }
 
     pub fn is_in_mate(&self) -> bool {
@@ -887,29 +993,38 @@ impl quickcheck::Arbitrary for Game {
     }
 
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        let game = self.clone();
+        let for_board = self.board().shrink().map({
+            let game = self.clone();
+            move |x| {
+                let mut game = game.clone();
+                game.board = x;
+                game
+            }
+        });
+        let for_rights = self.castle_rights().shrink().map({
+            let game = self.clone();
+            move |x| {
+                let mut game = game.clone();
+                game.castle_rights = x;
+                game
+            }
+        });
+        let for_en_passant = Some(self.clone()).into_iter().flat_map(|mut game| {
+            game.en_passant?;
+            game.en_passant = None;
+            Some(game)
+        });
 
-        let drop_pieces =
-            self.board()
-                .to_piece_list()
-                .into_iter()
-                .filter_map(move |(color, piece, square)| {
-                    let mut game = game.clone();
-                    if matches!(piece, Piece::King) {
-                        return None;
-                    }
-
-                    game.toggle_piece(color, piece, square);
-
-                    if game.check_valid().is_err() {
-                        return None;
-                    }
-
-                    Some(game)
-                });
-
+        let candis = std::iter::empty()
+            .chain(for_board)
+            .chain(for_rights)
+            .chain(for_en_passant)
+            .flat_map(|mut game| {
+                game.recalc_hash();
+                game.check_valid().is_ok().then_some(game)
+            });
         // TODO: drop rights that are present (en passant, castle, ...?)
-        Box::new(drop_pieces)
+        Box::new(candis)
     }
 }
 
@@ -1276,6 +1391,20 @@ mod tests {
         "5k2/8/8/8/8/8/8/R3K3 w Q - 1 2"
     );
 
+    simple_move_test!(
+        test_en_passant_discovered_check,
+        "8/8/8/2R1pP1k/8/8/8/3K4 w - e6 0 2",
+        "fxe6+ e.p.",
+        "8/8/4P3/2R4k/8/8/8/3K4 b - - 0 2"
+    );
+
+    simple_move_test!(
+        test_en_passant_discovered_check_bishop,
+        "7k/8/8/4pP2/8/2B5/8/3K4 w - e6 0 2",
+        "fxe6+ e.p.",
+        "7k/8/4P3/8/8/2B5/8/3K4 b - - 0 2"
+    );
+
     quickcheck::quickcheck! {
         fn all_generated_positions_vald(game: Game) -> Result<(), String>  {
             game.check_valid()
@@ -1299,7 +1428,8 @@ mod tests {
             for ply in possible_plies {
                 let trivial = pseudo_legal_moves.contains(&ply);
                 let fast = game.is_pseudo_legal(ply);
-                if fast != trivial {
+                if fast != trivial  {
+                    println!("{}", game.to_fen());
                     return Err(format!(
                         "Disagreement on {ply:?}. trivial: {trivial}, fast: {fast}"
                     ));
@@ -1329,6 +1459,32 @@ mod tests {
             let undo = after.apply_ply(ply);
             after.undo_ply(&undo);
             before == after
+        }
+
+        fn is_check_correct(game: Game) -> Result<(), String> {
+            for ply in game.legal_moves() {
+                let mut game = game.clone();
+                let fast = game.is_check(ply);
+                game.apply_ply(ply);
+                let trivial = game.is_in_check();
+                if trivial != fast {
+                    return Err(format!("Disagreement in {ply:?}: trivial: {trivial}, fast: {fast}"))
+                }
+            }
+            Ok(())
+        }
+
+        fn occupancy_after_ply_correct(game: Game) -> Result<(), String> {
+            for ply in game.legal_moves() {
+                let mut game = game.clone();
+                let fast = game.occupancy_after_ply(ply);
+                game.apply_ply(ply);
+                let trivial = game.board().get_occupied();
+                if trivial != fast {
+                    return Err(format!("Disagreement in {ply:?}: trivial: {trivial:?}  fast: {fast:?}"))
+                }
+            }
+            Ok(())
         }
     }
 }

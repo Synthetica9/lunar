@@ -116,7 +116,7 @@ impl CastleDirection {
         Ply::castling(src, dst)
     }
 
-    pub(crate) fn rook_col(&self) -> File {
+    pub(crate) fn rook_src_file(self) -> File {
         use CastleDirection::*;
 
         match self {
@@ -125,7 +125,16 @@ impl CastleDirection {
         }
     }
 
-    pub(crate) fn dst_file(&self) -> File {
+    pub(crate) fn rook_dst_file(self) -> File {
+        use CastleDirection::*;
+
+        match self {
+            Queenside => files::D,
+            Kingside => files::F,
+        }
+    }
+
+    pub(crate) fn dst_file(self) -> File {
         use CastleDirection::*;
 
         match self {

@@ -1,9 +1,12 @@
 use std::cmp::Ordering;
 
+use quickcheck::Arbitrary;
+
 use crate::{
     basic_enums::Color,
     bitboard::{Bitboard, DARK_SQUARES},
     castlerights::CastleRights,
+    game::Game,
     millipawns::Millipawns,
     piece::Piece,
     ply::ApplyPly,
@@ -351,8 +354,8 @@ impl Board {
         occupancy: Bitboard,
     ) -> Bitboard {
         let mut res = Bitboard::new();
-        for sqr in self.get(color, piece).iter() {
-            res |= Bitboard::piece_attacks_from_with_occupancy(piece, sqr, color, occupancy);
+        for square in self.get(color, piece).iter() {
+            res |= Bitboard::piece_attacks_from_with_occupancy(piece, square, color, occupancy);
         }
         res
     }
@@ -565,6 +568,34 @@ impl ApplyPly for Board {
     fn toggle_castle_rights(&mut self, _rights: CastleRights) {}
     fn toggle_en_passant(&mut self, _square: Square) {}
     fn flip_side(&mut self) {}
+}
+
+impl Arbitrary for Board {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        Game::arbitrary(g).board().clone()
+    }
+
+    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+        let board = self.clone();
+        Box::new(
+            self.to_piece_list()
+                .into_iter()
+                .filter_map(move |(color, piece, square)| {
+                    let mut board = board.clone();
+                    if matches!(piece, Piece::King) {
+                        return None;
+                    }
+
+                    board.toggle_piece(color, piece, square);
+
+                    if board.check_valid().is_err() {
+                        return None;
+                    }
+
+                    Some(board)
+                }),
+        )
+    }
 }
 
 #[cfg(test)]
