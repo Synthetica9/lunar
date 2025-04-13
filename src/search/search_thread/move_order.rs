@@ -136,10 +136,9 @@ enum GeneratorPhase {
     GetHashMove,
     LastMovedLVA,
     GenQuiescenceMoves,
-    YieldWinningCaptures,
+    YieldWinningOrEqualCaptures,
     GenKillerMoves,
     YieldKillerMoves,
-    YieldEqualCaptures,
     GenQuietMoves,
     YieldOtherMoves,
     Finished,
@@ -157,14 +156,10 @@ pub enum QueuedPly {
         value: Millipawns,
         ply: Ply,
     },
-    EqualCapture {
-        value: Millipawns,
-        ply: Ply,
-    }, // see = 0 (TODO: MVV-LVA?)
     KillerMove {
         ply: Ply,
     },
-    WinningCapture {
+    WinningOrEqualCapture {
         value: Millipawns,
         ply: Ply,
     },
@@ -178,19 +173,17 @@ impl QueuedPly {
         match self {
             LosingCapture { ply, .. }
             | QuietMove { ply, .. }
-            | EqualCapture { ply, .. }
-            | KillerMove { ply, .. }
-            | WinningCapture { ply, .. } => ply,
+            | WinningOrEqualCapture { ply, .. }
+            | KillerMove { ply, .. } => ply,
         }
     }
 
     fn guarantee(self) -> GuaranteeLevel {
         use QueuedPly::*;
         match self {
-            LosingCapture { .. }
-            | EqualCapture { .. }
-            | WinningCapture { .. }
-            | QuietMove { .. } => GuaranteeLevel::PseudoLegal,
+            LosingCapture { .. } | WinningOrEqualCapture { .. } | QuietMove { .. } => {
+                GuaranteeLevel::PseudoLegal
+            }
             KillerMove { .. } => GuaranteeLevel::HashLike,
         }
     }
@@ -208,9 +201,8 @@ impl QueuedPly {
 
         match self {
             LosingCapture { .. } | QuietMove { .. } => YieldOtherMoves,
-            EqualCapture { .. } => YieldEqualCaptures,
             KillerMove { .. } => YieldKillerMoves,
-            WinningCapture { .. } => YieldWinningCaptures,
+            WinningOrEqualCapture { .. } => YieldWinningOrEqualCaptures,
         }
     }
 }
@@ -328,11 +320,10 @@ impl MoveGenerator for StandardMoveGenerator {
                     let value = static_exchange_evaluation(thread.game(), ply);
 
                     let command = {
-                        use std::cmp::Ordering::*;
-                        match value.cmp(&DRAW) {
-                            Greater => WinningCapture { ply, value },
-                            Less => LosingCapture { ply, value },
-                            Equal => EqualCapture { value, ply },
+                        if value >= DRAW {
+                            WinningOrEqualCapture { ply, value }
+                        } else {
+                            LosingCapture { ply, value }
                         }
                     };
 
