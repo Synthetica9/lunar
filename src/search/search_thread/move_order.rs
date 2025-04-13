@@ -134,6 +134,7 @@ fn test_see() {
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
 enum GeneratorPhase {
     GetHashMove,
+    LastMovedLVA,
     GenQuiescenceMoves,
     YieldWinningCaptures,
     GenKillerMoves,
@@ -299,10 +300,26 @@ impl MoveGenerator for StandardMoveGenerator {
 
         match self.phase {
             GetHashMove => {
-                self.phase = GenQuiescenceMoves;
+                self.phase = LastMovedLVA;
                 return Some(Generated {
                     ply: GeneratedMove::HashMove,
                     guarantee: HashLike,
+                });
+            }
+            LastMovedLVA => 'lva: {
+                self.phase = GenQuiescenceMoves;
+                let Some(last_undo) = thread.history.peek() else {
+                    break 'lva;
+                };
+
+                let game = thread.game();
+                let dst = last_undo.ply.dst();
+                let Some(lva) = game.board().least_valuable_attacker(dst, game.to_move()) else {
+                    break 'lva;
+                };
+                return Some(Generated {
+                    ply: GeneratedMove::Ply(Ply::simple(lva, dst)),
+                    guarantee: GuaranteeLevel::HashLike,
                 });
             }
             GenQuiescenceMoves => {

@@ -112,7 +112,7 @@ where
         self.get_cell(index).get()
     }
     pub fn set(&self, index: Index, val: Val) {
-        self.get_cell(index).set(val)
+        self.get_cell(index).set(val);
     }
 
     pub fn update<F>(&self, index: Index, f: F)

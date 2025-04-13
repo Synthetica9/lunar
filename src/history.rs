@@ -53,9 +53,12 @@ impl History {
 
     pub fn hard_push(&mut self, ply: Ply) {
         self.push(ply);
+        debug_assert!(!self.undo_history.is_empty());
         if self.game.half_move() == 0 {
-            self.hash_history = Vec::new();
-            self.undo_history = Vec::new();
+            // Drop all except last
+            self.hash_history.drain(0..self.hash_history.len() - 1);
+            self.undo_history.drain(0..self.undo_history.len() - 1);
+            debug_assert!(self.undo_history.len() <= 1);
         }
     }
 

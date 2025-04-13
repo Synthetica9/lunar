@@ -5,6 +5,7 @@ use quickcheck::Arbitrary;
 use crate::{
     basic_enums::Color,
     bitboard::{Bitboard, DARK_SQUARES},
+    bitboard_map,
     castlerights::CastleRights,
     game::Game,
     millipawns::Millipawns,
@@ -423,6 +424,33 @@ impl Board {
         };
 
         res
+    }
+
+    pub fn least_valuable_attacker(&self, square: Square, attacker_color: Color) -> Option<Square> {
+        let occupancy = self.get_occupied();
+
+        // Get all possible locations an attacker would have to be in for the attack to land.
+        // TODO: this should probably be a standalone function
+        let attacks_by_piece_to = |piece| match piece {
+            Piece::Pawn => match attacker_color {
+                Color::White => bitboard_map::BLACK_PAWN_ATTACKS_ALL[square],
+                Color::Black => bitboard_map::WHITE_PAWN_ATTACKS_ALL[square],
+            },
+            Piece::Knight => bitboard_map::KNIGHT_MOVES[square],
+            Piece::Bishop | Piece::Rook | Piece::Queen => {
+                Bitboard::magic_attacks(square, piece, occupancy)
+            }
+            Piece::King => bitboard_map::KING_MOVES[square],
+        };
+
+        let attacker_pieces = self.get_color(attacker_color);
+        for piece in Piece::iter() {
+            let bb = attacker_pieces & attacks_by_piece_to(piece) & self.get_piece(piece);
+            if let Some(sq) = bb.first_occupied() {
+                return Some(sq);
+            }
+        }
+        None
     }
 
     pub fn major_piece_or_pawn_present(&self) -> bool {
