@@ -519,7 +519,7 @@ impl ThreadData {
                     let next_depth = if N::IS_PV || i < 5 || depth <= 3 || is_in_check || is_check {
                         depth - 1
                     } else {
-                        depth / 3
+                        (2 * depth) / 3
                     };
 
                     if !is_deferred {
