@@ -516,12 +516,12 @@ impl ThreadData {
                     // https://www.chessprogramming.org/Late_Move_Reductions
                     // TODO: deferred moves should be searched as if they were being searched in-order
 
-                    let (next_depth, is_reduced) =
-                        if N::IS_PV || i < 5 || depth <= 3 || is_in_check || is_check {
-                            (depth - 1, false)
-                        } else {
-                            ((2 * depth) / 3, true)
-                        };
+                    let (next_depth, is_reduced) = if i < 5 || depth <= 3 || is_in_check || is_check
+                    {
+                        (depth - 1, false)
+                    } else {
+                        ((2 * depth) / 3, true)
+                    };
 
                     if !is_deferred {
                         self.currently_searching
