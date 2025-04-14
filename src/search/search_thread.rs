@@ -548,7 +548,7 @@ impl ThreadData {
                             .alpha_beta_search::<N::OtherSuccessors>(-beta, -alpha, next_depth)?
                             .0;
 
-                        if is_reduced && x >= beta {
+                        if is_reduced && x > alpha {
                             // TODO: should probably check again if we need to defer technically,
                             // but I don't expect that to be a huge issue
                             x = -self
