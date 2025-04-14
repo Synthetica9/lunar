@@ -491,8 +491,16 @@ impl ThreadData {
 
                 any_moves_seen = true;
                 let is_first_move = i == 0;
+                i += 1;
 
                 self.history.push(ply);
+
+                let is_quiet = {
+                    let undo = self.history.peek().expect("we just pushed to history");
+                    let is_queen_promo =
+                        undo.ply.flag() == Some(SpecialFlag::Promotion(Piece::Queen));
+                    undo.info.captured_piece.is_none() && !is_queen_promo
+                };
 
                 let is_check = self.game().is_in_check();
 
@@ -515,12 +523,22 @@ impl ThreadData {
                     // https://www.chessprogramming.org/Late_Move_Reductions
                     // TODO: deferred moves should be searched as if they were being searched in-order
 
-                    let (next_depth, is_reduced) = if i < 5 || depth <= 3 || is_in_check || is_check
-                    {
-                        (depth - ONE_DEPTH, false)
+                    // Weiss reduces by 0.20 + ln(depth) * ln(move number) / 3.35 for captures and
+                    // promotions and 1.35 + ln(depth) * ln(move number) / 2.75 for quiet moves.
+                    let reduction = if depth <= 3 || is_in_check || is_check {
+                        ONE_DEPTH
                     } else {
-                        ((2 * depth) / 3, true)
+                        let x = depth.int_log2() * Depth::from_num(i).int_log2();
+                        let (a, b) = if !is_quiet {
+                            (Depth::from_num(1.0 / 3.35), Depth::from_num(0.20))
+                        } else {
+                            (Depth::from_num(1.0 / 2.75), Depth::from_num(1.35))
+                        };
+                        a * x + b
                     };
+
+                    let is_reduced = reduction > ONE_DEPTH;
+                    let next_depth = depth - reduction;
 
                     if !is_deferred {
                         self.currently_searching
@@ -584,9 +602,6 @@ impl ThreadData {
                     best_move = Some(ply);
                 }
 
-                let is_queen_promo = undo.ply.flag() == Some(SpecialFlag::Promotion(Piece::Queen));
-                let is_quiet = undo.info.captured_piece.is_none() && !is_queen_promo;
-
                 if alpha >= beta {
                     if is_quiet {
                         self.insert_killer_move(ply, self.game().half_move_total() as usize);
@@ -627,8 +642,6 @@ impl ThreadData {
                 if is_quiet {
                     bad_quiet_moves.push((undo.info.our_piece, undo.ply.dst()));
                 }
-
-                i += 1;
             }
 
             if !any_moves_seen {
@@ -652,7 +665,7 @@ impl ThreadData {
             };
 
             let tte = TranspositionEntry::new(
-                depth.max(Depth::from_num(0)).to_num(),
+                depth.max(Depth::ZERO).to_num(),
                 best_move,
                 value,
                 value_type,
