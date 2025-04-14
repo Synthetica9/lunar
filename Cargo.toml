@@ -44,6 +44,7 @@ not_empty = "0.1"
 lru = { version = "0.12", default-features = false }
 linear-map = "1.2"
 quickcheck = "1.0.3"
+fixed = { version = "=1.16.1", default-features = false }
 
 [build-dependencies]
 rand = { version = "0.8", features = ["small_rng"], default-features = false }

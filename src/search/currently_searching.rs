@@ -1,6 +1,7 @@
 use std::cell::UnsafeCell;
 use std::sync::Arc;
 
+use super::search_thread::Depth;
 use crate::zobrist_hash::ZobristHash;
 
 pub const CS_SIZE: usize = 1 << 15;
@@ -84,7 +85,7 @@ impl CurrentlySearching {
         }
     }
 
-    pub fn defer_move(&self, hash: ZobristHash, depth: usize) -> bool {
+    pub fn defer_move(&self, hash: ZobristHash, depth: Depth) -> bool {
         if depth < DEFER_DEPTH {
             return false;
         }
@@ -92,7 +93,7 @@ impl CurrentlySearching {
         self.get(hash)
     }
 
-    pub fn starting_search(&self, hash: ZobristHash, depth: usize) {
+    pub fn starting_search(&self, hash: ZobristHash, depth: Depth) {
         if depth < DEFER_DEPTH {
             return;
         }
@@ -100,7 +101,7 @@ impl CurrentlySearching {
         self.put(hash);
     }
 
-    pub fn finished_search(&self, hash: ZobristHash, depth: usize) {
+    pub fn finished_search(&self, hash: ZobristHash, depth: Depth) {
         if depth < DEFER_DEPTH {
             return;
         }

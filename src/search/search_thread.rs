@@ -28,7 +28,8 @@ use crate::zobrist_hash::ZobristHash;
 const N_KILLER_MOVES: usize = 2;
 const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 14;
-const NULL_MOVE_REDUCTION: usize = 2;
+const ONE_DEPTH: Depth = Depth::ONE;
+const NULL_MOVE_REDUCTION: Depth = ONE_DEPTH.wrapping_add(ONE_DEPTH); // 2
 const ONE_MP: Millipawns = Millipawns(1);
 
 mod move_order;
@@ -109,6 +110,8 @@ impl Node for GenericNode {
     type FirstSuccessor = GenericNode;
     type OtherSuccessors = GenericNode;
 }
+
+pub type Depth = fixed::types::I16F16;
 
 pub struct ThreadData {
     searching: bool,
@@ -259,7 +262,7 @@ impl ThreadData {
             // TODO: narrow alpha and beta? (aspiration windows)
             // Tried this, available in aspiration-windows branch, but it
             // seems to significantly weaken self-play.
-            match self.alpha_beta_search::<RootNode>(LOSS, WIN, depth) {
+            match self.alpha_beta_search::<RootNode>(LOSS, WIN, Depth::from_num(depth)) {
                 Ok((score, best_move)) => {
                     self.send_status_update();
                     self.status_channel
@@ -309,7 +312,7 @@ impl ThreadData {
         &mut self,
         alpha: Millipawns,
         beta: Millipawns,
-        depth: usize,
+        depth: Depth,
     ) -> Result<(Millipawns, Option<Ply>), ThreadCommand>
     where
         N: Node,
@@ -363,24 +366,20 @@ impl ThreadData {
 
         let is_in_check = self.game().is_in_check();
 
-        if depth == 0 {
-            if is_in_check {
-                (value, best_move) = self.alpha_beta_search::<N>(alpha, beta, 1)?;
-            } else {
-                value = self.quiescence_search(alpha, beta);
-            }
+        if depth <= 0 && !is_in_check {
+            value = self.quiescence_search(alpha, beta);
         } else {
             // Null move pruning
             // http://mediocrechess.blogspot.com/2007/01/guide-null-moves.html
             // TODO: increase reduction on deeper depths?
             // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
 
-            let mut r = NULL_MOVE_REDUCTION + 1;
+            let mut r = NULL_MOVE_REDUCTION + ONE_DEPTH;
             let game = self.game();
             let board = game.board();
             let friendly_pieces = board.get_color(game.to_move());
             if depth > 7 && friendly_pieces.popcount() >= 4 {
-                r += 1;
+                r += ONE_DEPTH;
             }
 
             let side_to_move_only_kp = friendly_pieces
@@ -407,7 +406,7 @@ impl ThreadData {
             let iid_depth = depth / 2;
             let do_iid = N::IS_PV
                 && depth > 5
-                && (best_move.is_none() || from_tt.map_or(0, |x| x.depth) < iid_depth as u8);
+                && (best_move.is_none() || from_tt.map_or(0, |x| x.depth) < iid_depth);
             if do_iid {
                 // Internal iterative deepening
                 // TODO: Should this use FirstSuccessor? What are other engines doing?
@@ -500,13 +499,13 @@ impl ThreadData {
                 let x = if is_first_move {
                     best_move = Some(ply);
                     -self
-                        .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, depth - 1)?
+                        .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, depth - ONE_DEPTH)?
                         .0
                 } else if !is_deferred
                     && !N::IS_ROOT // TODO: Should we defer in the root? Probably not...?
                     && self
                         .currently_searching
-                        .defer_move(self.game().hash(), depth)
+                        .defer_move(self.game().hash(), depth.int())
                 {
                     deferred_moves.push_back(ply);
                     // Can't continue because that would skip the rollback
@@ -518,7 +517,7 @@ impl ThreadData {
 
                     let (next_depth, is_reduced) = if i < 5 || depth <= 3 || is_in_check || is_check
                     {
-                        (depth - 1, false)
+                        (depth - ONE_DEPTH, false)
                     } else {
                         ((2 * depth) / 3, true)
                     };
@@ -552,7 +551,11 @@ impl ThreadData {
                             // TODO: should probably check again if we need to defer technically,
                             // but I don't expect that to be a huge issue
                             x = -self
-                                .alpha_beta_search::<N::OtherSuccessors>(-beta, -alpha, depth - 1)?
+                                .alpha_beta_search::<N::OtherSuccessors>(
+                                    -beta,
+                                    -alpha,
+                                    depth - ONE_DEPTH,
+                                )?
                                 .0
                         }
                     };
@@ -590,7 +593,7 @@ impl ThreadData {
 
                         let our_piece = undo.info.our_piece;
 
-                        let bonus = (depth * depth) as i32;
+                        let bonus = (depth * depth).to_num();
                         let to_move = self.game().to_move();
 
                         let continuation_history = |idx: usize, our_dst, our_piece, delta| {
@@ -649,7 +652,7 @@ impl ThreadData {
             };
 
             let tte = TranspositionEntry::new(
-                depth as u8,
+                depth.max(Depth::from_num(0)).to_num(),
                 best_move,
                 value,
                 value_type,
