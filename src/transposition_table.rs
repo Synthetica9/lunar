@@ -172,7 +172,7 @@ impl TranspositionTable {
 
         let boxed = table.into_boxed_slice();
 
-        assert!(boxed.len() > 0, "tt was found empty!");
+        assert!(!boxed.is_empty(), "tt was found empty!");
         assert!(boxed.len().is_power_of_two(), "must be power of two");
 
         // TODO: can this be done better?

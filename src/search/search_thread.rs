@@ -3,7 +3,6 @@
 
 use std::cell::Cell;
 use std::collections::VecDeque;
-use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -574,7 +573,7 @@ impl ThreadData {
                                     -alpha,
                                     depth - ONE_DEPTH,
                                 )?
-                                .0
+                                .0;
                         }
                     };
 
@@ -747,9 +746,7 @@ impl ThreadData {
     }
 
     fn countermove_cell(&self) -> Option<&Cell<Ply>> {
-        let Some(last_info) = self.history.peek() else {
-            return None;
-        };
+        let last_info = self.history.peek()?;
         Some(self.countermove.get_cell((
             self.game().to_move(),
             last_info.info.our_piece,

@@ -579,7 +579,7 @@ impl SearchThreadPool {
         let mut candidates = vec![from_tt, from_old_pv];
 
         if candidates.len() == 1 || force {
-            candidates.push(legal.get(0).copied());
+            candidates.push(legal.first().copied());
         }
 
         candidates.into_iter().flatten().find(|x| legal.contains(x))

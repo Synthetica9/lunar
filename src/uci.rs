@@ -46,9 +46,8 @@ impl UCIState {
     }
 
     pub fn log(&mut self, message: &str) {
-        match &mut self.log_file {
-            Some(ref mut file) => writeln!(file, "{message}").unwrap(),
-            None => {}
+        if let Some(ref mut file) = &mut self.log_file {
+            writeln!(file, "{message}").unwrap();
         }
         if self.debug {
             self.info(message);
@@ -476,7 +475,7 @@ const NEW_FREE_TIME: TimePolicy = TimePolicy::FreeTime {
 
 struct AvailableOptions(&'static [UCIOption<'static>]);
 
-impl<'a> AvailableOptions {
+impl AvailableOptions {
     fn print_uci_options(&self, state: &mut UCIState) {
         use UCIOptionType::*;
         for line in self.0 {
@@ -499,7 +498,7 @@ impl<'a> AvailableOptions {
         }
     }
 
-    fn get(&self, name: &str) -> Result<&'a UCIOption, String> {
+    fn get(&self, name: &str) -> Result<&UCIOption, String> {
         for line in self.0 {
             if line.name == name {
                 return Ok(line);

@@ -52,11 +52,9 @@ impl Bitboard {
     }
 
     pub fn pop_square(&mut self) -> Option<Square> {
-        let square = self.first_occupied();
-        square.map(|s| {
-            self.unset_mut(s);
-            s
-        })
+        let square = self.first_occupied()?;
+        self.unset_mut(square);
+        Some(square)
     }
 
     #[must_use]
