@@ -2,6 +2,8 @@
 #![cfg_attr(feature = "hugepages", feature(allocator_api, slice_ptr_get))]
 #![cfg_attr(feature = "intrinsics", feature(core_intrinsics))]
 #![feature(generic_const_exprs)]
+#![feature(new_uninit)]
+#![feature(thread_local)]
 
 pub mod basic_enums;
 pub mod bitboard;

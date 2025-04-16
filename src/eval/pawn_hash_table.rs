@@ -180,7 +180,7 @@ impl SidedPHTEntry {
 }
 
 impl PawnHashTable {
-    pub fn new() -> PawnHashTable {
+    pub const fn new() -> PawnHashTable {
         unsafe { std::mem::zeroed() }
     }
 
@@ -211,15 +211,14 @@ impl Default for PawnHashTable {
     }
 }
 
-thread_local! {
-    static PAWN_HASH_TABLE: Box<RefCell<PawnHashTable>> = Box::default();
-}
+#[thread_local]
+static PAWN_HASH_TABLE: RefCell<PawnHashTable> = RefCell::new(PawnHashTable::new());
 
 pub fn get(game: &Game) -> PHTEntry {
-    let res = PAWN_HASH_TABLE.with(|x| x.as_ref().borrow().get(game).copied());
+    let res = PAWN_HASH_TABLE.borrow().get(game).copied();
 
     match res {
-        None => PAWN_HASH_TABLE.with(|x| *x.as_ref().borrow_mut().insert(game)),
+        None => *PAWN_HASH_TABLE.borrow_mut().insert(game),
         Some(result) => result,
     }
 }
