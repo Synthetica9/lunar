@@ -1,6 +1,9 @@
 use std::cell::Cell;
 
-use crate::{basic_enums::Color, millipawns::Millipawns, piece::Piece, ply::Ply, square::Square};
+use crate::{
+    basic_enums::Color, millipawns::Millipawns, piece::Piece, ply::Ply, square::Square,
+    zero_init::ZeroInit,
+};
 
 const MAX_HISTORY: i32 = 512;
 
@@ -92,12 +95,21 @@ where
 pub struct Stats<Index, Val>([Cell<Val>; Index::SIZE])
 where
     Index: SmallFiniteEnum,
-    [Val; Index::SIZE]: Sized;
+    [(); Index::SIZE]: Sized;
+
+// Safety: Val guarantees us that it is safely zero-initializable
+unsafe impl<Index, Val> ZeroInit for Stats<Index, Val>
+where
+    Val: ZeroInit,
+    Index: SmallFiniteEnum,
+    [(); Index::SIZE]: Sized,
+{
+}
 
 impl<Index, Val> Stats<Index, Val>
 where
     Index: SmallFiniteEnum,
-    [Val; Index::SIZE]: Sized,
+    [(); Index::SIZE]: Sized,
     Val: Copy,
 {
     pub fn splat(val: Val) -> Self {

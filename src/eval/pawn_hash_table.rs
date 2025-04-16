@@ -215,6 +215,7 @@ impl Default for PawnHashTable {
 static PAWN_HASH_TABLE: RefCell<PawnHashTable> = RefCell::new(PawnHashTable::new());
 
 pub fn get(game: &Game) -> PHTEntry {
+    // TODO: should use some sort of reference? 🥴
     let res = PAWN_HASH_TABLE.borrow().get(game).copied();
 
     match res {

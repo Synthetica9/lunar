@@ -8,6 +8,7 @@ use crate::game::Game;
 use crate::piece::Piece;
 use crate::plyset::PlySet;
 use crate::square::{files, Square};
+use crate::zero_init::ZeroInit;
 
 // Based on stockfish. From their implementation:
 /// A move needs 16 bits to be stored
@@ -261,6 +262,9 @@ impl Ply {
         res
     }
 }
+
+// Safety: mem-zero ply is the null ply, which is fine.
+unsafe impl ZeroInit for Ply {}
 
 pub fn _combination_moves(
     plyset: &mut PlySet,

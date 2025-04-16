@@ -23,11 +23,18 @@ impl PartialEq for History {
 impl History {
     pub fn new(game: Game) -> Self {
         let hash = game.hash();
+
+        let hash_table = Box::new_zeroed();
+        let hash_table = unsafe {
+            // Safety: we were gonna fill it with zeroes anyways.
+            hash_table.assume_init()
+        };
+
         let mut res = Self {
             game,
             undo_history: Vec::new(),
             hash_history: Vec::new(),
-            hash_table: Box::new([0; 1 << 14]),
+            hash_table,
         };
         *res.hash_count_mut(hash) = 1;
         res

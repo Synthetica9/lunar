@@ -23,6 +23,7 @@ use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
 use crate::transposition_table::TranspositionTable;
+use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
 
 const N_KILLER_MOVES: usize = 2;
@@ -133,7 +134,7 @@ pub struct ThreadData {
     currently_searching: CurrentlySearching,
 
     killer_moves: Vec<[Option<Ply>; N_KILLER_MOVES]>,
-    history_table: std::rc::Rc<HistoryTable>,
+    history_table: Box<HistoryTable>,
     countermove: Box<CounterMove>,
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
 }
@@ -154,8 +155,7 @@ impl ThreadData {
             map
         });
 
-        let continuation_histories =
-            std::array::from_fn(|_| Box::new(L2History::splat(Millipawns(0))));
+        let continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
 
         Self {
             command_channel,
@@ -175,8 +175,8 @@ impl ThreadData {
 
             killer_moves: Vec::new(),
 
-            history_table: Rc::new(HistoryTable::new()),
-            countermove: Box::new(CounterMove::splat(Ply::NULL)),
+            history_table: ZeroInit::zero_box(),
+            countermove: ZeroInit::zero_box(),
             continuation_histories,
         }
     }
@@ -206,10 +206,10 @@ impl ThreadData {
                         self.searching = false;
                         // Send idle message:
                         self.send_status_update();
-                        self.history_table = Rc::new(HistoryTable::new());
-                        self.countermove = Box::new(CounterMove::splat(Ply::NULL));
-                        self.continuation_histories =
-                            std::array::from_fn(|_| Box::new(L2History::splat(Millipawns(0))));
+
+                        self.history_table = ZeroInit::zero_box();
+                        self.countermove = ZeroInit::zero_box();
+                        self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
 
                         // self.history_table.print_debug();
                     }
@@ -465,7 +465,7 @@ impl ThreadData {
                         "When we are in the root, we will only see legal moves."
                     );
 
-                    #[cfg(not(debug_assert))]
+                    #[cfg(not(debug_assertions))]
                     unsafe {
                         std::intrinsics::assume(matches!(guarantee, Legal) || !N::IS_ROOT);
                     };

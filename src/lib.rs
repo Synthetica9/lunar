@@ -2,7 +2,7 @@
 #![cfg_attr(feature = "hugepages", feature(allocator_api, slice_ptr_get))]
 #![cfg_attr(feature = "intrinsics", feature(core_intrinsics))]
 #![feature(generic_const_exprs)]
-#![feature(new_uninit)]
+#![feature(new_zeroed_alloc)]
 #![feature(thread_local)]
 
 pub mod basic_enums;
@@ -28,6 +28,7 @@ pub mod square;
 pub mod transposition_table;
 pub mod uci;
 pub mod values;
+pub mod zero_init;
 pub mod zobrist_hash;
 
 // pub mod build;

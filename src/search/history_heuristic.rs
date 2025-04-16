@@ -1,12 +1,15 @@
 use std::cell::Cell;
 
-use crate::{basic_enums::Color, piece::Piece, square::Square};
+use crate::{basic_enums::Color, piece::Piece, square::Square, zero_init::ZeroInit};
 
 const HISTORY_SIZE: usize = 2 * 6 * 64;
 const MAX_HISTORY: i32 = 512;
 
 #[derive(Debug)]
 pub struct HistoryTable([Cell<i32>; HISTORY_SIZE]);
+
+// safety: trust me bro
+unsafe impl ZeroInit for HistoryTable {}
 
 impl HistoryTable {
     #[must_use]

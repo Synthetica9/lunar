@@ -1,3 +1,5 @@
+use crate::zero_init::ZeroInit;
+
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug)]
 pub struct Millipawns(pub i32);
 
@@ -15,6 +17,9 @@ impl Millipawns {
         }
     }
 }
+
+// Safety: zero millipawns is a valid value
+unsafe impl ZeroInit for Millipawns {}
 
 impl std::ops::Add for Millipawns {
     type Output = Millipawns;
