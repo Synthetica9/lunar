@@ -110,7 +110,7 @@ impl Evaluator {
 
                     pieces = pieces.perspective(color);
 
-                    x.get(&piece).dot_product(pieces)
+                    x.get(piece).dot_product(pieces)
                         + piece.base_value() * (pieces.popcount() as i32)
                 })
                 .sum()
@@ -359,13 +359,13 @@ impl DotProduct for SparseBoardParameter {
 pub trait ByPiece<'a> {
     type Output;
 
-    fn get(&'a self, piece: &Piece) -> &'a Self::Output;
+    fn get(&'a self, piece: Piece) -> &'a Self::Output;
 }
 
 impl<'a, T> ByPiece<'a> for PieceParameter<T> {
     type Output = T;
 
-    fn get(&'a self, piece: &Piece) -> &'a Self::Output {
+    fn get(&'a self, piece: Piece) -> &'a Self::Output {
         use Piece::*;
         match piece {
             Pawn => &self.pawn,

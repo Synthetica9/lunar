@@ -393,7 +393,7 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let square_table = &crate::eval::STATIC_PARAMETERS
         .piece_square_table
         .mg
-        .get(&piece)
+        .get(piece)
         .values;
 
     let color = game.to_move();
