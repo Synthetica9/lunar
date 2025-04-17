@@ -20,7 +20,7 @@ pub struct Game {
     board: Board,
     to_move: Color,
     castle_rights: CastleRights,
-    en_passant: Option<Square>,
+    en_passant: Bitboard,
     half_move: i16,
 
     // Full move clock isn't used anywhere? Move to higher level game state
@@ -52,7 +52,7 @@ impl Game {
     }
 
     pub const fn en_passant(&self) -> Option<Square> {
-        self.en_passant
+        self.en_passant.first_occupied()
     }
 
     pub const fn castle_rights(&self) -> CastleRights {
@@ -106,7 +106,14 @@ impl Game {
             }
         }
 
-        if let Some(square) = self.en_passant {
+        if self.en_passant.popcount() > 1 {
+            return Err(format!(
+                "Mulitple en passant squares set: {:?}",
+                self.en_passant
+            ));
+        }
+
+        if let Some(square) = self.en_passant() {
             let other = self.to_move().other();
             let pawn_present = self
                 .board()
@@ -128,8 +135,8 @@ impl Game {
         let to_move = Color::from_fen_part(parts.next().ok_or("No side to move")?)?;
         let castle_rights = CastleRights::from_fen_part(parts.next().ok_or("No castling rights")?)?;
         let en_passant = match parts.next().unwrap() {
-            "-" => None,
-            square => Some(Square::from_fen_part(square)?),
+            "-" => Bitboard::new(),
+            square => Bitboard::from_square(Square::from_fen_part(square)?),
         };
 
         let half_move = parts
@@ -171,7 +178,9 @@ impl Game {
             // (not just pseudo-legal.) See:
             // 4k3/4p3/8/r2P3K/8/8/8/8 b - - 0 1
             // where after ... e5 the fen doesn't show the en passant
-            self.en_passant.map_or("-".to_string(), Square::to_fen_part),
+            self.en_passant
+                .first_occupied()
+                .map_or("-".to_string(), Square::to_fen_part),
             self.half_move,
             self.full_move()
         )
@@ -193,7 +202,7 @@ impl Game {
         let info = crate::ply::GameInfoForPly::new(self, ply);
 
         // self.hash.apply_ply(&cln, ply);
-        self._apply_ply_with_info(info, ply, false);
+        self._apply_ply_with_info(info, ply);
 
         debug_assert!(self.board.is_valid(), "board got hecked. {ply:?}");
 
@@ -209,7 +218,7 @@ impl Game {
         self.half_move_total -= 1;
         self.half_move = undo_info.half_move_clock_before;
 
-        self._apply_ply_with_info(undo_info.info, undo_info.ply, true);
+        self._apply_ply_with_info(undo_info.info, undo_info.ply);
         debug_assert!(self.board.is_not_corrupt());
     }
 
@@ -389,7 +398,9 @@ impl Game {
 
     fn _en_passant_captures(&self, plyset: &mut PlySet) {
         // println!("Checking en passant captures");
-        let Some(ep) = self.en_passant else { return };
+        let Some(ep) = self.en_passant() else {
+            return;
+        };
 
         let color = self.to_move;
         let rev_move_table = match color {
@@ -525,7 +536,7 @@ impl Game {
                 return res;
             }
             Some(EnPassant) => {
-                if piece != Pawn || Some(dst) != self.en_passant {
+                if piece != Pawn || !self.en_passant.get(dst) {
                     return false;
                 }
                 is_attack = true;
@@ -959,13 +970,7 @@ impl ApplyPly for Game {
 
     fn toggle_en_passant(&mut self, en_passant: Square) {
         // debug_assert!(en_passant.rank().is_en_passant_rank())
-        self.en_passant = match self.en_passant {
-            Some(current) => {
-                debug_assert_eq!(current, en_passant);
-                None
-            }
-            None => Some(en_passant),
-        };
+        self.en_passant ^= Bitboard::from_square(en_passant);
         self.board.toggle_en_passant(en_passant);
         self.hash.toggle_en_passant(en_passant);
     }
@@ -1010,8 +1015,10 @@ impl quickcheck::Arbitrary for Game {
             }
         });
         let for_en_passant = Some(self.clone()).into_iter().flat_map(|mut game| {
-            game.en_passant?;
-            game.en_passant = None;
+            if game.en_passant.is_empty() {
+                return None;
+            };
+            game.en_passant = Bitboard::new();
             Some(game)
         });
 

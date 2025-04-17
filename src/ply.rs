@@ -373,7 +373,7 @@ pub(crate) trait ApplyPly {
 
     fn _apply_ply(&mut self, game: &Game, ply: Ply) {
         let info = GameInfoForPly::new(game, ply);
-        self._apply_ply_with_info(info, ply, false);
+        self._apply_ply_with_info(info, ply);
     }
 
     fn _rough_apply(&mut self, game: &Game, ply: Ply) {
@@ -396,7 +396,7 @@ pub(crate) trait ApplyPly {
         self.flip_side();
     }
 
-    fn _apply_ply_with_info(&mut self, info: GameInfoForPly, ply: Ply, invert: bool) {
+    fn _apply_ply_with_info(&mut self, info: GameInfoForPly, ply: Ply) {
         // ToDo: should probably return an error type
         use Piece::*;
 
@@ -409,10 +409,8 @@ pub(crate) trait ApplyPly {
 
         // update en passant rights
         // First, disable current en passant rights.
-        if !invert {
-            if let Some(en_passant) = info.en_passant {
-                self.toggle_en_passant(en_passant);
-            }
+        if let Some(en_passant) = info.en_passant {
+            self.toggle_en_passant(en_passant);
         }
 
         // Then, enable new en passant rights.
@@ -423,16 +421,6 @@ pub(crate) trait ApplyPly {
             if is_pawn_move && is_double_move {
                 let en_passant = Square::new(dst.file(), info.to_move.en_passant_rank());
                 self.toggle_en_passant(en_passant);
-            }
-        }
-
-        if invert {
-            if let Some(en_passant) = info.en_passant {
-                self.toggle_en_passant(en_passant);
-            }
-
-            if ply.is_null() {
-                return;
             }
         }
 
