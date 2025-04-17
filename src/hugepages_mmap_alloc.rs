@@ -1,11 +1,10 @@
 // https://stackoverflow.com/questions/69542979/how-can-i-align-memory-on-the-heap-in-a-box-in-a-convenient-way
 
 use std::alloc::*;
-use std::fs::File;
 use std::num::NonZeroUsize;
 use std::ptr::{slice_from_raw_parts_mut, NonNull};
 
-use nix::sys::mman::{mmap, munmap, MapFlags, ProtFlags};
+use nix::sys::mman::{mmap_anonymous, munmap, MapFlags, ProtFlags};
 
 pub struct HugePagesAlloc;
 
@@ -25,10 +24,9 @@ fn alloc(size: NonZeroUsize, with_hugepages: bool) -> Result<NonNull<[u8]>, Huge
         }
         flags
     };
-    let f: Option<File> = None;
-    let mmap_result = unsafe { mmap(None, size, prot_flags, map_flags, f, 0) }
+    let mmap_result = unsafe { mmap_anonymous(None, size, prot_flags, map_flags) }
         .map_err(|err| HugePagesAllocFailure::MMapErr(err))?;
-    let slc = slice_from_raw_parts_mut(mmap_result.cast::<u8>(), size.get());
+    let slc = slice_from_raw_parts_mut(mmap_result.cast::<u8>().as_ptr(), size.get());
     let nonnull = NonNull::new(slc).ok_or(HugePagesAllocFailure::Null)?;
     Ok(nonnull)
 }
@@ -54,6 +52,6 @@ unsafe impl Allocator for HugePagesAlloc {
         Err(AllocError)
     }
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        munmap(ptr.as_ptr().cast(), layout.size()).expect("munmap failed");
+        munmap(ptr.cast(), layout.size()).expect("munmap failed");
     }
 }

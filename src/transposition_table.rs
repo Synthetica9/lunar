@@ -197,9 +197,19 @@ impl TranspositionTable {
             let addr = self.table.as_mut_ptr().cast::<c_void>();
             let length = self.num_bytes();
 
-            let advise = MmapAdvise::MADV_RANDOM;
-            unsafe {
-                madvise(addr, length, advise).expect("madvise failed");
+            let advises = [
+                MmapAdvise::MADV_RANDOM,
+                MmapAdvise::MADV_DONTDUMP,
+                MmapAdvise::MADV_WILLNEED,
+            ];
+
+            let addr = std::ptr::NonNull::new(addr)
+                .expect("addr is not null (we initialized the hash table)");
+
+            for advise in advises {
+                unsafe {
+                    madvise(addr, length, advise).expect("madvise failed");
+                }
             }
         }
     }

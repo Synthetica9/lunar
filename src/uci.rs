@@ -318,6 +318,9 @@ impl UCIState {
                 }
                 self.log("Done waiting");
             }
+            "panic" => {
+                panic!("See you on the other side 💀");
+            }
             _ => {
                 self.log(&format!("Unknown command: {command}"));
             }
