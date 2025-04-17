@@ -45,7 +45,7 @@ impl ZobristHash {
         let mut hash = Self::new();
 
         for (color, piece, square) in game.board().to_piece_list() {
-            if !pawns_only || piece != Piece::Pawn {
+            if !pawns_only || piece == Piece::Pawn {
                 hash.toggle_piece(color, piece, square);
             }
         }

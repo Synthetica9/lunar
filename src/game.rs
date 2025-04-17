@@ -1449,8 +1449,10 @@ mod tests {
         fn hash_correct(game: Game) -> bool {
             let mut game = game;
             let hash = game.hash();
+            let pawn_hash = game.pawn_hash();
+
             game.recalc_hash();
-            hash == game.hash
+            hash == game.hash() && pawn_hash == game.pawn_hash()
         }
 
         fn do_undo_correct(game: Game) -> bool {
