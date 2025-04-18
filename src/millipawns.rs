@@ -8,6 +8,8 @@ pub const DRAW: Millipawns = Millipawns(0);
 pub const LOSS: Millipawns = Millipawns(-WIN.0);
 
 impl Millipawns {
+    pub const ONE: Self = Self(1);
+
     pub fn is_mate_in_n(self) -> Option<i32> {
         let diff = WIN.0 - self.0.abs();
         if diff <= 256 {

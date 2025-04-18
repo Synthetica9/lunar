@@ -4,6 +4,7 @@
 #![feature(generic_const_exprs)]
 #![feature(new_zeroed_alloc)]
 #![feature(thread_local)]
+#![feature(const_precise_live_drops)]
 
 pub mod basic_enums;
 pub mod bitboard;

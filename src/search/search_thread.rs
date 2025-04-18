@@ -21,16 +21,14 @@ use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
+use crate::search::parameters::SEARCH_PARAMETERS;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
 
 const N_KILLER_MOVES: usize = 2;
-const N_CONTINUATION_HISTORIES: usize = 2;
+pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 14;
-const ONE_DEPTH: Depth = Depth::ONE;
-const NULL_MOVE_REDUCTION: Depth = ONE_DEPTH.wrapping_add(ONE_DEPTH); // 2
-const ONE_MP: Millipawns = Millipawns(1);
 
 mod move_order;
 
@@ -300,7 +298,7 @@ impl ThreadData {
         // base_eval is cheap, and we divide it by 500. This gives us 2mp/pawn,
         // 6mp/knight, etc. This in concert makes it so we'd rather make our
         // opponent take the draw than lose material, but still keep both in mind.
-        DRAW + ONE_MP + crate::eval::base_eval(self.game()) / 500
+        DRAW + Millipawns::ONE + crate::eval::base_eval(self.game()) / 500
     }
 
     fn game(&self) -> &'_ Game {
@@ -373,12 +371,12 @@ impl ThreadData {
             // TODO: increase reduction on deeper depths?
             // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
 
-            let mut r = NULL_MOVE_REDUCTION + ONE_DEPTH;
+            let mut r: Depth = SEARCH_PARAMETERS.null_move_reduction + Depth::ONE;
             let game = self.game();
             let board = game.board();
             let friendly_pieces = board.get_color(game.to_move());
             if depth > 7 && friendly_pieces.popcount() >= 4 {
-                r += ONE_DEPTH;
+                r += Depth::ONE;
             }
 
             let side_to_move_only_kp = friendly_pieces
@@ -392,7 +390,11 @@ impl ThreadData {
             {
                 self.history.push(Ply::NULL);
                 let null_value = -self
-                    .alpha_beta_search::<N::OtherSuccessors>(-beta, -(beta - ONE_MP), depth - r)?
+                    .alpha_beta_search::<N::OtherSuccessors>(
+                        -beta,
+                        -(beta - Millipawns::ONE),
+                        depth - r,
+                    )?
                     .0;
                 self.history.pop();
                 if null_value >= beta {
@@ -402,9 +404,9 @@ impl ThreadData {
 
             best_move = from_tt.and_then(|x| x.best_move());
 
-            let iid_depth = depth / 2;
+            let iid_depth = depth * SEARCH_PARAMETERS.iid_factor;
             let do_iid = N::IS_PV
-                && depth > 5
+                && depth > SEARCH_PARAMETERS.min_iid_depth
                 && (best_move.is_none() || from_tt.map_or(0, |x| x.depth) < iid_depth);
             if do_iid {
                 // Internal iterative deepening
@@ -506,7 +508,7 @@ impl ThreadData {
                 let x = if is_first_move {
                     best_move = Some(ply);
                     -self
-                        .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, depth - ONE_DEPTH)?
+                        .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, depth - Depth::ONE)?
                         .0
                 } else if !is_deferred
                     && !N::IS_ROOT // TODO: Should we defer in the root? Probably not...?
@@ -525,18 +527,24 @@ impl ThreadData {
                     // Weiss reduces by 0.20 + ln(depth) * ln(move number) / 3.35 for captures and
                     // promotions and 1.35 + ln(depth) * ln(move number) / 2.75 for quiet moves.
                     let reduction = if depth <= 3 || is_in_check || is_check {
-                        ONE_DEPTH
+                        Depth::ONE
                     } else {
                         let x = depth.int_log2() * Depth::from_num(i).int_log2();
                         let (a, b) = if !is_quiet {
-                            (Depth::from_num(1.0 / 3.35), Depth::from_num(0.20))
+                            (
+                                SEARCH_PARAMETERS.lmr_quiescent_slope,
+                                SEARCH_PARAMETERS.lmr_quiescent_offset,
+                            )
                         } else {
-                            (Depth::from_num(1.0 / 2.75), Depth::from_num(1.35))
+                            (
+                                SEARCH_PARAMETERS.lmr_quiet_slope,
+                                SEARCH_PARAMETERS.lmr_quiet_offset,
+                            )
                         };
                         a * x + b
                     };
 
-                    let is_reduced = reduction > ONE_DEPTH;
+                    let is_reduced = reduction > Depth::ONE;
                     let next_depth = depth - reduction;
 
                     if !is_deferred {
@@ -547,7 +555,7 @@ impl ThreadData {
                     // Null-window search
                     let mut x = -self
                         .alpha_beta_search::<N::OtherSuccessors>(
-                            -alpha - ONE_MP,
+                            -alpha - Millipawns::ONE,
                             -alpha,
                             next_depth,
                         )?
@@ -571,7 +579,7 @@ impl ThreadData {
                                 .alpha_beta_search::<N::OtherSuccessors>(
                                     -beta,
                                     -alpha,
-                                    depth - ONE_DEPTH,
+                                    depth - Depth::ONE,
                                 )?
                                 .0;
                         }
@@ -649,7 +657,7 @@ impl ThreadData {
         }
 
         if value.is_mate_in_n().is_some() {
-            value -= ONE_MP * value.0.signum();
+            value -= Millipawns::ONE * value.0.signum();
         }
 
         // if depth >= 0 {

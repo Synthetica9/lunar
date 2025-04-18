@@ -1,6 +1,7 @@
 mod countermove;
 mod currently_searching;
 mod history_heuristic;
+mod parameters;
 mod search_pool;
 mod search_thread;
 
