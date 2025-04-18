@@ -16,6 +16,7 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 use super::countermove::{CounterMove, L2History};
 use super::currently_searching::CurrentlySearching;
 use super::history_heuristic::HistoryTable;
+use crate::eval;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -371,16 +372,16 @@ impl ThreadData {
             // TODO: increase reduction on deeper depths?
             // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
 
-            let mut r: Depth = SEARCH_PARAMETERS.null_move_reduction + Depth::ONE;
+            let mut r: Depth = SEARCH_PARAMETERS.nmr_offset + Depth::ONE;
             let game = self.game();
             let board = game.board();
             let friendly_pieces = board.get_color(game.to_move());
-            if depth > 7 && friendly_pieces.popcount() >= 4 {
-                r += Depth::ONE;
-            }
+            let kp =
+                (board.get_piece(Piece::Pawn) | board.get_piece(Piece::King)) & friendly_pieces;
+            r += eval::game_phase(board) * SEARCH_PARAMETERS.nmr_piece_slope;
+            r += depth * SEARCH_PARAMETERS.nmr_depth_slope;
 
-            let side_to_move_only_kp = friendly_pieces
-                == (board.get_piece(Piece::Pawn) | board.get_piece(Piece::King)) & friendly_pieces;
+            let side_to_move_only_kp = kp == friendly_pieces;
 
             if !N::IS_PV
                 && !side_to_move_only_kp
@@ -407,7 +408,7 @@ impl ThreadData {
             let iid_depth = depth * SEARCH_PARAMETERS.iid_factor;
             let do_iid = N::IS_PV
                 && depth > SEARCH_PARAMETERS.min_iid_depth
-                && (best_move.is_none() || from_tt.map_or(0, |x| x.depth) < iid_depth);
+                && (from_tt.map_or(0, |x| x.depth) < iid_depth);
             if do_iid {
                 // Internal iterative deepening
                 // TODO: Should this use FirstSuccessor? What are other engines doing?

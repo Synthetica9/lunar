@@ -26,7 +26,8 @@ const fn gamephase_inc(piece: Piece) -> i32 {
     }
 }
 
-fn game_phase(board: &Board) -> i32 {
+pub fn game_phase(board: &Board) -> i32 {
+    // TODO: move to board
     let res = Piece::iter()
         .map(|piece| board.get_piece(piece).popcount() as i32 * gamephase_inc(piece))
         .sum();

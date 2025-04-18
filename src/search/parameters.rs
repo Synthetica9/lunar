@@ -4,7 +4,10 @@ use super::search_thread::Depth;
 use super::search_thread::N_CONTINUATION_HISTORIES;
 
 pub struct SearchParameters {
-    pub null_move_reduction: Depth,
+    pub nmr_offset: Depth,
+    pub nmr_piece_slope: Depth,
+    pub nmr_depth_slope: Depth,
+
     pub min_iid_depth: Depth,
     pub iid_factor: Depth,
     pub lmr_quiescent_slope: Depth,
@@ -28,7 +31,10 @@ const fn const_depth(val: &str) -> Depth {
 }
 
 pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
-    null_move_reduction: const_depth("2"),
+    nmr_offset: const_depth("2"),
+    nmr_piece_slope: const_depth("0.1"),
+    nmr_depth_slope: const_depth("7").recip(),
+
     min_iid_depth: const_depth("5"),
     iid_factor: const_depth("0.5"),
     lmr_quiescent_slope: const_depth("3.35").recip(),
