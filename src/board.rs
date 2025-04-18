@@ -516,36 +516,45 @@ impl Board {
         let perspective = move |color| {
             // https://www.chessprogramming.org/Draw_Evaluation
 
-            let own = self.get_color(color);
-            let opponent = self.get_color(color.other());
+            let own_minors = self.get_color(color) & minors;
+            let opponent_minors = self.get_color(color.other()) & minors;
+
+            // There are only minor pieces and kings:
+            debug_assert_eq!(
+                self.get_occupied() & !self.get_piece(King),
+                own_minors | opponent_minors
+            );
 
             // Two Knights against the bare King [1]
-            if (own & bishops).is_empty() && opponent.is_empty() && (own & knights).popcount() <= 2
+            if (own_minors & bishops).is_empty()
+                && opponent_minors.is_empty()
+                && (own_minors & knights).popcount() <= 2
             {
                 return true;
             }
 
             // Both Sides have a King and a Minor Piece each
-            if (own & minors).popcount() == 1 && (opponent & minors).popcount() == 1 {
+            if own_minors.popcount() == 1 && opponent_minors.popcount() == 1 {
                 return true;
             }
 
             // The Weaker Side has a Minor Piece against two Knights
-            if (own & bishops).is_empty()
-                && (own & knights).popcount() == 2
-                && (opponent & minors).popcount() == 1
+            if (own_minors & bishops).is_empty()
+                && (own_minors & knights).popcount() == 2
+                && opponent_minors.popcount() == 1
             {
                 return true;
             }
 
             // Two Bishops draw against a Bishop
-            if (own & bishops).popcount() == 1 && (opponent & bishops).popcount() == 1 {
+            if (own_minors & bishops).popcount() == 2 && (opponent_minors & bishops).popcount() == 1
+            {
                 return true;
             }
 
             // Two Minor Pieces against one draw, except when the Stronger Side has a Bishop Pair
-            if (own & minors).popcount() == 2
-                && (opponent & minors).popcount() == 1
+            if own_minors.popcount() == 2
+                && opponent_minors.popcount() == 1
                 && !self.has_bishop_pair(color)
             {
                 return true;
@@ -667,6 +676,33 @@ mod tests {
             assert_eq!(Some(piece), board.occupant_piece(square));
             assert_eq!(Some(color), board.occupant_color(square));
             assert_eq!(Some((color, piece)), board.square(square));
+        }
+    }
+
+    #[test]
+    fn test_likely_draws() {
+        let fens = [
+            ("8/4k3/8/8/8/8/5K2/8", true, true),
+            ("4k3/8/8/8/8/8/2B5/4K3", true, true),
+            ("4k3/8/8/8/8/8/2B1B3/4K3", false, false),
+            ("4k3/8/8/8/8/8/3N1N2/4K3", false, true),
+            ("4k3/4b3/8/8/8/8/3BB3/4K3", false, true),
+            ("4k3/4n3/8/8/8/8/3BB3/4K3", false, false),
+            ("4k3/4n3/8/8/8/8/2B1B3/4K3", false, true),
+            ("4k3/4n3/8/8/8/8/3NB3/4K3", false, true),
+            ("4k3/4b3/8/8/8/8/3NN3/4K3", false, true),
+            ("4k3/8/8/8/8/8/4Q3/4K3", false, false),
+            ("4k3/1P6/8/8/8/8/8/4K3", false, false),
+            ("4k3/8/8/8/8/8/3BBB2/4K3", false, false),
+            ("4k3/4b3/8/8/8/8/3B4/4K3", true, true),
+            ("4k3/3b4/8/8/8/8/4B3/4K3", true, true),
+        ];
+
+        for (fen, fide, likely) in fens {
+            println!("Testing {fen}...");
+            let board = Board::from_fen_part(fen).unwrap();
+            assert_eq!(board.is_fide_draw(), fide);
+            assert_eq!(board.is_likely_draw(), likely);
         }
     }
 }
