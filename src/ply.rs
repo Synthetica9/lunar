@@ -173,10 +173,6 @@ impl Ply {
         matches!(self.flag(), Some(SpecialFlag::Castling))
     }
 
-    pub const fn is_special(&self) -> bool {
-        self.flag().is_some()
-    }
-
     pub fn moved_piece(&self, game: &Game) -> Piece {
         let src = self.src();
         match game.board().occupant_piece(src) {
@@ -532,9 +528,10 @@ pub(crate) trait ApplyPly {
     }
 }
 
+#[mutants::skip]
 impl std::fmt::Debug for Ply {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.is_special() {
+        if self.flag().is_some() {
             write!(
                 fmt,
                 "Ply::new({:?}, {:?}, {:?})",

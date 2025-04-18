@@ -33,6 +33,7 @@ debug = true
 opt-level = 3
 
 [dependencies]
+mutants = "0.0.3" # Just for the decorator
 crossbeam-channel = "0.5"
 smallvec = { version = "1.15", features = ["union"] }
 static_assertions = "1.1"

@@ -566,6 +566,7 @@ impl Board {
         perspective(White) || perspective(Black)
     }
 
+    #[mutants::skip]
     pub fn simple_render(&self) -> String {
         let mut res = String::new();
         for rank in (0..8).rev() {

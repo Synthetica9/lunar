@@ -57,15 +57,6 @@ impl Bitboard {
         Some(square)
     }
 
-    #[must_use]
-    pub const fn last_occupied(self) -> Option<Square> {
-        if self.is_empty() {
-            None
-        } else {
-            Some(Square::from_index(63 - self.0.leading_zeros() as u8))
-        }
-    }
-
     pub fn iter(self) -> BitboardSquareIter {
         BitboardSquareIter(self)
     }
@@ -270,6 +261,7 @@ impl Bitboard {
         self.gather_south().fill_north_singular()
     }
 
+    #[mutants::skip]
     pub fn simple_render(self) -> String {
         let mut res = String::new();
 
@@ -432,6 +424,7 @@ pub const KINGSIDE: Bitboard = QUEENSIDE.not_const();
 
 pub const HOME_RANKS: Bitboard = EMPTY.or(ROW_1).or(ROW_8);
 
+#[mutants::skip]
 impl Debug for Bitboard {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> std::fmt::Result {
         if self.is_empty() {
@@ -508,6 +501,24 @@ impl std::ops::Not for Bitboard {
 
     fn not(self) -> Self {
         self.not_const()
+    }
+}
+
+#[mutants::skip]
+impl quickcheck::Arbitrary for Bitboard {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        let inner = u64::arbitrary(g);
+        Self(inner)
+    }
+
+    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+        let clone = self.clone();
+
+        let iter = self
+            .iter()
+            .map(move |square| clone & !Bitboard::from_square(square));
+
+        Box::new(iter)
     }
 }
 
@@ -612,12 +623,10 @@ mod tests {
     }
 
     #[test]
-    fn test_first_last_occupied() {
+    fn test_first_occupied() {
         let bb = Bitboard::from_squares(&[A1, A8, H1, H8]);
         assert_eq!(bb.first_occupied(), Some(A1));
-        assert_eq!(bb.last_occupied(), Some(H8));
         assert_eq!(EMPTY.first_occupied(), None);
-        assert_eq!(EMPTY.last_occupied(), None);
     }
 
     #[test]
@@ -641,6 +650,13 @@ mod tests {
     }
 
     #[test]
+    fn test_size_hint() {
+        let bb = DARK_SQUARES;
+        let it = bb.iter();
+        assert_eq!(it.size_hint(), (32, Some(32)))
+    }
+
+    #[test]
     fn test_smear_cols() {
         assert_eq!(FULL, Bitboard(COL_A.0 * ROW_1.0));
         assert_eq!(FULL, ROW_1.fill_north_singular());
@@ -653,5 +669,21 @@ mod tests {
         println!("{}", bb.fill_north_singular().simple_render());
 
         assert_eq!(smeared, FULL);
+    }
+
+    quickcheck::quickcheck! {
+        fn test_from_squares(bb: Bitboard) -> bool {
+            let squares: Vec<_> = bb.iter().collect();
+
+            let reconstructed = Bitboard::from_squares(&squares);
+            assert_eq!(reconstructed, bb);
+
+            let mut doubled = squares.clone();
+            doubled.extend(squares.iter());
+            let doubled_reconstructed = Bitboard::from_squares(&doubled);
+            assert_eq!(doubled_reconstructed, bb);
+
+            true
+        }
     }
 }

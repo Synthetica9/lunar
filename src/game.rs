@@ -982,6 +982,7 @@ impl ApplyPly for Game {
     }
 }
 
+#[mutants::skip]
 impl quickcheck::Arbitrary for Game {
     fn arbitrary(g: &mut quickcheck::Gen) -> Self {
         let mut game = Game::new();
@@ -1494,6 +1495,44 @@ mod tests {
                 }
             }
             Ok(())
+        }
+
+        fn is_some_mate_correct(game: Game) -> quickcheck::TestResult {
+            let mut has_mate = false;
+            for ply in game.legal_moves() {
+                let mut game = game.clone();
+                if !game.is_mate(ply) {
+                    continue;
+                }
+
+                has_mate = true;
+
+                let checkmate = game.is_checkmate(ply);
+                let stalemate = game.is_stalemate(ply);
+                assert!(checkmate || stalemate);
+
+                game.apply_ply(ply);
+                assert!(game.is_in_mate());
+                assert!(!checkmate || game.is_in_checkmate());
+                assert!(!stalemate || game.is_in_stalemate());
+            }
+
+            if !has_mate {
+                quickcheck::TestResult::discard()
+            } else {
+                quickcheck::TestResult::from_bool(true)
+            }
+        }
+
+        fn parse_uci_long_name_correct(game: Game) -> bool {
+            for ply in game.legal_moves() {
+                let name = ply.long_name();
+                let parsed = game.parse_uci_long_name(&name).unwrap();
+
+                assert_eq!(parsed, ply);
+            }
+
+            true
         }
     }
 }
