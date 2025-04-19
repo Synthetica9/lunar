@@ -416,13 +416,8 @@ impl ThreadData {
                 && !self.history.last_is_null()
             {
                 self.history.push(Ply::NULL);
-                // TODO: should be CUT
                 let null_value = -self
-                    .alpha_beta_search::<N::OtherSuccessors>(
-                        -beta,
-                        -(beta - Millipawns::ONE),
-                        depth - r,
-                    )?
+                    .alpha_beta_search::<CutNode>(-beta, -(beta - Millipawns::ONE), depth - r)?
                     .0;
                 self.history.pop();
                 // TODO: best_move is always None here, should be either honest and hard-code None
@@ -436,15 +431,14 @@ impl ThreadData {
 
             best_move = from_tt.and_then(|x| x.best_move());
             let iid_depth = depth * search_parameter!(iid_factor);
-            let do_iid = N::is_pv()
+
+            // In ALL nodes, the order doesn't matter too much, in other nodes it's important.
+            let do_iid = (!N::is_all())
                 && depth > search_parameter!(min_iid_depth)
                 && (from_tt.map_or(0, |x| x.depth) < iid_depth);
             if do_iid {
                 // Internal iterative deepening
-                // TODO: Should be N
-                best_move = self
-                    .alpha_beta_search::<N::FirstSuccessor>(alpha, beta, iid_depth)?
-                    .1;
+                best_move = self.alpha_beta_search::<N>(alpha, beta, iid_depth)?.1;
             };
 
             let mut deferred_moves = VecDeque::new();
@@ -604,22 +598,16 @@ impl ThreadData {
                         // > more likely that other threads will search the move sooner.
                         // > (Note 5.2 in the pseudocode.)
 
-                        // TODO: Should be PV I think?
                         x = -self
-                            .alpha_beta_search::<N::OtherSuccessors>(-beta, -alpha, next_depth)?
+                            .alpha_beta_search::<PVNode>(-beta, -alpha, next_depth)?
                             .0;
 
                         if is_reduced && x > alpha {
                             // TODO: should probably check again if we need to defer technically,
                             // but I don't expect that to be a huge issue
 
-                            // TODO: should be PV I think?
                             x = -self
-                                .alpha_beta_search::<N::OtherSuccessors>(
-                                    -beta,
-                                    -alpha,
-                                    depth - Depth::ONE,
-                                )?
+                                .alpha_beta_search::<PVNode>(-beta, -alpha, depth - Depth::ONE)?
                                 .0;
                         }
                     };
