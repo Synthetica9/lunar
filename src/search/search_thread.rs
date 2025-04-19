@@ -392,6 +392,12 @@ impl ThreadData {
         if depth <= 0 && !is_in_check {
             value = self.quiescence_search(alpha, beta);
         } else {
+            if from_tt.is_none() {
+                // Internal iterative reduction
+                // https://www.chessprogramming.org/Internal_Iterative_Reductions
+                depth -= search_parameter!(iir_reduction);
+            };
+
             // Null move pruning
             // http://mediocrechess.blogspot.com/2007/01/guide-null-moves.html
             // TODO: increase reduction on deeper depths?
@@ -423,12 +429,6 @@ impl ThreadData {
                     return Ok((null_value, best_move));
                 }
             }
-
-            if from_tt.is_none() {
-                // Internal iterative reduction
-                // https://www.chessprogramming.org/Internal_Iterative_Reductions
-                depth -= search_parameter!(iir_reduction);
-            };
 
             let mut deferred_moves = VecDeque::new();
             let mut hash_moves_played = SmallVec::<[Ply; 4]>::new();
