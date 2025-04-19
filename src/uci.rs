@@ -485,6 +485,8 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         #[cfg(feature = "tunable")]
         tunable!(iir_reduction, fixed::types::I16F16),
         #[cfg(feature = "tunable")]
+        tunable!(iir_min_depth, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
         tunable!(lmr_quiescent_slope, fixed::types::I16F16),
         #[cfg(feature = "tunable")]
         tunable!(lmr_quiescent_offset, fixed::types::I16F16),
