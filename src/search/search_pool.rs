@@ -515,6 +515,7 @@ impl SearchThreadPool {
                     }
                     res
                 }
+                Nodes(n) => nodes_searched >= n || *best_depth >= 100,
             }
         } else {
             false

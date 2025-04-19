@@ -16,16 +16,15 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 use super::countermove::{CounterMove, L2History};
 use super::currently_searching::CurrentlySearching;
 use super::history_heuristic::HistoryTable;
-use crate::eval;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
-use crate::search::parameters::SEARCH_PARAMETERS;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
+use crate::{eval, search_parameter};
 
 const N_KILLER_MOVES: usize = 2;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
@@ -64,7 +63,15 @@ struct RootNode;
 
 struct PVNode;
 
-struct GenericNode;
+struct CutNode;
+
+struct AllNode;
+
+enum NodeType {
+    Pv,
+    Cut,
+    All,
+}
 
 trait Node
 where
@@ -72,42 +79,61 @@ where
     Self::FirstSuccessor: Node,
     Self::OtherSuccessors: Node,
 {
-    const IS_PV: bool;
-    const IS_ROOT: bool;
+    const TYPE: NodeType;
+    const IS_ROOT: bool = false;
 
     type Gen;
     type FirstSuccessor;
     type OtherSuccessors;
+
+    fn is_pv() -> bool {
+        matches!(Self::TYPE, NodeType::Pv)
+    }
+
+    fn is_cut() -> bool {
+        matches!(Self::TYPE, NodeType::Cut)
+    }
+
+    fn is_all() -> bool {
+        matches!(Self::TYPE, NodeType::All)
+    }
 }
 
 impl Node for RootNode {
-    const IS_PV: bool = true;
+    const TYPE: NodeType = NodeType::Pv;
     const IS_ROOT: bool = true;
 
     type Gen = RootMoveGenerator;
 
     type FirstSuccessor = PVNode;
-    type OtherSuccessors = GenericNode;
+    // TODO: Cut
+    type OtherSuccessors = CutNode;
 }
 
 impl Node for PVNode {
-    const IS_PV: bool = true;
-    const IS_ROOT: bool = false;
-
+    const TYPE: NodeType = NodeType::Pv;
     type Gen = StandardMoveGenerator;
 
     type FirstSuccessor = PVNode;
-    type OtherSuccessors = GenericNode;
+    type OtherSuccessors = CutNode;
 }
 
-impl Node for GenericNode {
-    const IS_PV: bool = false;
-    const IS_ROOT: bool = false;
+impl Node for CutNode {
+    const TYPE: NodeType = NodeType::Cut;
 
     type Gen = StandardMoveGenerator;
 
-    type FirstSuccessor = GenericNode;
-    type OtherSuccessors = GenericNode;
+    type FirstSuccessor = AllNode;
+    type OtherSuccessors = AllNode;
+}
+
+impl Node for AllNode {
+    const TYPE: NodeType = NodeType::All;
+
+    type Gen = StandardMoveGenerator;
+
+    type FirstSuccessor = CutNode;
+    type OtherSuccessors = CutNode;
 }
 
 pub type Depth = fixed::types::I16F16;
@@ -342,7 +368,7 @@ impl ThreadData {
 
         let from_tt = self.transposition_table.get(self.game().hash());
         if let Some(tte) = from_tt {
-            if depth <= tte.depth as usize && !self.history.may_be_repetition() && !N::IS_PV {
+            if depth <= tte.depth && !self.history.may_be_repetition() && !N::is_pv() {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
@@ -372,24 +398,25 @@ impl ThreadData {
             // TODO: increase reduction on deeper depths?
             // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
 
-            let mut r: Depth = SEARCH_PARAMETERS.nmr_offset + Depth::ONE;
+            let mut r: Depth = search_parameter!(nmr_offset) + Depth::ONE;
             let game = self.game();
             let board = game.board();
             let friendly_pieces = board.get_color(game.to_move());
             let kp =
                 (board.get_piece(Piece::Pawn) | board.get_piece(Piece::King)) & friendly_pieces;
-            r += eval::game_phase(board) * SEARCH_PARAMETERS.nmr_piece_slope;
-            r += depth * SEARCH_PARAMETERS.nmr_depth_slope;
+            r += eval::game_phase(board) * search_parameter!(nmr_piece_slope);
+            r += depth * search_parameter!(nmr_depth_slope);
 
             let side_to_move_only_kp = kp == friendly_pieces;
 
-            if !N::IS_PV
+            if !N::is_pv()
                 && !side_to_move_only_kp
                 && depth >= r
                 && !is_in_check
                 && !self.history.last_is_null()
             {
                 self.history.push(Ply::NULL);
+                // TODO: should be CUT
                 let null_value = -self
                     .alpha_beta_search::<N::OtherSuccessors>(
                         -beta,
@@ -398,20 +425,23 @@ impl ThreadData {
                     )?
                     .0;
                 self.history.pop();
+                // TODO: best_move is always None here, should be either honest and hard-code None
+                // or move the line that sets it from TT above this. Defer until after making
+                // ALL/CUT distinction. debug_assert to keep me honest here.
+                debug_assert_eq!(best_move, None, "See comment above, remove if fixed.");
                 if null_value >= beta {
                     return Ok((null_value, best_move));
                 }
             }
 
             best_move = from_tt.and_then(|x| x.best_move());
-
-            let iid_depth = depth * SEARCH_PARAMETERS.iid_factor;
-            let do_iid = N::IS_PV
-                && depth > SEARCH_PARAMETERS.min_iid_depth
+            let iid_depth = depth * search_parameter!(iid_factor);
+            let do_iid = N::is_pv()
+                && depth > search_parameter!(min_iid_depth)
                 && (from_tt.map_or(0, |x| x.depth) < iid_depth);
             if do_iid {
                 // Internal iterative deepening
-                // TODO: Should this use FirstSuccessor? What are other engines doing?
+                // TODO: Should be N
                 best_move = self
                     .alpha_beta_search::<N::FirstSuccessor>(alpha, beta, iid_depth)?
                     .1;
@@ -507,6 +537,9 @@ impl ThreadData {
                 let is_check = self.game().is_in_check();
 
                 let x = if is_first_move {
+                    // What else could we be overwriting here?
+                    debug_assert!(best_move == None || best_move == Some(ply));
+
                     best_move = Some(ply);
                     -self
                         .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, depth - Depth::ONE)?
@@ -517,6 +550,7 @@ impl ThreadData {
                         .currently_searching
                         .defer_move(self.game().hash(), depth.int())
                 {
+                    // TODO: don't actually make the move, do a hash based on ply and previous hash
                     deferred_moves.push_back(ply);
                     // Can't continue because that would skip the rollback
                     Millipawns(i32::MIN)
@@ -533,13 +567,13 @@ impl ThreadData {
                         let x = depth.int_log2() * Depth::from_num(i).int_log2();
                         let (a, b) = if !is_quiet {
                             (
-                                SEARCH_PARAMETERS.lmr_quiescent_slope,
-                                SEARCH_PARAMETERS.lmr_quiescent_offset,
+                                search_parameter!(lmr_quiescent_slope),
+                                search_parameter!(lmr_quiescent_offset),
                             )
                         } else {
                             (
-                                SEARCH_PARAMETERS.lmr_quiet_slope,
-                                SEARCH_PARAMETERS.lmr_quiet_offset,
+                                search_parameter!(lmr_quiet_slope),
+                                search_parameter!(lmr_quiet_offset),
                             )
                         };
                         a * x + b
@@ -569,6 +603,8 @@ impl ThreadData {
                         // > table of moves that are currently being searched. This makes it
                         // > more likely that other threads will search the move sooner.
                         // > (Note 5.2 in the pseudocode.)
+
+                        // TODO: Should be PV I think?
                         x = -self
                             .alpha_beta_search::<N::OtherSuccessors>(-beta, -alpha, next_depth)?
                             .0;
@@ -576,6 +612,8 @@ impl ThreadData {
                         if is_reduced && x > alpha {
                             // TODO: should probably check again if we need to defer technically,
                             // but I don't expect that to be a huge issue
+
+                            // TODO: should be PV I think?
                             x = -self
                                 .alpha_beta_search::<N::OtherSuccessors>(
                                     -beta,

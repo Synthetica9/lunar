@@ -1,5 +1,8 @@
 use fixed::ParseFixedError;
 
+#[cfg(feature = "tunable")]
+use std::sync::RwLock;
+
 use super::search_thread::Depth;
 use super::search_thread::N_CONTINUATION_HISTORIES;
 
@@ -46,4 +49,17 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     direct_history_weight: 50,
 };
 
-pub const SEARCH_PARAMETERS: SearchParameters = SEARCH_PARAMETERS_BASE;
+#[cfg(feature = "tunable")]
+pub static SEARCH_PARAMETERS: RwLock<SearchParameters> = RwLock::new(SEARCH_PARAMETERS_BASE);
+
+#[cfg(feature = "tunable")]
+#[macro_export]
+macro_rules! search_parameter (
+    ($name:ident) => { crate::search::parameters::SEARCH_PARAMETERS.read().unwrap().$name }
+);
+
+#[cfg(not(feature = "tunable"))]
+#[macro_export]
+macro_rules! search_parameter (
+    ($name:ident) => { crate::search::parameters::SEARCH_PARAMETERS_BASE.$name }
+);

@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 
 use crate::game::Game;
 use crate::history::History;
+use crate::search_parameter;
 use crate::transposition_table::TranspositionTable;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -232,6 +233,14 @@ impl UCIState {
                                 .map_err(|x| x.to_string())?;
                             time_policy = MoveTime(Duration::from_millis(move_time));
                         }
+                        "nodes" => {
+                            let nodes = parts
+                                .next()
+                                .ok_or("nodes not specified")?
+                                .parse::<usize>()
+                                .map_err(|x| x.to_string())?;
+                            time_policy = Nodes(nodes);
+                        }
                         "infinite" => time_policy = Infinite,
                         "wtime" | "btime" | "winc" | "binc" | "movestogo" => {
                             // All specify free time is gonna be used.
@@ -362,7 +371,7 @@ enum UCIOptionType<'a> {
 struct UCIOption<'a> {
     name: &'a str,
     typ: &'a UCIOptionType<'a>,
-    setter: &'a dyn Fn(&str, &mut UCIState) -> Result<(), String>,
+    setter: fn(&str, &mut UCIState) -> Result<(), String>,
 }
 
 const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
@@ -401,6 +410,22 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         Ok(())
     }
 
+    macro_rules! tunable (
+        ($name:ident, $tpe:ty) => {
+            UCIOption {
+                name: stringify!($name),
+                typ: &Str {
+                    // ew
+                    default: "<>",
+                },
+                setter: |value, _state| {
+                    crate::search::parameters::SEARCH_PARAMETERS.write().unwrap().$name = <$tpe>::from_str(value).unwrap();
+                    Ok(())
+                },
+            }
+        }
+    );
+
     &[
         UCIOption {
             name: "Hash",
@@ -410,7 +435,7 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
                 max: 1024 * 1024,
                 default: 128,
             },
-            setter: &hash_setter,
+            setter: hash_setter,
         },
         UCIOption {
             name: "Threads",
@@ -419,12 +444,12 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
                 max: 1024,
                 default: 1,
             },
-            setter: &thread_setter,
+            setter: thread_setter,
         },
         UCIOption {
             name: "Log File",
             typ: &Str { default: "" },
-            setter: &|value, state| {
+            setter: |value, state| {
                 let file = std::fs::File::create(value).map_err(|x| x.to_string())?;
                 state.log_file = Some(Box::new(file));
                 state.log("Log file set");
@@ -435,7 +460,7 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         UCIOption {
             name: "Ponder",
             typ: &Check { default: false },
-            setter: &|value, state| {
+            setter: |value, state| {
                 state.search_thread_pool.set_ponder(parse_bool(value)?);
                 Ok(())
             },
@@ -446,11 +471,29 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         UCIOption {
             name: "AutoPonder",
             typ: &Check { default: false },
-            setter: &|value, state| {
+            setter: |value, state| {
                 state.auto_ponder = parse_bool(value)?;
                 Ok(())
             },
         },
+        #[cfg(feature = "tunable")]
+        tunable!(nmr_offset, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(nmr_piece_slope, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(nmr_depth_slope, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(min_iid_depth, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(iid_factor, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(lmr_quiescent_slope, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(lmr_quiescent_offset, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(lmr_quiet_slope, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(lmr_quiet_offset, fixed::types::I16F16),
     ]
 });
 
@@ -466,6 +509,7 @@ pub enum TimePolicy {
         binc: std::time::Duration,
         movestogo: Option<u64>,
     },
+    Nodes(usize),
 }
 
 const NEW_FREE_TIME: TimePolicy = TimePolicy::FreeTime {
@@ -476,7 +520,7 @@ const NEW_FREE_TIME: TimePolicy = TimePolicy::FreeTime {
     movestogo: None,
 };
 
-struct AvailableOptions(&'static [UCIOption<'static>]);
+pub(crate) struct AvailableOptions(&'static [UCIOption<'static>]);
 
 impl AvailableOptions {
     fn print_uci_options(&self, state: &mut UCIState) {
