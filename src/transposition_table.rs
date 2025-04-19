@@ -141,7 +141,7 @@ impl TranspositionEntry {
         TranspositionEntry {
             depth,
             value,
-            best_move: Ply::unwrap_null(&best_move),
+            best_move: Ply::unwrap_null(best_move),
             age_value_type: age << (8 - AGE_BITS) | value_type as u8,
         }
     }

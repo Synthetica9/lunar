@@ -95,20 +95,20 @@ impl Ply {
 
     pub const NULL: Ply = Ply(0);
 
-    pub const fn is_null(&self) -> bool {
+    pub const fn is_null(self) -> bool {
         self.0 == 0
     }
 
-    pub const fn wrap_null(&self) -> Option<Ply> {
+    pub const fn wrap_null(self) -> Option<Ply> {
         // TODO: return option ref?
         if self.is_null() {
             None
         } else {
-            Some(*self)
+            Some(self)
         }
     }
 
-    pub fn unwrap_null(val: &Option<Ply>) -> Ply {
+    pub fn unwrap_null(val: Option<Ply>) -> Ply {
         val.unwrap_or(Ply::NULL)
     }
 
@@ -117,15 +117,15 @@ impl Ply {
         Ply::new(self.src(), self.dst(), self.flag())
     }
 
-    pub const fn dst(&self) -> Square {
+    pub const fn dst(self) -> Square {
         Square::from_index(self.0 as u8 & 0x3F)
     }
 
-    pub const fn src(&self) -> Square {
+    pub const fn src(self) -> Square {
         Square::from_index((self.0 >> 6) as u8 & 0x3F)
     }
 
-    pub fn long_name(&self) -> String {
+    pub fn long_name(self) -> String {
         let mut res = String::new();
         res.push_str(&self.src().to_fen_part());
         res.push_str(&self.dst().to_fen_part());
@@ -135,27 +135,27 @@ impl Ply {
         res
     }
 
-    pub const fn promotion_piece(&self) -> Option<Piece> {
+    pub const fn promotion_piece(self) -> Option<Piece> {
         match self.flag() {
             Some(SpecialFlag::Promotion(piece)) => Some(piece),
             _ => None,
         }
     }
 
-    pub const fn flag(&self) -> Option<SpecialFlag> {
+    pub const fn flag(self) -> Option<SpecialFlag> {
         let val = (self.0 >> 12) as u8;
         SpecialFlag::from_u8(val)
     }
 
-    pub const fn is_promotion(&self) -> bool {
+    pub const fn is_promotion(self) -> bool {
         matches!(self.flag(), Some(SpecialFlag::Promotion(_)))
     }
 
-    pub const fn is_en_passant(&self) -> bool {
+    pub const fn is_en_passant(self) -> bool {
         matches!(self.flag(), Some(SpecialFlag::EnPassant))
     }
 
-    pub const fn castling_direction(&self) -> Option<CastleDirection> {
+    pub const fn castling_direction(self) -> Option<CastleDirection> {
         match self.flag() {
             Some(SpecialFlag::Castling) => {
                 let dst = self.dst().file().as_u8();
@@ -169,11 +169,11 @@ impl Ply {
         }
     }
 
-    pub const fn is_castling(&self) -> bool {
+    pub const fn is_castling(self) -> bool {
         matches!(self.flag(), Some(SpecialFlag::Castling))
     }
 
-    pub fn moved_piece(&self, game: &Game) -> Piece {
+    pub fn moved_piece(self, game: &Game) -> Piece {
         let src = self.src();
         match game.board().occupant_piece(src) {
             Some(piece) => piece,
@@ -184,12 +184,12 @@ impl Ply {
         }
     }
 
-    pub const fn _captured_piece(&self, game: &Game) -> Option<Piece> {
+    pub const fn _captured_piece(self, game: &Game) -> Option<Piece> {
         // captured_piece, but doesn't track en passant.
         game.board().occupant_piece(self.dst())
     }
 
-    pub const fn captured_piece(&self, game: &Game) -> Option<Piece> {
+    pub const fn captured_piece(self, game: &Game) -> Option<Piece> {
         if self.is_en_passant() {
             debug_assert!(game.board().occupant_piece(self.dst()).is_none());
             Some(Piece::Pawn)
@@ -198,12 +198,12 @@ impl Ply {
         }
     }
 
-    pub const fn is_capture(&self, game: &Game) -> bool {
+    pub const fn is_capture(self, game: &Game) -> bool {
         // Todo: move to game object
         self.captured_piece(game).is_some()
     }
 
-    pub fn resets_halfmove_clock(&self, game: &Game) -> bool {
+    pub fn resets_halfmove_clock(self, game: &Game) -> bool {
         // TODO: move to Game object
         !self.is_null() && (self.is_capture(game) || self.moved_piece(game) == Piece::Pawn)
     }

@@ -431,7 +431,7 @@ impl ThreadData {
             }
 
             let mut deferred_moves = VecDeque::new();
-            let mut hash_moves_played = SmallVec::<[Ply; 4]>::new();
+            let mut hash_moves_played = [Ply::NULL; 8];
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
 
             let mut generator = N::Gen::init(self);
@@ -497,7 +497,10 @@ impl ThreadData {
                     debug_assert!(legality_checker.is_legal(ply, game));
 
                     if hash_like {
-                        hash_moves_played.push(ply);
+                        hash_moves_played
+                            .iter_mut()
+                            .find(|x| x.is_null())
+                            .map(|x| *x = ply);
                     }
                 }
 
