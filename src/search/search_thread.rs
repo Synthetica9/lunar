@@ -106,7 +106,6 @@ impl Node for RootNode {
     type Gen = RootMoveGenerator;
 
     type FirstSuccessor = PVNode;
-    // TODO: Cut
     type OtherSuccessors = CutNode;
 }
 
@@ -385,7 +384,7 @@ impl ThreadData {
             }
         }
 
-        let mut best_move = None;
+        let mut best_move = from_tt.and_then(|x| x.best_move());
         let mut value = Millipawns(i32::MIN + 12345);
 
         let is_in_check = self.game().is_in_check();
@@ -420,16 +419,11 @@ impl ThreadData {
                     .alpha_beta_search::<CutNode>(-beta, -(beta - Millipawns::ONE), depth - r)?
                     .0;
                 self.history.pop();
-                // TODO: best_move is always None here, should be either honest and hard-code None
-                // or move the line that sets it from TT above this. Defer until after making
-                // ALL/CUT distinction. debug_assert to keep me honest here.
-                debug_assert_eq!(best_move, None, "See comment above, remove if fixed.");
                 if null_value >= beta {
                     return Ok((null_value, best_move));
                 }
             }
 
-            best_move = from_tt.and_then(|x| x.best_move());
             let iid_depth = depth * search_parameter!(iid_factor);
 
             // In ALL nodes, the order doesn't matter too much, in other nodes it's important.
