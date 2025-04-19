@@ -483,9 +483,7 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         #[cfg(feature = "tunable")]
         tunable!(nmr_depth_slope, fixed::types::I16F16),
         #[cfg(feature = "tunable")]
-        tunable!(min_iid_depth, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(iid_factor, fixed::types::I16F16),
+        tunable!(iir_reduction, fixed::types::I16F16),
         #[cfg(feature = "tunable")]
         tunable!(lmr_quiescent_slope, fixed::types::I16F16),
         #[cfg(feature = "tunable")]

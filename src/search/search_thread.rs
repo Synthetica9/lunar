@@ -335,7 +335,7 @@ impl ThreadData {
         &mut self,
         alpha: Millipawns,
         beta: Millipawns,
-        depth: Depth,
+        mut depth: Depth,
     ) -> Result<(Millipawns, Option<Ply>), ThreadCommand>
     where
         N: Node,
@@ -424,14 +424,10 @@ impl ThreadData {
                 }
             }
 
-            let iid_depth = depth * search_parameter!(iid_factor);
-
-            let do_iid = N::is_pv()
-                && depth > search_parameter!(min_iid_depth)
-                && (from_tt.map_or(0, |x| x.depth) < iid_depth);
-            if do_iid {
-                // Internal iterative deepening
-                best_move = self.alpha_beta_search::<N>(alpha, beta, iid_depth)?.1;
+            if from_tt.is_none() {
+                // Internal iterative reduction
+                // https://www.chessprogramming.org/Internal_Iterative_Reductions
+                depth -= search_parameter!(iir_reduction);
             };
 
             let mut deferred_moves = VecDeque::new();
