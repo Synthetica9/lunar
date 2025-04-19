@@ -426,8 +426,7 @@ impl ThreadData {
 
             let iid_depth = depth * search_parameter!(iid_factor);
 
-            // In ALL nodes, the order doesn't matter too much, in other nodes it's important.
-            let do_iid = (!N::is_all())
+            let do_iid = N::is_pv()
                 && depth > search_parameter!(min_iid_depth)
                 && (from_tt.map_or(0, |x| x.depth) < iid_depth);
             if do_iid {
