@@ -392,7 +392,7 @@ impl ThreadData {
         if depth <= 0 && !is_in_check {
             value = self.quiescence_search(alpha, beta);
         } else {
-            if from_tt.is_none() && (N::is_pv() || N::is_cut()) {
+            if from_tt.is_none() && N::is_pv() {
                 // Internal iterative reduction
                 // https://www.chessprogramming.org/Internal_Iterative_Reductions
                 depth -= search_parameter!(iir_reduction);
