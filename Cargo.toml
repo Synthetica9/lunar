@@ -20,6 +20,8 @@ readline = ["rustyline"]
 hugepages = ["nix"]
 # Enable core_intrinsics and some implementations that that enables.
 intrinsics = []
+# Allow tuning via UCI
+tunable = []
 
 [profile.release]
 lto = true
