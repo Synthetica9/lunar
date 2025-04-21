@@ -164,7 +164,7 @@ impl std::ops::IndexMut<Square> for BitboardMap {
     }
 }
 
-const KNIGHT_DIRECTIONS: [Direction; 8] = [
+pub const KNIGHT_DIRECTIONS: [Direction; 8] = [
     Direction::new(-1, -2),
     Direction::new(-1, 2),
     Direction::new(-2, -1),
@@ -176,7 +176,7 @@ const KNIGHT_DIRECTIONS: [Direction; 8] = [
 ];
 pub const KNIGHT_MOVES: BitboardMap = BitboardMap::step_moves(&KNIGHT_DIRECTIONS);
 
-const KING_DIRECTIONS: [Direction; 8] = [
+pub const KING_DIRECTIONS: [Direction; 8] = [
     directions::N,
     directions::E,
     directions::S,
@@ -191,7 +191,7 @@ pub const KING_MOVES: BitboardMap = BitboardMap::step_moves(&KING_DIRECTIONS);
 pub const IMMEDIATE_NEIGHBORHOOD: BitboardMap = KING_MOVES;
 pub const MEDIUM_NEIGHBORHOOD: BitboardMap = KING_MOVES.compose(&KING_MOVES);
 
-const BLACK_PAWN_ATTACK_DIRECTIONS: [Direction; 2] = [directions::SE, directions::SW];
+pub const BLACK_PAWN_ATTACK_DIRECTIONS: [Direction; 2] = [directions::SE, directions::SW];
 const BLACK_PAWN_PROMOTIONS_RANK: BitboardMap = BitboardMap::smear(crate::bitboard::ROW_1);
 pub const BLACK_PAWN_ATTACKS_ALL: BitboardMap =
     BitboardMap::step_moves(&BLACK_PAWN_ATTACK_DIRECTIONS);
@@ -208,7 +208,7 @@ pub const BLACK_PAWN_MOVES_PROMOTION: BitboardMap =
 pub const BLACK_PAWN_DOUBLE_MOVES: BitboardMap = BitboardMap::pawn_double_moves(Color::Black);
 pub const BLACK_PAWN_MOVES_ALL: BitboardMap = BLACK_PAWN_SINGLE_MOVES.or(&BLACK_PAWN_DOUBLE_MOVES);
 
-const WHITE_PAWN_ATTACK_DIRECTIONS: [Direction; 2] = [directions::NE, directions::NW];
+pub const WHITE_PAWN_ATTACK_DIRECTIONS: [Direction; 2] = [directions::NE, directions::NW];
 const WHITE_PAWN_PROMOTIONS_RANK: BitboardMap = BitboardMap::smear(crate::bitboard::ROW_8);
 pub const WHITE_PAWN_ATTACKS_ALL: BitboardMap =
     BitboardMap::step_moves(&WHITE_PAWN_ATTACK_DIRECTIONS);

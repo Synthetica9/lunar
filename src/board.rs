@@ -12,6 +12,7 @@ use crate::{
     piece::Piece,
     ply::ApplyPly,
     square::{File, Rank, Square},
+    values::KING,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -341,31 +342,41 @@ impl Board {
         has_black_bishop && has_white_bishop
     }
 
-    pub const fn knights_in_central_16(&self, color: Color) -> u8 {
-        use crate::bitboard::*;
-
-        let knights = self.get(color, Piece::Knight);
-        (knights.and(CENTRAL_16)).popcount()
-    }
-
-    fn attacked_squares_by_piece_with_occupancy(
-        &self,
-        color: Color,
-        piece: Piece,
-        occupancy: Bitboard,
-    ) -> Bitboard {
-        let mut res = Bitboard::new();
-        for square in self.get(color, piece).iter() {
-            res |= Bitboard::piece_attacks_from_with_occupancy(piece, square, color, occupancy);
-        }
-        res
-    }
-
     pub fn attacked_squares_with_occupancy(&self, color: Color, occupancy: Bitboard) -> Bitboard {
+        use crate::direction::Direction;
+        use bitboard_map::{
+            BLACK_PAWN_ATTACK_DIRECTIONS, KING_DIRECTIONS, KNIGHT_DIRECTIONS,
+            WHITE_PAWN_ATTACK_DIRECTIONS,
+        };
+
         let mut res = Bitboard::new();
-        for piece in Piece::iter() {
-            res |= self.attacked_squares_by_piece_with_occupancy(color, piece, occupancy);
+
+        let mut extend_step = |piece, directions: &'static [Direction]| {
+            let bb = self.get(color, piece);
+            for direction in directions {
+                res |= bb.shift(*direction);
+            }
+        };
+
+        extend_step(
+            Piece::Pawn,
+            match color {
+                Color::White => &WHITE_PAWN_ATTACK_DIRECTIONS,
+                Color::Black => &BLACK_PAWN_ATTACK_DIRECTIONS,
+            },
+        );
+        extend_step(Piece::Knight, &KNIGHT_DIRECTIONS);
+        extend_step(Piece::King, &KING_DIRECTIONS);
+
+        let queens = self.get(color, Piece::Queen);
+        for square in (queens | self.get(color, Piece::Bishop)).iter() {
+            res |= Bitboard::bishop_attacks(square, occupancy);
         }
+
+        for square in (queens | self.get(color, Piece::Rook)).iter() {
+            res |= Bitboard::rook_attacks(square, occupancy);
+        }
+
         res
     }
 
