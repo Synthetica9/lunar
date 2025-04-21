@@ -1,4 +1,12 @@
 /target
+mutants.out
+mutants.out.old
+result
+plots
+*.npz
+*.pkl
+error.dat
+*.bak
 
 callgrind.out.*
 *.pgn
