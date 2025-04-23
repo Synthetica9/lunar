@@ -24,6 +24,7 @@ pub struct UCIState {
     // repetition_table: RepetitionTable,
     last_info_string: Instant,
     auto_ponder: bool,
+    base_instability: f64, // Reapplied on ucinewgame
 }
 
 impl UCIState {
@@ -39,6 +40,7 @@ impl UCIState {
 
             last_info_string: Instant::now(),
             auto_ponder: false,
+            base_instability: 1.0,
         }
     }
 
@@ -130,7 +132,7 @@ impl UCIState {
             }
             "ucinewgame" => {
                 self.history = History::new(Game::new());
-                self.search_thread_pool.base_instability = 1.0;
+                self.search_thread_pool.base_instability = self.base_instability;
                 // TODO: should we explicitly wait for clear?
                 self.transposition_table.clear();
             }
@@ -410,6 +412,14 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         Ok(())
     }
 
+    fn instabilty_setter(value: &str, state: &mut UCIState) -> Result<(), String> {
+        let parsed = value.parse::<f64>().map_err(|x| x.to_string())?;
+        state.search_thread_pool.base_instability = parsed;
+        state.base_instability = parsed;
+
+        Ok(())
+    }
+
     macro_rules! tunable (
         ($name:ident, $tpe:ty) => {
             UCIOption {
@@ -475,6 +485,11 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
                 state.auto_ponder = parse_bool(value)?;
                 Ok(())
             },
+        },
+        UCIOption {
+            name: "BaseInstability",
+            typ: &Str { default: "1.0" },
+            setter: instabilty_setter,
         },
         #[cfg(feature = "tunable")]
         tunable!(nmr_offset, fixed::types::I16F16),
