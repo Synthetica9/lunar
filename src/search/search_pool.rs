@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{spawn, JoinHandle};
 use std::time::Duration;
@@ -8,6 +8,7 @@ use std::time::Instant;
 
 // TODO: use stock rust channels?
 use crossbeam_channel as channel;
+use linear_map::LinearMap;
 use lru::LruCache;
 
 use super::currently_searching::CurrentlySearching;
@@ -41,6 +42,7 @@ enum PoolState {
         pv: Vec<Ply>,
         pv_instability: f64,
         last_pv_update: Instant,
+        root_move_counts: Arc<LinearMap<Ply, AtomicUsize>>,
 
         last_depth_increase: usize,
         depth_increase_nodes: usize,
@@ -149,7 +151,7 @@ impl SearchThreadPool {
         }
 
         self.transposition_table.inc_age();
-        let root_moves = Arc::new({
+        let root_moves: Arc<LinearMap<Ply, AtomicUsize>> = Arc::new({
             history
                 .game()
                 .legal_moves_plausible_ordering()
@@ -160,7 +162,7 @@ impl SearchThreadPool {
 
         self.broadcast(&ThreadCommand::SearchThis(
             history.clone().into(),
-            root_moves,
+            root_moves.clone(),
         ))
         .unwrap();
 
@@ -180,6 +182,7 @@ impl SearchThreadPool {
             pv: Vec::new(),
             pv_instability: self.base_instability,
             last_pv_update: now,
+            root_move_counts: root_moves,
 
             last_depth_increase: 0,
             depth_increase_nodes: 0,
@@ -412,6 +415,35 @@ impl SearchThreadPool {
         }
     }
 
+    pub fn first_subtree_ratio(&self) -> Option<f64> {
+        let PoolState::Searching {
+            best_move,
+            ref root_move_counts,
+            nodes_searched,
+            best_depth,
+            ..
+        } = self.state
+        else {
+            return None;
+        };
+
+        if best_depth < 6 {
+            return None;
+        }
+
+        let first_subtree_size = root_move_counts.get(&best_move?)?.load(Ordering::Relaxed);
+        let res = (first_subtree_size as f64) / (nodes_searched as f64);
+
+        Some(res)
+    }
+
+    pub fn first_subtree_ratio_ratio_factor(&self) -> f64 {
+        match self.first_subtree_ratio() {
+            None => 1.0,
+            Some(x) => (1.0 - x).powf(0.5) * 1.2,
+        }
+    }
+
     pub fn time_policy_finished(&self) -> bool {
         if let PoolState::Searching {
             start_time,
@@ -505,7 +537,9 @@ impl SearchThreadPool {
 
                     let time_per_move = (time + inc * (moves_to_go - 1)) / moves_to_go;
                     let per_move_millis = time_per_move.as_millis() as f64;
-                    let adjusted_millis = 1.3 * per_move_millis * pv_instability.clamp(0.1, 5.0);
+                    let first_subtree_fac = self.first_subtree_ratio_ratio_factor().max(0.1);
+                    let adjusted_millis =
+                        1.3 * first_subtree_fac * per_move_millis * pv_instability.clamp(0.1, 5.0);
                     let time_per_move = Duration::from_millis(adjusted_millis as u64);
 
                     let res = elapsed_then >= time_per_move;
@@ -627,15 +661,21 @@ impl SearchThreadPool {
             return None;
         };
 
-        let (best_move, mut game, pv_instability) = match &self.state {
-            PoolState::Searching {
-                best_move,
-                history,
-                pv_instability,
-                ..
-            } => (*best_move, history.game().clone(), *pv_instability),
-            _ => return None,
+        let PoolState::Searching {
+            best_move,
+            ref history,
+            pv_instability,
+            ref root_move_counts,
+            nodes_searched,
+            ..
+        } = self.state
+        else {
+            return None;
         };
+
+        let root_move_counts = root_move_counts.clone();
+
+        let mut game = history.game().clone();
 
         let best_move = best_move.or(self.move_in_state(&game, true));
         debug_assert!(
