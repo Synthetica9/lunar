@@ -35,6 +35,7 @@ enum PoolState {
         clock_start_time: Option<Instant>, // The moment our clock actually started running
 
         is_pondering: bool,
+        is_ponderhit: bool,
 
         score: Millipawns,
         best_move: Option<Ply>,
@@ -174,6 +175,7 @@ impl SearchThreadPool {
             clock_start_time,
 
             is_pondering,
+            is_ponderhit: false,
             time_policy,
 
             best_move: None,
@@ -197,10 +199,12 @@ impl SearchThreadPool {
             PoolState::Searching {
                 ref mut clock_start_time,
                 ref mut is_pondering,
+                ref mut is_ponderhit,
                 ..
             } if *is_pondering => {
                 *clock_start_time = Some(Instant::now());
                 *is_pondering = false;
+                *is_ponderhit = true;
 
                 true
             }
@@ -452,6 +456,7 @@ impl SearchThreadPool {
             best_depth,
             history,
             is_pondering,
+            is_ponderhit,
             pv_instability,
             best_move,
             last_depth_increase,
@@ -538,8 +543,13 @@ impl SearchThreadPool {
                     let time_per_move = (time + inc * (moves_to_go - 1)) / moves_to_go;
                     let per_move_millis = time_per_move.as_millis() as f64;
                     let first_subtree_fac = self.first_subtree_ratio_ratio_factor().max(0.1);
-                    let adjusted_millis =
+                    let mut adjusted_millis =
                         1.3 * first_subtree_fac * per_move_millis * pv_instability.clamp(0.1, 5.0);
+                    if *is_ponderhit {
+                        // We spent some time on this already, and we're not in an unexpected
+                        // scenario. Let's just say it's okay.
+                        adjusted_millis /= 2.0;
+                    }
                     let time_per_move = Duration::from_millis(adjusted_millis as u64);
 
                     let res = elapsed_then >= time_per_move;
