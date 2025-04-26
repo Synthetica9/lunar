@@ -548,7 +548,7 @@ impl SearchThreadPool {
                     if *is_ponderhit {
                         // We spent some time on this already, and we're not in an unexpected
                         // scenario. Let's just say it's okay.
-                        adjusted_millis /= 2.0;
+                        adjusted_millis /= 1.5;
                     }
                     let time_per_move = Duration::from_millis(adjusted_millis as u64);
 
