@@ -4,6 +4,7 @@ use crate::bitboard::Bitboard;
 
 use crate::bitboard_map::BitboardMap;
 use crate::castlerights::CastleRights;
+use crate::direction::directions;
 use crate::game::Game;
 use crate::piece::Piece;
 use crate::plyset::PlySet;
@@ -299,6 +300,7 @@ pub struct GameInfoForPly {
     pub our_piece: Piece,
     pub captured_piece: Option<Piece>,
     pub en_passant: Option<Square>,
+    pub en_passant_attacker_present: bool,
     pub castle_rights: CastleRights,
 }
 
@@ -337,17 +339,26 @@ impl GameInfoForPly {
                 // Knight will never trigger any special conditions.
                 our_piece: Piece::Knight,
                 captured_piece: None,
+                en_passant_attacker_present: false,
             };
         }
 
         let our_piece = ply.moved_piece(game);
         let captured_piece = ply._captured_piece(game);
 
+        // We don't need to deal with direction here, because the pawns just need to be side by side.
+        let opponent_pawns = game.board().get(to_move.other(), Piece::Pawn);
+        let our_piece_bb = Bitboard::from_square(ply.dst());
+        let opponent_pawn_locs =
+            our_piece_bb.shift(directions::E) | our_piece_bb.shift(directions::W);
+        let en_passant_attacker_present = opponent_pawn_locs.intersects(opponent_pawns);
+
         GameInfoForPly {
             to_move,
             our_piece,
             captured_piece,
             en_passant,
+            en_passant_attacker_present,
             castle_rights,
         }
     }
@@ -414,7 +425,12 @@ pub(crate) trait ApplyPly {
         {
             let is_pawn_move = info.our_piece == Pawn;
             let is_double_move = (dst.rank().as_u8() as i8 - src.rank().as_u8() as i8).abs() == 2;
-            if is_pawn_move && is_double_move {
+
+            // Don't store info when no attacker is present, requirement from polyglot books and
+            // makes for better transposition lookups.
+            let attacker_is_present = info.en_passant_attacker_present;
+
+            if is_pawn_move && is_double_move && attacker_is_present {
                 let en_passant = Square::new(dst.file(), info.to_move.en_passant_rank());
                 self.toggle_en_passant(en_passant);
             }

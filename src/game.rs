@@ -5,6 +5,7 @@ use crate::bitboard::Bitboard;
 use crate::bitboard_map::{self, BitboardMap};
 use crate::board::Board;
 use crate::castlerights::CastleRights;
+use crate::direction::directions;
 use crate::legality::LegalityChecker;
 
 use crate::piece::Piece;
@@ -114,6 +115,46 @@ impl Game {
         }
 
         if let Some(square) = self.en_passant() {
+            let bb_sq = Bitboard::from_square(square);
+            debug_assert!(bb_sq == self.en_passant);
+
+            // Must be one past the opponent start rank.
+            // TODO: when we have direct square shifting this should be done directly on the square
+            let start_square = bb_sq
+                .shift(self.to_move.pawn_move_direction())
+                .first_occupied_or_a1();
+
+            if start_square.rank() != self.to_move.other().pawn_start_rank() {
+                return Err(format!(
+                    "Start square not before start {:?} rank: {:?}",
+                    self.to_move.other(),
+                    square
+                ));
+            }
+
+            // Our opponent must have moved a pawn there last turn, is it still there?
+            let pawns = self.board().get(self.to_move.other(), Piece::Pawn);
+            if !pawns.intersects(bb_sq.shift(self.to_move.other().pawn_move_direction())) {
+                return Err(format!(
+                    "{:?} Pawn expected one past en passant square {square:?}",
+                    self.to_move.other()
+                ));
+            }
+
+            // We must have a pawn to capture, otherwise it shouldn't be set. (different from FEN,
+            // and slightly breaks FEN round-trip but needed for polyglot compatibility)
+            let our_pawns = self.board().get(self.to_move, Piece::Pawn);
+            let our_pawns_required = pawns.shift(directions::E) | pawns.shift(directions::W);
+            if !our_pawns.intersects(our_pawns_required) {
+                let squares: Vec<_> = our_pawns_required.iter().collect();
+                return Err(format!(
+                    "{:?} Pawn expected on {squares:?} but not found",
+                    self.to_move
+                ));
+            }
+        }
+
+        if let Some(square) = self.en_passant() {
             let other = self.to_move().other();
             let pawn_present = self
                 .board()
@@ -129,25 +170,38 @@ impl Game {
     }
 
     pub fn from_fen(fen: &str) -> Result<Game, String> {
-        let mut parts = fen.split(' ');
+        let mut parts = fen.split(' ').filter(|x| !x.is_empty());
 
         let board = Board::from_fen_part(parts.next().ok_or("No board definition")?)?;
         let to_move = Color::from_fen_part(parts.next().ok_or("No side to move")?)?;
         let castle_rights = CastleRights::from_fen_part(parts.next().ok_or("No castling rights")?)?;
         let en_passant = match parts.next().unwrap() {
             "-" => Bitboard::new(),
-            square => Bitboard::from_square(Square::from_fen_part(square)?),
+            square => {
+                let candidate = Bitboard::from_square(Square::from_fen_part(square)?);
+
+                let pawns_on = (candidate.shift(directions::E) | candidate.shift(directions::W))
+                    .shift(to_move.other().pawn_move_direction());
+                let pawns = board.get(to_move, Piece::Pawn);
+                println!("{candidate:?} {pawns_on:?} {pawns:?}");
+
+                if pawns_on.intersects(pawns) {
+                    candidate
+                } else {
+                    Bitboard::new()
+                }
+            }
         };
 
         let half_move = parts
             .next()
-            .ok_or("No half move clock")?
+            .unwrap_or("0")
             .parse::<i16>()
             .map_err(|e| format!("Error parsing half move clock: {e}"))?;
 
         let full_move = parts
             .next()
-            .ok_or("No full move number")?
+            .unwrap_or("1")
             .parse::<i16>()
             .map_err(|e| format!("Error parsing full move number: {e}"))?;
 
@@ -165,6 +219,8 @@ impl Game {
         };
 
         res.recalc_hash();
+
+        res.check_valid()?;
         Ok(res)
     }
 
@@ -1058,7 +1114,7 @@ mod tests {
         // 1. Parsing with no available castling rights
         // 2. Parsing with an en passant square
         // 3. Parsing with black to move
-        let double_bongcloud = "rnbq1bnr/pp1pkppp/8/3Pp3/1Pp1P3/8/P1P1KPPP/RNBQ1BNR b - b3 0 5";
+        let double_bongcloud = "rnbq1bnr/pp1pkppp/8/3Pp3/1Pp1P3/8/P1P1KPPP/RNBQ1BNR b - - 0 5";
         let game = Game::from_fen(double_bongcloud).unwrap();
         assert_eq!(game.to_fen(), double_bongcloud);
     }
@@ -1072,6 +1128,7 @@ mod tests {
                     Err(e) => panic!("Error parsing fen: {}", e),
                 };
                 println!("Starting fen: {}", $fen);
+                println!("Parsed fen:   {}", game.to_fen());
 
                 for ply in game.legal_moves() {
                     println!("Legal move: {} ({:?})", game.ply_name(ply), ply);
@@ -1136,7 +1193,7 @@ mod tests {
         test_simple_move,
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
         "e4",
-        "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
     );
 
     illegal_move_test!(test_illegal_move_misparse, STARTING_POSITION, "HADOUKEN!");
