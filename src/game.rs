@@ -1,5 +1,3 @@
-use smallvec::SmallVec;
-
 use crate::basic_enums::{CastleDirection, Color};
 use crate::bitboard::Bitboard;
 use crate::bitboard_map::{self, BitboardMap};
@@ -670,49 +668,47 @@ impl Game {
             .collect()
     }
 
-    pub fn blockers(
-        &self,
-        to: Square,
-        slider_color: Color,
-        blocker_color: Color,
-    ) -> SmallVec<[(Square, Square); 4]> {
-        // TODO: move to Board
-        let mut res = SmallVec::new();
+    pub fn blockers(&self, square: Square, slider_color: Color, blocker_color: Color) -> Bitboard {
+        // TODO: move square Board
+        let mut res = Bitboard::new();
 
         let board = &self.board;
-        let occupied = board.get_occupied();
-        let queen = board.get_piece(Piece::Queen);
-        for other in [Piece::Rook, Piece::Bishop] {
-            // First, we do a reverse look from the king to see which pieces it
-            // sees first along every ray.
-            let candidates = Bitboard::magic_attacks(to, other, occupied);
+        let occupancy = board.get_occupied();
+        let potential_blockers = board.get_color(blocker_color);
+        let queens = board.get_piece(Piece::Queen);
 
-            let candidates = candidates & board.get_color(blocker_color);
+        for piece in [Piece::Rook, Piece::Bishop] {
+            let sq_attacks = Bitboard::magic_attacks(square, piece, occupancy);
+            let potential_pinned = sq_attacks & potential_blockers;
+            let without_pinned =
+                Bitboard::magic_attacks(square, piece, occupancy & !potential_pinned);
 
-            // remove them and check if a relevant piece is behind them.
-            let occupied = occupied & !candidates;
-            let pinners = Bitboard::magic_attacks(to, other, occupied)
-                & board.get_color(slider_color)
-                & (board.get_piece(other) | queen);
-            // TODO: up to here can be split out into a "pinners" function.
+            let potential_blocked =
+                board.get_color(slider_color) & (queens | board.get_piece(piece));
+            // The stuff we see when removing the pinned pieces.
+            let blocked = !sq_attacks & without_pinned & potential_blocked;
 
-            // Now we have a bitboard of pieces pinning something to the square.
-            // We need to find the piece that it is pinning.
-            for pinner in pinners.iter() {
-                // Todo: is an explicit interposition check better here?
-                // look in reverse
-                let path = Bitboard::magic_attacks(pinner, other, occupied);
-                let path = path & candidates;
-                debug_assert!(path.popcount() <= 1);
-                if let Some(pinned) = path.first_occupied() {
-                    res.push((pinned, pinner));
-                }
+            debug_assert!(blocked.popcount() <= 4, "at most 4 blocked per axis");
+
+            // We need to figure out which pieces were actually pinned.
+            let mut blocker_mask = Bitboard::new();
+            for pinner in blocked.iter() {
+                blocker_mask |= Bitboard::magic_attacks(pinner, piece, occupancy);
             }
+
+            let blockers = potential_pinned & blocker_mask;
+            debug_assert_eq!(
+                blockers.popcount(),
+                blocked.popcount(),
+                "should have as many blockers as blocked"
+            );
+
+            res |= blockers;
         }
         res
     }
 
-    pub fn absolute_pins(&self) -> SmallVec<[(Square, Square); 4]> {
+    pub fn absolute_pins(&self) -> Bitboard {
         let king = self
             .board
             .get(self.to_move, Piece::King)
@@ -745,18 +741,12 @@ impl Game {
         let dst = ply.dst();
         let src = ply.src();
 
-        if let Some(x_ray) = self
+        if self
             .blockers(enemy_king, self.to_move, self.to_move)
-            .into_iter()
-            .find(|(block, _)| *block == src)
-            .map(|x| x.1)
+            .get(src)
+            && !crate::legality::moves_on_pin(enemy_king, src, dst)
         {
-            let occupancy_after = self.occupancy_after_ply(ply);
-            // This is probably faster? No branch vs less memory
-            let attacks_after_xray = Bitboard::magic_attacks(x_ray, Piece::Queen, occupancy_after);
-            if attacks_after_xray.get(enemy_king) {
-                return true;
-            }
+            return true;
         }
 
         if let Some(flag) = ply.flag() {

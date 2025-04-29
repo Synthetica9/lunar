@@ -1,5 +1,3 @@
-use smallvec::SmallVec;
-
 use crate::bitboard::Bitboard;
 use crate::game::Game;
 use crate::piece::Piece;
@@ -10,7 +8,6 @@ pub struct LegalityChecker {
     king_square: Square,
     king_attackers: Bitboard,
     absolute_pins: Bitboard,
-    absolute_pin_pairs: SmallVec<[(Square, Square); 4]>,
     check_count: u8,
     attackers_without_king: Bitboard,
 }
@@ -30,14 +27,7 @@ impl LegalityChecker {
         let attackers_without_king =
             board.attacked_squares_with_occupancy(game.to_move().other(), occupied & !king);
 
-        let absolute_pin_pairs = game.absolute_pins();
-        let absolute_pins = {
-            let mut res = Bitboard::new();
-            for (pin, _pinner) in absolute_pin_pairs.iter() {
-                res |= Bitboard::from_square(*pin);
-            }
-            res
-        };
+        let absolute_pins = game.absolute_pins();
 
         LegalityChecker {
             king_square,
@@ -45,7 +35,6 @@ impl LegalityChecker {
             check_count,
             attackers_without_king,
             absolute_pins,
-            absolute_pin_pairs,
         }
     }
 
@@ -169,21 +158,31 @@ impl LegalityChecker {
 
             // If we're not in check, we only need to check absolutely
             // pinned pieces for illegal moves.
-            if self.absolute_pins.get(ply.src()) {
-                use Square::A1;
-                let pinner = self
-                    .absolute_pin_pairs
-                    .iter()
-                    .find(|p| p.0 == ply.src())
-                    .unwrap_or(&(A1, A1))
-                    .1;
-
-                // Move on the pin or capture the pinning piece.
-
-                ply.dst().interposes(self.king_square, pinner) || ply.dst() == pinner
-            } else {
-                true
-            }
+            let src = ply.src();
+            !self.absolute_pins.get(src) || moves_on_pin(self.king_square, src, ply.dst())
         }
     }
+}
+
+pub fn moves_on_pin(pin_target: Square, pinned: Square, dst: Square) -> bool {
+    // TODO: where should this live?
+    let bishop_attacks_from_target =
+        Bitboard::magic_attacks(pin_target, Piece::Bishop, Bitboard::new());
+
+    // Or queen in either case, but moving as given:
+    let pinner = if bishop_attacks_from_target.get(pinned) {
+        Piece::Bishop
+    } else {
+        Piece::Rook
+    };
+
+    // Heavily relies on the fact that no piece can phase through the king or the
+    // pinning piece:
+    let pinner_attacks_from_target = Bitboard::magic_attacks(pin_target, pinner, Bitboard::new());
+
+    let pinner_attacks_from_pinned = Bitboard::magic_attacks(pinned, pinner, Bitboard::new());
+
+    let valid_dsts = pinner_attacks_from_target & pinner_attacks_from_pinned;
+
+    valid_dsts.get(dst)
 }
