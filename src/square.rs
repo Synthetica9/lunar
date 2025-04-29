@@ -1,7 +1,7 @@
 use std::string::String;
 
 pub mod files {
-    #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+    #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
     pub struct File(u8);
 
     use crate::bitboard::Bitboard;
@@ -46,7 +46,7 @@ pub mod files {
 pub use files::File;
 
 pub mod ranks {
-    #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+    #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
     pub struct Rank(pub u8);
 
     use crate::bitboard::Bitboard;

@@ -10,12 +10,16 @@ use std::time::Instant;
 use crossbeam_channel as channel;
 use linear_map::LinearMap;
 use lru::LruCache;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 
 use super::currently_searching::CurrentlySearching;
 use super::search_thread::{ThreadCommand, ThreadData, ThreadStatus};
 use crate::history::History;
+use crate::hugepages_mmap_alloc::HugePagesAlloc;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
+use crate::polyglot::PolyglotBook;
 use crate::transposition_table::TranspositionTable;
 use crate::uci::TimePolicy;
 use crate::zobrist_hash::ZobristHash;
@@ -36,6 +40,7 @@ enum PoolState {
 
         is_pondering: bool,
         is_ponderhit: bool,
+        in_book: bool,
 
         score: Millipawns,
         best_move: Option<Ply>,
@@ -67,10 +72,12 @@ pub struct SearchThreadPool {
     transposition_table: Arc<TranspositionTable>,
     ponder: bool,
     pub base_instability: f64,
+    rng: SmallRng,
 
     state: PoolState,
     pv_hash: LruCache<ZobristHash, Ply>,
     pub currently_searching: CurrentlySearching,
+    pub(crate) opening_book: Option<Arc<PolyglotBook, HugePagesAlloc>>,
 }
 
 impl SearchThreadPool {
@@ -81,6 +88,7 @@ impl SearchThreadPool {
         let mut threads = Vec::new();
 
         let currently_searching = CurrentlySearching::new();
+        let rng = SmallRng::from_entropy();
 
         for _ in 0..num_threads {
             let (command_s, command_r) = channel::unbounded();
@@ -116,6 +124,8 @@ impl SearchThreadPool {
             ponder: false,
             state: PoolState::Idle,
             currently_searching,
+            opening_book: None,
+            rng,
 
             pv_hash: LruCache::new(NonZeroUsize::new(1024).unwrap()),
         }
@@ -169,11 +179,18 @@ impl SearchThreadPool {
 
         self.currently_searching.clear();
 
+        let in_book = self
+            .opening_book
+            .as_ref()
+            .map(|x| !x.get(&history.game()).is_empty())
+            .unwrap_or(false);
+
         self.state = PoolState::Searching {
             history: history.clone(),
             start_time: now,
             clock_start_time,
 
+            in_book,
             is_pondering,
             is_ponderhit: false,
             time_policy,
@@ -456,6 +473,7 @@ impl SearchThreadPool {
             best_depth,
             history,
             is_pondering,
+            in_book,
             is_ponderhit,
             pv_instability,
             best_move,
@@ -469,6 +487,7 @@ impl SearchThreadPool {
             if *is_pondering {
                 return false;
             }
+
             match time_policy {
                 Depth(depth) => best_depth >= depth,
                 MoveTime(time) => {
@@ -484,9 +503,12 @@ impl SearchThreadPool {
                     binc,
                     movestogo,
                 } => {
-                    // TODO: more accurate time management
-                    // (things like waiting longer when the opponent has less time,
-                    //  when the evaluation swings wildly, pv keeps changing, etc.)
+                    // When we're in book, we don't want to not search when explicitly asked to
+                    // "go depth 15" (though we also don't really want to then after that search
+                    // return the book move?)
+                    if *in_book {
+                        return true;
+                    }
 
                     use crate::basic_enums::Color::*;
 
@@ -614,6 +636,18 @@ impl SearchThreadPool {
         let hash = game.hash();
         let legal = game.legal_moves();
 
+        let from_book = self
+            .opening_book
+            .as_ref()
+            .and_then(|x| {
+                use rand::seq::SliceRandom;
+                x.get(game)
+                    .choose_weighted(&mut self.rng, |x| x.0)
+                    .ok()
+                    .copied()
+            })
+            .map(|x| x.1);
+
         let from_tt = self
             .transposition_table
             .get(hash)
@@ -621,9 +655,9 @@ impl SearchThreadPool {
 
         let from_old_pv = self.pv_hash.get(&hash).copied();
 
-        let mut candidates = vec![from_tt, from_old_pv];
+        let mut candidates = vec![from_book, from_tt, from_old_pv];
 
-        if candidates.len() == 1 || force {
+        if legal.len() == 1 || force {
             candidates.push(legal.first().copied());
         }
 
@@ -675,15 +709,11 @@ impl SearchThreadPool {
             best_move,
             ref history,
             pv_instability,
-            ref root_move_counts,
-            nodes_searched,
             ..
         } = self.state
         else {
             return None;
         };
-
-        let root_move_counts = root_move_counts.clone();
 
         let mut game = history.game().clone();
 
@@ -719,6 +749,18 @@ impl SearchThreadPool {
                 // Should we sleep for a few microseconds or something?
             }
         }
+    }
+
+    pub(crate) fn set_opening_book(&mut self, book: Option<Box<PolyglotBook, HugePagesAlloc>>) {
+        let Some(book) = book else {
+            self.opening_book = None;
+            return;
+        };
+
+        // TODO: this actually reallocates...
+        // https://stackoverflow.com/questions/51638604/mmap-file-with-larger-fixed-length-with-zero-padding
+        let arc: Arc<PolyglotBook, HugePagesAlloc> = book.into();
+        self.opening_book = Some(arc);
     }
 }
 

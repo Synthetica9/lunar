@@ -24,6 +24,7 @@ pub mod millipawns;
 pub mod piece;
 pub mod ply;
 pub mod plyset;
+pub mod polyglot;
 pub mod search;
 pub mod square;
 pub mod transposition_table;

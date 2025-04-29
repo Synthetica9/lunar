@@ -24,6 +24,7 @@ impl ApplyPly for ZobristHash {
     fn toggle_castle_rights(&mut self, rights: CastleRights) {
         for (color, direction) in rights.iter() {
             let idx = direction.as_index() + color.as_index() * 2;
+            unsafe { assert_unchecked(idx < constants::CASTLE_HASHES.len()) };
             self.0 ^= constants::CASTLE_HASHES[idx];
         }
     }

@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 
 use crate::game::Game;
 use crate::history::History;
+use crate::polyglot::PolyglotBook;
 use crate::search_parameter;
 use crate::transposition_table::TranspositionTable;
 
@@ -310,6 +311,15 @@ impl UCIState {
                         .currently_searching
                         .num_buckets_filled()
                 );
+                if let Some(book) = &self.search_thread_pool.opening_book {
+                    println!("Opening book:");
+                    let from_book = book.get(&game);
+                    if from_book.is_empty() {
+                        println!("[out of book]");
+                    } else {
+                        println!("{:?}", from_book)
+                    }
+                }
             }
             "stop" => {
                 if let Some(msg) = self.search_thread_pool.maybe_end_search(true) {
@@ -420,6 +430,17 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         Ok(())
     }
 
+    fn opening_book_setter(value: &str, state: &mut UCIState) -> Result<(), String> {
+        let book = if value.is_empty() {
+            None
+        } else {
+            let book = PolyglotBook::load_from_path(value)?;
+            Some(book)
+        };
+        state.search_thread_pool.set_opening_book(book);
+        Ok(())
+    }
+
     macro_rules! tunable (
         ($name:ident, $tpe:ty) => {
             UCIOption {
@@ -490,6 +511,11 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
             name: "BaseInstability",
             typ: &Str { default: "1.0" },
             setter: instabilty_setter,
+        },
+        UCIOption {
+            name: "OpeningBook",
+            typ: &Str { default: "" },
+            setter: opening_book_setter,
         },
         #[cfg(feature = "tunable")]
         tunable!(nmr_offset, fixed::types::I16F16),
