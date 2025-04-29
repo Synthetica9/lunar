@@ -1,9 +1,6 @@
 use std::fs::File;
 use std::io::Write;
 
-pub mod hashes;
-use hashes::gen_hashes_file;
-
 pub mod magics;
 use magics::gen_magics_file;
 
@@ -17,7 +14,6 @@ pub fn main() -> std::io::Result<()> {
 
     gen_tuning_file(&mut open("parameters")?)?;
     gen_magics_file(&mut open("magics")?)?;
-    gen_hashes_file(&mut open("hashes")?)?;
 
     // std::thread::sleep(std::time::Duration::from_secs(10));
     Ok(())
