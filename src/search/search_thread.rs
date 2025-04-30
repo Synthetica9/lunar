@@ -633,7 +633,7 @@ impl ThreadData {
 
                         let our_piece = undo.info.our_piece;
 
-                        let bonus = (depth * depth).to_num();
+                        let bonus = (depth.saturating_mul(depth)).to_num();
                         let to_move = self.game().to_move();
 
                         let continuation_history = |idx: usize, our_dst, our_piece, delta| {
