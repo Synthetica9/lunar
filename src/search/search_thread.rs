@@ -517,6 +517,17 @@ impl ThreadData {
                 let is_first_move = i == 0;
                 i += 1;
 
+                let hash_before = self.game().hash();
+                if !is_first_move && !is_deferred
+                    && !N::IS_ROOT // TODO: Should we defer in the root? Probably not...?
+                    && self
+                        .currently_searching
+                        .defer_move(hash_before, ply, depth.int())
+                {
+                    deferred_moves.push_back((moveno, ply));
+                    continue;
+                }
+
                 self.history.push(ply);
 
                 let is_quiet = {
@@ -538,16 +549,6 @@ impl ThreadData {
                     -self
                         .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, depth - Depth::ONE)?
                         .0
-                } else if !is_deferred
-                    && !N::IS_ROOT // TODO: Should we defer in the root? Probably not...?
-                    && self
-                        .currently_searching
-                        .defer_move(self.game().hash(), depth.int())
-                {
-                    // TODO: don't actually make the move, do a hash based on ply and previous hash
-                    deferred_moves.push_back((moveno, ply));
-                    // Can't continue because that would skip the rollback
-                    Millipawns(i32::MIN)
                 } else {
                     // late move reduction
                     // https://www.chessprogramming.org/Late_Move_Reductions
@@ -578,7 +579,7 @@ impl ThreadData {
 
                     if !is_deferred {
                         self.currently_searching
-                            .starting_search(self.game().hash(), next_depth);
+                            .starting_search(hash_before, ply, next_depth);
                     }
 
                     // Null-window search
@@ -614,7 +615,7 @@ impl ThreadData {
 
                     if !is_deferred {
                         self.currently_searching
-                            .finished_search(self.game().hash(), next_depth);
+                            .finished_search(hash_before, ply, next_depth);
                     }
 
                     x

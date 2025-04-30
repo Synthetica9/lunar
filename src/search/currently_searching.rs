@@ -2,6 +2,7 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 
 use super::search_thread::Depth;
+use crate::ply::Ply;
 use crate::zobrist_hash::ZobristHash;
 
 pub const CS_SIZE: usize = 1 << 15;
@@ -11,7 +12,7 @@ pub const DEFER_DEPTH: Depth = Depth::ONE.wrapping_add(Depth::ONE).wrapping_add(
 
 // TODO: move Arc out of here?
 #[derive(Clone)]
-pub struct CurrentlySearching(Arc<[[UnsafeCell<ZobristHash>; CS_BUCKET_SIZE]; CS_SIZE]>);
+pub struct CurrentlySearching(Arc<[[UnsafeCell<u64>; CS_BUCKET_SIZE]; CS_SIZE]>);
 
 // This data structure is not intended to be 100% correct all the time, and its
 // consumers should be aware of this.
@@ -29,8 +30,7 @@ impl Default for CurrentlySearching {
 
 impl CurrentlySearching {
     pub fn new() -> CurrentlySearching {
-        let cs: [[UnsafeCell<ZobristHash>; CS_BUCKET_SIZE]; CS_SIZE] =
-            unsafe { std::mem::zeroed() };
+        let cs: [[UnsafeCell<u64>; CS_BUCKET_SIZE]; CS_SIZE] = unsafe { std::mem::zeroed() };
 
         CurrentlySearching(cs.into())
     }
@@ -38,81 +38,92 @@ impl CurrentlySearching {
     pub fn clear(&self) {
         for bucket in self.0.iter() {
             for slot in bucket {
-                unsafe { *slot.get() = ZobristHash(0) };
+                unsafe { *slot.get() = 0 };
             }
         }
     }
 
-    fn get_bucket(&self, hash: ZobristHash) -> &[UnsafeCell<ZobristHash>; CS_BUCKET_SIZE] {
-        &self.0[hash.to_usize() % CS_SIZE]
+    fn get_bucket(&self, hash: ZobristHash, ply: Ply) -> &[UnsafeCell<u64>; CS_BUCKET_SIZE] {
+        // TODO: is the multiplication here mathematically necessary?
+        &self.0[Self::combine(hash, ply) as usize % CS_SIZE]
     }
 
-    fn get(&self, hash: ZobristHash) -> bool {
-        let bucket = self.get_bucket(hash);
+    fn combine(hash: ZobristHash, ply: Ply) -> u64 {
+        hash.as_u64().wrapping_add(3 * ply.as_u16() as u64)
+    }
+
+    fn get(&self, hash: ZobristHash, ply: Ply) -> bool {
+        let content = Self::combine(hash, ply);
+        let bucket = self.get_bucket(hash, ply);
+
         for cell in bucket {
             let p = cell.get();
             let val = unsafe { p.read_volatile() };
-            if val == hash {
+            if val == content {
                 return true;
             }
         }
         false
     }
 
-    fn put(&self, hash: ZobristHash) {
-        let bucket = self.get_bucket(hash);
+    fn put(&self, hash: ZobristHash, ply: Ply) {
+        let bucket = self.get_bucket(hash, ply);
+        let content = Self::combine(hash, ply);
+
         for cell in bucket {
             let p = cell.get();
             let val = unsafe { p.read_volatile() };
-            if val == hash {
+            if val == content {
                 return;
             }
-            if *val.as_u64() == 0 {
-                unsafe { p.write_volatile(hash) };
+            if val == 0 {
+                unsafe { p.write_volatile(content) };
                 return;
             }
         }
 
-        unsafe { bucket[0].get().write_volatile(hash) };
+        unsafe { bucket[0].get().write_volatile(content) };
     }
 
-    fn remove(&self, hash: ZobristHash) {
-        let bucket = self.get_bucket(hash);
+    fn remove(&self, hash: ZobristHash, ply: Ply) {
+        let bucket = self.get_bucket(hash, ply);
+        let content = Self::combine(hash, ply);
+
         for cell in bucket {
             let p = cell.get();
             let val = unsafe { p.read_volatile() };
 
             // Due to potential race conditions we can't quit after zeroing one
             // hash.
-            if val == hash {
+            if val == content {
                 // Zero the cell.
-                unsafe { p.write_volatile(ZobristHash::new()) };
+                unsafe { p.write_volatile(0) };
             }
         }
     }
 
-    pub fn defer_move(&self, hash: ZobristHash, depth: Depth) -> bool {
+    pub fn defer_move(&self, hash: ZobristHash, ply: Ply, depth: Depth) -> bool {
         if depth < DEFER_DEPTH {
             return false;
         }
 
-        self.get(hash)
+        self.get(hash, ply)
     }
 
-    pub fn starting_search(&self, hash: ZobristHash, depth: Depth) {
+    pub fn starting_search(&self, hash: ZobristHash, ply: Ply, depth: Depth) {
         if depth < DEFER_DEPTH {
             return;
         }
 
-        self.put(hash);
+        self.put(hash, ply);
     }
 
-    pub fn finished_search(&self, hash: ZobristHash, depth: Depth) {
+    pub fn finished_search(&self, hash: ZobristHash, ply: Ply, depth: Depth) {
         if depth < DEFER_DEPTH {
             return;
         }
 
-        self.remove(hash);
+        self.remove(hash, ply);
     }
 
     pub fn num_buckets_filled(&self) -> usize {
@@ -121,7 +132,7 @@ impl CurrentlySearching {
         for bucket in self.0.iter() {
             for hash in bucket {
                 let hash = unsafe { *hash.get() };
-                if hash == ZobristHash(0) {
+                if hash == 0 {
                     continue;
                 }
 
