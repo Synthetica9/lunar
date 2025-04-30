@@ -440,12 +440,19 @@ impl ThreadData {
             let mut any_moves_seen = false;
             let mut bad_quiet_moves: SmallVec<[_; 16]> = SmallVec::new();
 
-            while let Some(Generated { ply, guarantee }) = generator.next(self).or_else(|| {
-                deferred_moves.pop_front().map(|ply| Generated {
-                    ply: GeneratedMove::Ply(ply),
-                    guarantee: GuaranteeLevel::Deferred,
+            while let Some((moveno, Generated { ply, guarantee })) =
+                generator.next(self).map(|x| (i, x)).or_else(|| {
+                    deferred_moves.pop_front().map(|(moveno, ply)| {
+                        (
+                            moveno,
+                            Generated {
+                                ply: GeneratedMove::Ply(ply),
+                                guarantee: GuaranteeLevel::Deferred,
+                            },
+                        )
+                    })
                 })
-            }) {
+            {
                 let ply = {
                     use GeneratedMove::*;
                     match ply {
@@ -523,7 +530,9 @@ impl ThreadData {
 
                 let x = if is_first_move {
                     // What else could we be overwriting here?
-                    debug_assert!(best_move == None || best_move == Some(ply));
+                    // if let Some(best) = best_move {
+                    //     debug_assert_eq!(best, ply);
+                    // }
 
                     best_move = Some(ply);
                     -self
@@ -536,7 +545,7 @@ impl ThreadData {
                         .defer_move(self.game().hash(), depth.int())
                 {
                     // TODO: don't actually make the move, do a hash based on ply and previous hash
-                    deferred_moves.push_back(ply);
+                    deferred_moves.push_back((moveno, ply));
                     // Can't continue because that would skip the rollback
                     Millipawns(i32::MIN)
                 } else {
@@ -549,7 +558,7 @@ impl ThreadData {
                     let reduction = if depth <= 3 || is_in_check || is_check {
                         Depth::ONE
                     } else {
-                        let x = depth.int_log2() * Depth::from_num(i).int_log2();
+                        let x = depth.int_log2() * Depth::from_num(moveno).int_log2();
                         let (a, b) = if !is_quiet {
                             (
                                 search_parameter!(lmr_quiescent_slope),
