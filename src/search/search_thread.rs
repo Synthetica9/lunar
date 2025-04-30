@@ -674,8 +674,8 @@ impl ThreadData {
             }
         }
 
-        if value.is_mate_in_n().is_some() {
-            value -= Millipawns::ONE * value.0.signum();
+        if value.is_mate_in_n().is_some() && value > DRAW {
+            value -= Millipawns::ONE;
         }
 
         // if depth >= 0 {
