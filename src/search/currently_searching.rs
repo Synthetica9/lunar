@@ -21,6 +21,12 @@ pub struct CurrentlySearching(Arc<[[UnsafeCell<ZobristHash>; CS_BUCKET_SIZE]; CS
 unsafe impl Send for CurrentlySearching {}
 unsafe impl Sync for CurrentlySearching {}
 
+impl Default for CurrentlySearching {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CurrentlySearching {
     pub fn new() -> CurrentlySearching {
         let cs: [[UnsafeCell<ZobristHash>; CS_BUCKET_SIZE]; CS_SIZE] =

@@ -22,6 +22,12 @@ const fn step_moves(source: Square, directions: &[Direction]) -> Bitboard {
     res
 }
 
+impl Default for BitboardMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BitboardMap {
     pub const fn new() -> BitboardMap {
         BitboardMap([Bitboard::new(); 64])

@@ -12,13 +12,18 @@ use crate::{
     piece::Piece,
     ply::ApplyPly,
     square::{File, Rank, Square},
-    values::KING,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Board {
     colors: [Bitboard; 2],
     pieces: [Bitboard; 6],
+}
+
+impl Default for Board {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Board {

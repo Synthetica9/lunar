@@ -497,10 +497,9 @@ impl ThreadData {
                     debug_assert!(legality_checker.is_legal(ply, game));
 
                     if hash_like {
-                        hash_moves_played
-                            .iter_mut()
-                            .find(|x| x.is_null())
-                            .map(|x| *x = ply);
+                        if let Some(x) = hash_moves_played.iter_mut().find(|x| x.is_null()) {
+                            *x = ply;
+                        };
                     }
                 }
 

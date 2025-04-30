@@ -25,7 +25,7 @@ fn alloc(size: NonZeroUsize, with_hugepages: bool) -> Result<NonNull<[u8]>, Huge
         flags
     };
     let mmap_result = unsafe { mmap_anonymous(None, size, prot_flags, map_flags) }
-        .map_err(|err| HugePagesAllocFailure::MMapErr(err))?;
+        .map_err(HugePagesAllocFailure::MMapErr)?;
     let slc = slice_from_raw_parts_mut(mmap_result.cast::<u8>().as_ptr(), size.get());
     let nonnull = NonNull::new(slc).ok_or(HugePagesAllocFailure::Null)?;
     Ok(nonnull)

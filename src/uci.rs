@@ -317,7 +317,7 @@ impl UCIState {
                     if from_book.is_empty() {
                         println!("[out of book]");
                     } else {
-                        println!("{:?}", from_book)
+                        println!("{from_book:?}");
                     }
                 }
             }

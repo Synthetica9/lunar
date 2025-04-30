@@ -11,7 +11,7 @@ use crossbeam_channel as channel;
 use linear_map::LinearMap;
 use lru::LruCache;
 use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 
 use super::currently_searching::CurrentlySearching;
 use super::search_thread::{ThreadCommand, ThreadData, ThreadStatus};
@@ -182,8 +182,7 @@ impl SearchThreadPool {
         let in_book = self
             .opening_book
             .as_ref()
-            .map(|x| !x.get(&history.game()).is_empty())
-            .unwrap_or(false);
+            .is_some_and(|x| !x.get(history.game()).is_empty());
 
         self.state = PoolState::Searching {
             history: history.clone(),
@@ -503,14 +502,14 @@ impl SearchThreadPool {
                     binc,
                     movestogo,
                 } => {
+                    use crate::basic_enums::Color::*;
+
                     // When we're in book, we don't want to not search when explicitly asked to
                     // "go depth 15" (though we also don't really want to then after that search
                     // return the book move?)
                     if *in_book {
                         return true;
                     }
-
-                    use crate::basic_enums::Color::*;
 
                     let game = history.game();
 

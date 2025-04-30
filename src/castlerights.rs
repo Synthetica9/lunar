@@ -5,6 +5,12 @@ use crate::basic_enums::{CastleDirection, Color};
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct CastleRights(u8);
 
+impl Default for CastleRights {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CastleRights {
     pub const fn new() -> CastleRights {
         CastleRights(0)

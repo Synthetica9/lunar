@@ -8,6 +8,12 @@ use crate::square::{files, ranks, Square};
 #[derive(Copy, Clone, PartialEq)]
 pub struct Bitboard(pub u64);
 
+impl Default for Bitboard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Bitboard {
     pub const fn popcount(self) -> u8 {
         self.0.count_ones() as u8
@@ -495,7 +501,7 @@ impl quickcheck::Arbitrary for Bitboard {
     }
 
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        let clone = self.clone();
+        let clone = *self;
 
         let iter = self
             .iter()
