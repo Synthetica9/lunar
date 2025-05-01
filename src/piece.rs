@@ -70,19 +70,6 @@ impl Piece {
         }
     }
 
-    pub const fn value(self) -> Millipawns {
-        use crate::values::*;
-        use Piece::*;
-        match self {
-            Pawn => PAWN,
-            Knight => KNIGHT,
-            Bishop => BISHOP,
-            Rook => ROOK,
-            Queen => QUEEN,
-            King => KING,
-        }
-    }
-
     pub const fn is_promotable(self) -> bool {
         use Piece::*;
         match self {

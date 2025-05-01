@@ -39,9 +39,6 @@ pub mod files {
     pub const H: File = File::new(7);
 
     pub const ALL: [File; 8] = [A, B, C, D, E, F, G, H];
-
-    pub const KINGSIDE_CASTLE_MUST_BE_EMPTY: [File; 3] = [F, G, G];
-    pub const QUEENSIDE_CASTLE_MUST_BE_EMPTY: [File; 3] = [B, C, D];
 }
 pub use files::File;
 
@@ -132,10 +129,6 @@ impl Square {
         (self.rank().as_u8() + self.file().as_u8()) ^ 7
     }
 
-    pub const fn file_rank(self) -> (File, Rank) {
-        (self.file(), self.rank())
-    }
-
     pub fn to_fen_part(self) -> String {
         let mut res = String::new();
         res.push(self.file().as_char());
@@ -154,16 +147,19 @@ impl Square {
             return Err("Too many characters".to_string());
         }
 
-        let f = File::new(file.to_ascii_lowercase() as u8 - b'a');
-        let r = Rank::new(rank.to_ascii_lowercase() as u8 - b'1');
+        let f = file.to_ascii_lowercase() as u8 - b'a';
+        let r = rank.to_ascii_lowercase() as u8 - b'1';
 
-        if f > files::H {
+        if f >= 8 {
             return Err(format!("Invalid file: {file}"));
         }
 
-        if r > ranks::EIGHT {
-            return Err("Invalid rank".to_string());
+        if r >= 8 {
+            return Err(format!("Invalid rank: {rank}"));
         }
+
+        let f = File::new(f);
+        let r = Rank::new(r);
 
         Ok(Square::new(f, r))
     }
@@ -210,16 +206,6 @@ impl Square {
     #[must_use]
     pub const fn flip_vert(&self) -> Square {
         Square::from_u8(self.as_u8() ^ 56)
-    }
-
-    pub const fn is_dark(&self) -> bool {
-        // B1 is light, A1 is dark.
-        // TODO: Wait this doesn't work this selects columns
-        self.as_index() % 2 == 0
-    }
-
-    pub const fn is_light(&self) -> bool {
-        !self.is_dark()
     }
 }
 

@@ -29,7 +29,6 @@ pub mod search;
 pub mod square;
 pub mod transposition_table;
 pub mod uci;
-pub mod values;
 pub mod zero_init;
 pub mod zobrist_hash;
 

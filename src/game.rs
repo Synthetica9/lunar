@@ -1,3 +1,5 @@
+use smallvec::SmallVec;
+
 use crate::basic_enums::{CastleDirection, Color};
 use crate::bitboard::Bitboard;
 use crate::bitboard_map::{self, BitboardMap};
@@ -913,47 +915,38 @@ impl Game {
     }
 
     pub fn parse_uci_long_name(&self, name: &str) -> Result<Ply, String> {
+        let len = name.len();
+        let short = len < 4;
+        let long = len > 5;
+
+        if short || long {
+            let problem = if short { "short" } else { "long" };
+            return Err(format!(
+                "Name too {problem}, expected 4 or 5 characters but got {}",
+                name.len()
+            ));
+        }
+
         let src = Square::from_fen_part(&name[0..2])?;
         let dst = Square::from_fen_part(&name[2..4])?;
 
         let promotion_piece = match name.len() {
-            5 => Some(Piece::from_char(name.chars().nth(4).unwrap())?),
+            5 => Some(Piece::from_char(
+                name.chars()
+                    .nth(4)
+                    .expect("we explictly checked the length?"),
+            )?),
             _ => None,
         };
 
         let legal_moves = self.legal_moves();
         let res = legal_moves
-            .iter()
-            .filter(|x| x.src() == src)
-            .filter(|x| x.dst() == dst)
-            .filter(|x| match promotion_piece {
-                Some(piece) => x.promotion_piece() == Some(piece),
-                None => x.promotion_piece().is_none(),
-            })
-            .collect::<Vec<&Ply>>();
+            .into_iter()
+            .filter(|x| x.src() == src && x.dst() == dst && x.promotion_piece() == promotion_piece)
+            .collect::<SmallVec<[Ply; 4]>>();
 
         assert!(res.len() <= 1);
-        if res.len() == 1 {
-            Ok(*res[0])
-        } else {
-            Err("Couldn't parse uci long name".to_string())
-        }
-    }
-
-    pub fn make_move_uci(&mut self, uci: &str) -> Result<(), String> {
-        let ply = self.parse_uci_long_name(uci)?;
-        self.apply_ply(ply);
-        Ok(())
-    }
-
-    pub fn make_move(&mut self, name: &str) -> Result<(), String> {
-        // Convenience function to make a move and mutate the board.
-        let ply = self
-            .ply_from_name(name)
-            .ok_or(format!("Invalid move: {name}"))?;
-        self.apply_ply(ply);
-
-        Ok(())
+        res.get(0).copied().ok_or("Could not parse move".to_owned())
     }
 
     pub fn simple_render(&self) -> String {
@@ -1459,6 +1452,22 @@ mod tests {
         "fxe6+ e.p.",
         "7k/8/4P3/8/8/2B5/8/3K4 b - - 0 2"
     );
+
+    #[test]
+    fn parse_uci_error_states() {
+        let game = Game::new();
+
+        assert!(game
+            .parse_uci_long_name("a1")
+            .is_err_and(|x| x.contains("too short")));
+
+        assert!(game
+            .parse_uci_long_name("aab1")
+            .is_err_and(|x| x.contains("Invalid rank")));
+
+        let endgame = Game::from_fen("8/3k2P1/8/8/8/8/3K4/8 w - - 0 1").unwrap();
+        assert!(endgame.parse_uci_long_name("g7g8a").is_err());
+    }
 
     quickcheck::quickcheck! {
         fn all_generated_positions_vald(game: Game) -> Result<(), String>  {

@@ -330,7 +330,7 @@ impl Board {
         let mut result = Millipawns(0);
 
         for piece in Piece::iter() {
-            result += piece.value() * self.get(color, piece).popcount() as i32;
+            result += piece.base_value() * self.get(color, piece).popcount() as i32;
         }
 
         result
