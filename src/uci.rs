@@ -162,7 +162,7 @@ impl UCIState {
 
                 let value = value.trim();
 
-                self.info(&format!("Setting option {name} to {value}"));
+                self.info(&format!("Setting option '{name}' to '{value}'"));
                 self.set_option(name, value)?;
             }
             "position" => {
@@ -630,8 +630,21 @@ fn spawn_reader_thread() -> crossbeam_channel::Receiver<String> {
         let lines = editor.iter("[🌑] ");
 
         for line in lines {
-            tx.send(line.unwrap_or_default().trim().to_string())
-                .unwrap();
+            let line = match line {
+                Ok(line) => line,
+                Err(e) => {
+                    println!("info string Error reading line: {e:?}");
+                    continue;
+                }
+            };
+
+            for line in line.split('\n') {
+                let res = tx.send(line.trim().trim_end_matches('\r').to_string());
+
+                if let Err(e) = res {
+                    println!("info string Error sending line: {e:?}");
+                }
+            }
         }
 
         // This kills the process.
