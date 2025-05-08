@@ -846,18 +846,20 @@ impl Game {
         let is_check = self.is_check(ply);
         let is_checkmate = self.is_checkmate(ply);
         let piece = ply.moved_piece(self);
-        let other_on_rank = legal_moves
+        let conflicting: Vec<_> = legal_moves
+            .into_iter()
+            .filter(|x| x.moved_piece(self) == piece && x.dst() == dst && x.src() != src)
+            .collect();
+        let any_conflicting = !conflicting.is_empty();
+
+        let other_on_rank = conflicting
             .iter()
-            .filter(|x| x.moved_piece(self) == piece)
-            .filter(|x| x.src().rank() != src.rank())
-            .filter(|x| x.dst() == dst)
+            .filter(|x| x.src().rank() == src.rank())
             .count()
             >= 1;
-        let other_on_file = legal_moves
+        let other_on_file = conflicting
             .iter()
-            .filter(|x| x.moved_piece(self) == piece)
-            .filter(|x| x.src().file() != src.file())
-            .filter(|x| x.dst() == dst)
+            .filter(|x| x.src().file() == src.file())
             .count()
             >= 1;
         let is_en_passant = ply.is_en_passant();
@@ -872,10 +874,10 @@ impl Game {
                 if !is_pawn_move {
                     res.push(piece.to_char().to_ascii_uppercase());
                 }
-                if other_on_file || is_pawn_capture {
+                if other_on_rank || is_pawn_capture {
                     res.push(src.file().as_char());
                 }
-                if other_on_rank {
+                if other_on_file {
                     res.push(src.rank().as_char());
                 }
                 if is_capture {

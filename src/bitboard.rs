@@ -110,21 +110,12 @@ impl Bitboard {
     }
 
     #[must_use]
-    pub const fn flip(self, square: Square) -> Bitboard {
+    pub const fn toggle(self, square: Square) -> Bitboard {
         Bitboard::from_square(square).xor(self)
     }
 
-    pub fn flip_mut(&mut self, square: Square) {
+    pub fn toggle_mut(&mut self, square: Square) {
         *self ^= Bitboard::from_square(square);
-    }
-
-    #[must_use]
-    pub const fn flip_if(&self, cond: bool) -> Bitboard {
-        if cond {
-            self.not_const()
-        } else {
-            *self
-        }
     }
 
     pub const fn row(row: u8) -> Bitboard {
@@ -389,6 +380,7 @@ pub const ROW_6: Bitboard = Bitboard::row(5);
 pub const ROW_7: Bitboard = Bitboard::row(6);
 pub const ROW_8: Bitboard = Bitboard::row(7);
 
+pub const PROMOTION_SQUARES: Bitboard = ROW_1.or(ROW_8);
 pub const EDGES: Bitboard = COL_A.or(COL_H).or(ROW_1).or(ROW_8);
 pub const CORNERS: Bitboard = COL_A.or(COL_H).and(ROW_1.or(ROW_8));
 

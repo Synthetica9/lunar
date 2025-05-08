@@ -425,8 +425,8 @@ impl Board {
                 Bitboard::pawn_attacks(square, color.other())
             } else {
                 // Both pawn directions
-                Bitboard::pawn_attacks(square, Color::White)
-                    | Bitboard::pawn_attacks(square, Color::Black)
+                (Bitboard::pawn_attacks(square, Color::White) & self.get_color(Color::Black))
+                    | (Bitboard::pawn_attacks(square, Color::Black) & self.get_color(Color::White))
             };
 
         res |= self.get_piece(Piece::Knight) & Bitboard::knight_attacks(square);
