@@ -21,6 +21,15 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
     // Improved to also include promotions using Leorik test positions as verification:
     // https://github.com/lithander/Leorik/blob/master/Leorik.Test/see.epd
 
+    let full_pawn_value = |piece| match piece {
+        Piece::Pawn => 1,
+        Piece::Knight => 3,
+        Piece::Bishop => 3,
+        Piece::Rook => 5,
+        Piece::Queen => 9,
+        Piece::King => 50,
+    };
+
     let board = game.board();
     let square = ply.dst();
 
@@ -49,7 +58,7 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
     let bishop_like = board.get_piece(Piece::Bishop) | queens;
     let rook_like = board.get_piece(Piece::Rook) | queens;
 
-    let mut gain = [Millipawns(0); 32];
+    let mut gain: [i8; 32] = [0; 32];
     let mut d = 0;
 
     let may_x_ray = board.get_piece(Piece::Pawn) | bishop_like | rook_like;
@@ -60,18 +69,16 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
 
     let mut attacked_piece = board.occupant_piece(from).expect("Piece must be set");
 
-    let target = board
-        .occupant_piece(square)
-        .map_or(Millipawns(0), Piece::base_value);
+    let target = board.occupant_piece(square).map_or(0, full_pawn_value);
 
     gain[0] = target
         + match ply.flag() {
             Some(SpecialFlag::Promotion(p)) => {
                 attacked_piece = p;
-                p.base_value() - Millipawns(1000)
+                full_pawn_value(p) - 1
             }
-            Some(SpecialFlag::EnPassant) => Millipawns(1000),
-            _ => Millipawns(0),
+            Some(SpecialFlag::EnPassant) => 1,
+            _ => 0,
         };
 
     let mut side = game.to_move();
@@ -80,7 +87,7 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
         d += 1;
         side = side.other();
 
-        gain[d] = attacked_piece.base_value() - gain[d - 1];
+        gain[d] = full_pawn_value(attacked_piece) - gain[d - 1];
 
         attack_def.unset_mut(from);
 
@@ -104,7 +111,7 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
         }
 
         if attacked_piece == Piece::Pawn && pawns_promote {
-            gain[d] += Piece::Queen.base_value() - Piece::Pawn.base_value();
+            gain[d] += full_pawn_value(Piece::Queen) - full_pawn_value(Piece::Pawn);
             attacked_piece = Piece::Queen;
         }
     }
@@ -114,7 +121,7 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
         gain[d - 1] = -std::cmp::max(-gain[d - 1], gain[d]);
     }
 
-    gain[0]
+    Millipawns(gain[0] as i32 * 1000)
 }
 
 #[test]
