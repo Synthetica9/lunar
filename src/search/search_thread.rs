@@ -314,7 +314,7 @@ impl ThreadData {
         ThreadCommand::StopSearch
     }
 
-    fn draw_value(&self) -> Millipawns {
+    fn draw_value(&self, depth: Depth) -> Millipawns {
         // TODO: contempt value instead of DRAW
         use crate::millipawns::DRAW;
         // If we control that we want a draw that is better than our
@@ -324,7 +324,17 @@ impl ThreadData {
         // base_eval is cheap, and we divide it by 500. This gives us 2mp/pawn,
         // 6mp/knight, etc. This in concert makes it so we'd rather make our
         // opponent take the draw than lose material, but still keep both in mind.
-        DRAW + Millipawns::ONE + crate::eval::base_eval(self.game()) / 500
+
+        let mut res = DRAW + Millipawns::ONE + crate::eval::base_eval(self.game()) / 500;
+
+        if depth >= 3 {
+            // Additionally, randomise.
+            // https://www.talkchess.com/forum3/viewtopic.php?f=7&t=71707
+            // https://github.com/official-stockfish/Stockfish/commit/97d2cc9a9c1c4b6ff1b470676fa18c7fc6509886
+            res += Millipawns::ONE * if self.nodes_searched % 2 == 0 { -1 } else { 1 }
+        }
+
+        res
     }
 
     fn game(&self) -> &'_ Game {
@@ -358,7 +368,7 @@ impl ThreadData {
             || self.history.repetition_count_at_least_3()
             || self.game().board().is_fide_draw()
         {
-            return Ok((self.draw_value(), None));
+            return Ok((self.draw_value(depth), None));
         }
 
         let alpha_orig = alpha;
