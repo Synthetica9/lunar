@@ -397,8 +397,9 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let from_history =
         thread.history_table.score(color, piece, dst) * search_parameter!(direct_history_weight);
     let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
+    let see = static_exchange_evaluation(game, ply);
 
-    let mut val = from_history + from_pesto;
+    let mut val = from_history + from_pesto + see.0;
     for i in 0..N_CONTINUATION_HISTORIES {
         if let Some(cont_hist) = thread.history.peek_n(i + 1) {
             let cont = thread.continuation_histories[i]
