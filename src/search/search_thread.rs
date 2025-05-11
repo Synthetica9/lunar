@@ -726,16 +726,15 @@ impl ThreadData {
         Ok((value, best_move))
     }
 
-    fn quiescence_search(&mut self, alpha: Millipawns, beta: Millipawns) -> Millipawns {
+    fn quiescence_search(&mut self, mut alpha: Millipawns, beta: Millipawns) -> Millipawns {
         self.quiescence_nodes_searched += 1;
 
         let stand_pat = crate::eval::evaluation(self.game());
 
         if stand_pat >= beta {
-            return beta;
+            return stand_pat;
         }
 
-        let mut alpha = alpha;
         if alpha <= stand_pat {
             alpha = stand_pat;
         }
@@ -755,6 +754,7 @@ impl ThreadData {
 
         let legality_checker = crate::legality::LegalityChecker::new(self.game());
 
+        let mut best_score = stand_pat;
         for (ply, _millipawns) in candidates {
             if !legality_checker.is_legal(ply, self.game()) {
                 continue;
@@ -765,15 +765,19 @@ impl ThreadData {
             self.history.pop();
 
             if score >= beta {
-                return beta;
+                return score;
             }
 
             if score > alpha {
                 alpha = score;
             }
+
+            if score > best_score {
+                best_score = score;
+            }
         }
 
-        alpha
+        best_score
     }
 
     fn insert_killer_move(&mut self, ply: Ply, half_move_total: usize) {
