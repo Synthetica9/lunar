@@ -27,6 +27,12 @@ def get_parser():
         choices=["internal", "cutechess-cli"],
         default="cutechess-cli" if have_cutechess else "internal",
     )
+    parser.add_argument(
+        "--external-engines",
+        type=Path,
+        nargs="*",
+    )
+    parser.add_argument("--gauntlet", action="store_true")
 
     parser.add_argument("--stockfish", type=int, nargs="*")
 
@@ -34,6 +40,7 @@ def get_parser():
 
 
 def selfplay(options, *revs, stockfishes=None):
+    kwargs = {}
     engines = [
         {
             "name": f"lunar {parse_rev(rev, short=True)}",
@@ -53,10 +60,17 @@ def selfplay(options, *revs, stockfishes=None):
                 }
             )
 
+    for engine in options.external_engines:
+        engines.append({"cmd": engine.resolve()})
+
     if len(engines) < 2:
         raise ValueError("Not enough revs.")
 
     backend = None if options.backend == "internal" else options.backend
+
+    if options.gauntlet:
+        kwargs["tournament"] = "gauntlet"
+        kwargs["seeds"] = str(len(revs))
 
     c_chess_cli(
         backend=backend,
@@ -68,8 +82,8 @@ def selfplay(options, *revs, stockfishes=None):
         },
         repeat=True,
         each={
-            "tc": "2+.1",
-            "option.Hash": 64,
+            "tc": "10+.1",
+            "option.Hash": 128,
         },
         resign={"score": 1000, "count": 10},
         draw={
@@ -77,11 +91,12 @@ def selfplay(options, *revs, stockfishes=None):
             "count": 20,
         },
         # log=True,
-        concurrency=2,
+        concurrency=6,
         rounds=1000,
         games=2,
         pgn="out.pgn",
         # tournament="swiss-tcec",
+        **kwargs,
     )
 
 
