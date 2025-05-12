@@ -375,6 +375,16 @@ impl ThreadData {
         let mut alpha = alpha;
         let mut beta = beta;
 
+        let eval = crate::eval::evaluation(self.game());
+        let futility_pruning = {
+            let fut_margin = Millipawns(
+                (depth * Depth::from_num(2500))
+                    .max(Depth::from_num(1000))
+                    .to_num(),
+            );
+            depth <= 4 && eval + fut_margin < alpha
+        };
+
         let from_tt = self.transposition_table.get(self.game().hash());
         if let Some(tte) = from_tt {
             if depth <= tte.depth && !self.history.may_be_repetition() && !N::is_pv() {
@@ -417,6 +427,7 @@ impl ThreadData {
             let game = self.game();
             let board = game.board();
             let friendly_pieces = board.get_color(game.to_move());
+            let enemy_pieces = board.get_color(game.to_move().other());
             let kp =
                 (board.get_piece(Piece::Pawn) | board.get_piece(Piece::King)) & friendly_pieces;
             r += eval::game_phase(board) * search_parameter!(nmr_piece_slope);
@@ -538,16 +549,17 @@ impl ThreadData {
                     continue;
                 }
 
+                // Do the actual futility prune
+                // TODO: skip negative SEE captures?
+                let is_quiet = !ply.promotion_piece().is_some_and(|x| x == Piece::Queen)
+                    && !enemy_pieces.get(ply.dst());
+                let is_check = self.game().is_check(ply);
+
+                if !N::is_pv() && is_quiet && !is_check && futility_pruning && !is_first_move {
+                    continue;
+                }
+
                 self.history.push(ply);
-
-                let is_quiet = {
-                    let undo = self.history.peek().expect("we just pushed to history");
-                    let is_queen_promo =
-                        undo.ply.flag() == Some(SpecialFlag::Promotion(Piece::Queen));
-                    undo.info.captured_piece.is_none() && !is_queen_promo
-                };
-
-                let is_check = self.game().is_in_check();
 
                 let x = if is_first_move {
                     // What else could we be overwriting here?
