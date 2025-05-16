@@ -378,11 +378,11 @@ impl ThreadData {
         let eval = crate::eval::evaluation(self.game());
         let futility_pruning = {
             let fut_margin = Millipawns(
-                (depth * Depth::from_num(2500))
-                    .max(Depth::from_num(1000))
+                (depth * search_parameter!(futprun_mp_per_ply))
+                    .max(search_parameter!(futprun_min_mp))
                     .to_num(),
             );
-            depth <= 4 && eval + fut_margin < alpha
+            depth <= search_parameter!(futprun_max_depth) && eval + fut_margin < alpha
         };
 
         let from_tt = self.transposition_table.get(self.game().hash());

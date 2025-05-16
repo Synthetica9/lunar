@@ -21,6 +21,10 @@ pub struct SearchParameters {
 
     pub continuation_weights: [i32; N_CONTINUATION_HISTORIES],
     pub direct_history_weight: i32,
+
+    pub futprun_max_depth: Depth,
+    pub futprun_mp_per_ply: Depth,
+    pub futprun_min_mp: Depth,
 }
 
 const fn const_unwrap<T>(val: Result<T, ParseFixedError>) -> T {
@@ -46,6 +50,10 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     lmr_quiescent_offset: const_depth("0.2"),
     lmr_quiet_slope: const_depth("2.75").recip(),
     lmr_quiet_offset: const_depth("1.35"),
+
+    futprun_max_depth: const_depth("4"),
+    futprun_mp_per_ply: const_depth("2500"),
+    futprun_min_mp: const_depth("1000"),
 
     continuation_weights: [40, 30],
     direct_history_weight: 50,
