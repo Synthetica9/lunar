@@ -378,6 +378,17 @@ impl MoveGenerator for StandardMoveGenerator {
     // Also: what would the guarantee be in this case?
 }
 
+fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
+    let mut res = [0; N_CONTINUATION_HISTORIES];
+    let mut val = search_parameters().mo_continuation_start_weight;
+    for cell in res.iter_mut() {
+        *cell = val.to_num();
+        val *= search_parameters().mo_continuation_factor;
+    }
+
+    res
+}
+
 pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     // http://www.talkchess.com/forum3/viewtopic.php?t=66312
     // Based on Andrew Grant's idea.
@@ -395,17 +406,19 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let piece = game.board().occupant_piece(ply.src()).unwrap();
 
     let from_history =
-        thread.history_table.score(color, piece, dst) * search_parameters().direct_history_weight;
+        thread.history_table.score(color, piece, dst) * search_parameters().mo_direct_history_weight;
     let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
     let see = static_exchange_evaluation(game, ply).0.min(0);
 
     let mut val = from_history + from_pesto + see;
+
+    let cont_weights = continuation_weights();
     for i in 0..N_CONTINUATION_HISTORIES {
         if let Some(cont_hist) = thread.history.peek_n(i + 1) {
             let cont = thread.continuation_histories[i]
                 .get((color, cont_hist.piece_dst(), (piece, dst)))
                 .0
-                * search_parameters().continuation_weights[i];
+                * cont_weights[i];
             val += cont;
         }
     }

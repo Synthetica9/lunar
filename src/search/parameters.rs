@@ -21,8 +21,9 @@ pub struct SearchParameters {
     pub lmr_quiet_slope: Depth,
     pub lmr_quiet_offset: Depth,
 
-    pub continuation_weights: [i32; N_CONTINUATION_HISTORIES],
-    pub direct_history_weight: i32,
+    pub mo_continuation_start_weight: Depth,
+    pub mo_continuation_factor: Depth,
+    pub mo_direct_history_weight: i32,
 
     pub futprun_max_depth: Depth,
     pub futprun_mp_per_ply: Depth,
@@ -57,8 +58,9 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     futprun_mp_per_ply: const_depth("384"),
     futprun_min_mp: const_depth("0"),
 
-    continuation_weights: [40, 30],
-    direct_history_weight: 50,
+    mo_continuation_start_weight: const_depth("40"),
+    mo_continuation_factor: const_depth("0.75"),
+    mo_direct_history_weight: 50,
 };
 
 #[cfg(feature = "tunable")]
