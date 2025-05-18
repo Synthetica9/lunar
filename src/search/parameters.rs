@@ -46,14 +46,14 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     iir_reduction: const_depth("2"),
     iir_min_depth: const_depth("6"),
 
-    lmr_quiescent_slope: const_depth("3.35").recip(),
-    lmr_quiescent_offset: const_depth("0.2"),
-    lmr_quiet_slope: const_depth("2.75").recip(),
-    lmr_quiet_offset: const_depth("1.35"),
+    lmr_quiescent_slope: const_depth("0"),
+    lmr_quiescent_offset: const_depth("1.41"),
+    lmr_quiet_slope: const_depth("0.36"),
+    lmr_quiet_offset: const_depth("1.50"),
 
-    futprun_max_depth: const_depth("4"),
-    futprun_mp_per_ply: const_depth("2500"),
-    futprun_min_mp: const_depth("1000"),
+    futprun_max_depth: const_depth("6.17"),
+    futprun_mp_per_ply: const_depth("384"),
+    futprun_min_mp: const_depth("0"),
 
     continuation_weights: [40, 30],
     direct_history_weight: 50,
