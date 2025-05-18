@@ -610,7 +610,7 @@ impl ThreadData {
                     };
 
                     let is_reduced = reduction > Depth::ONE;
-                    let next_depth = depth - reduction;
+                    let next_depth = depth - reduction.max(Depth::ONE);
 
                     if !is_deferred {
                         self.currently_searching
