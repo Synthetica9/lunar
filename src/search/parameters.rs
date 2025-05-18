@@ -21,6 +21,8 @@ pub struct SearchParameters {
     pub lmr_quiet_slope: Depth,
     pub lmr_quiet_offset: Depth,
 
+    pub tt_capture_reduction: Depth,
+
     pub mo_continuation_start_weight: Depth,
     pub mo_continuation_factor: Depth,
     pub mo_direct_history_weight: i32,
@@ -57,6 +59,8 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     futprun_max_depth: const_depth("6.17"),
     futprun_mp_per_ply: const_depth("384"),
     futprun_min_mp: const_depth("0"),
+
+    tt_capture_reduction: const_depth("0.5"),
 
     mo_continuation_start_weight: const_depth("40"),
     mo_continuation_factor: const_depth("0.75"),

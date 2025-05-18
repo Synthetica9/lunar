@@ -140,22 +140,10 @@ enum GeneratorPhase {
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub enum QueuedPly {
     // Should be searched _last_
-    LosingCapture {
-        value: Millipawns,
-        ply: Ply,
-    },
-    QuietMove {
-        is_check: bool,
-        value: Millipawns,
-        ply: Ply,
-    },
-    KillerMove {
-        ply: Ply,
-    },
-    WinningOrEqualCapture {
-        value: Millipawns,
-        ply: Ply,
-    },
+    LosingCapture { value: Millipawns, ply: Ply },
+    QuietMove { value: Millipawns, ply: Ply },
+    KillerMove { ply: Ply },
+    WinningOrEqualCapture { value: Millipawns, ply: Ply },
     // Should be searched _first_
 }
 
@@ -354,12 +342,7 @@ impl MoveGenerator for StandardMoveGenerator {
                 let game = thread.game();
                 for ply in game.quiet_pseudo_legal_moves() {
                     let value = quiet_move_order(thread, ply);
-                    // let is_check = game.is_check(ply);
-                    self.queue.push(QuietMove {
-                        ply,
-                        value,
-                        is_check: false,
-                    });
+                    self.queue.push(QuietMove { ply, value });
                 }
                 self.queue.sort_unstable();
 
@@ -405,8 +388,8 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let src = ply.src();
     let piece = game.board().occupant_piece(ply.src()).unwrap();
 
-    let from_history =
-        thread.history_table.score(color, piece, dst) * search_parameters().mo_direct_history_weight;
+    let from_history = thread.history_table.score(color, piece, dst)
+        * search_parameters().mo_direct_history_weight;
     let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
     let see = static_exchange_evaluation(game, ply).0.min(0);
 

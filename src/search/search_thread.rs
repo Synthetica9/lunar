@@ -16,16 +16,16 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 use super::countermove::{CounterMove, L2History};
 use super::currently_searching::CurrentlySearching;
 use super::history_heuristic::HistoryTable;
+use crate::eval;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
+use crate::search::parameters::search_parameters;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
-use crate::{eval};
-use crate::search::parameters::search_parameters;
 
 const N_KILLER_MOVES: usize = 2;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
@@ -387,6 +387,7 @@ impl ThreadData {
         };
 
         let from_tt = self.transposition_table.get(self.game().hash());
+
         if let Some(tte) = from_tt {
             if depth <= tte.depth && !self.history.may_be_repetition() && !N::is_pv() {
                 // println!("Transposition table hit");
@@ -435,6 +436,8 @@ impl ThreadData {
             r += depth * search_parameters().nmr_depth_slope;
 
             let side_to_move_only_kp = kp == friendly_pieces;
+            let tt_is_capture = from_tt
+                .is_some_and(|x| x.best_move().is_some_and(|ply| enemy_pieces.get(ply.dst())));
 
             if !N::is_pv()
                 && !side_to_move_only_kp
@@ -560,6 +563,8 @@ impl ThreadData {
                     continue;
                 }
 
+                let see = crate::search::static_exchange_evaluation(self.game(), ply);
+
                 self.history.push(ply);
 
                 let x = if is_first_move {
@@ -579,7 +584,8 @@ impl ThreadData {
 
                     // Weiss reduces by 0.20 + ln(depth) * ln(move number) / 3.35 for captures and
                     // promotions and 1.35 + ln(depth) * ln(move number) / 2.75 for quiet moves.
-                    let reduction = if depth <= 3 || is_in_check || is_check {
+
+                    let reduction = if depth <= 3 || is_in_check || is_check || see.0 > 0 {
                         Depth::ONE
                     } else {
                         let x = depth.int_log2() * Depth::from_num(moveno).int_log2();
@@ -594,7 +600,13 @@ impl ThreadData {
                                 search_parameters().lmr_quiet_offset,
                             )
                         };
-                        a * x + b
+                        let mut base = a * x + b;
+
+                        if is_quiet && tt_is_capture {
+                            base += search_parameters().tt_capture_reduction;
+                        }
+
+                        base
                     };
 
                     let is_reduced = reduction > Depth::ONE;
