@@ -3,6 +3,8 @@ use fixed::ParseFixedError;
 #[cfg(feature = "tunable")]
 use std::sync::RwLock;
 
+use std::ops::Deref;
+
 use super::search_thread::Depth;
 use super::search_thread::N_CONTINUATION_HISTORIES;
 
@@ -63,13 +65,12 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
 pub static SEARCH_PARAMETERS: RwLock<SearchParameters> = RwLock::new(SEARCH_PARAMETERS_BASE);
 
 #[cfg(feature = "tunable")]
-#[macro_export]
-macro_rules! search_parameter (
-    ($name:ident) => { crate::search::parameters::SEARCH_PARAMETERS.read().unwrap().$name }
-);
+pub fn search_parameters() -> impl Deref<Target = SearchParameters> {
+    SEARCH_PARAMETERS.read().unwrap()
+}
 
 #[cfg(not(feature = "tunable"))]
-#[macro_export]
-macro_rules! search_parameter (
-    ($name:ident) => { crate::search::parameters::SEARCH_PARAMETERS_BASE.$name }
-);
+#[inline(always)]
+pub const fn search_parameters() -> impl Deref<Target = SearchParameters> {
+    &SEARCH_PARAMETERS_BASE
+}

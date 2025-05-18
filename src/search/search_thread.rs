@@ -24,7 +24,8 @@ use crate::ply::{Ply, SpecialFlag};
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
-use crate::{eval, search_parameter};
+use crate::{eval};
+use crate::search::parameters::search_parameters;
 
 const N_KILLER_MOVES: usize = 2;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
@@ -378,11 +379,11 @@ impl ThreadData {
         let eval = crate::eval::evaluation(self.game());
         let futility_pruning = {
             let fut_margin = Millipawns(
-                (depth * search_parameter!(futprun_mp_per_ply))
-                    .max(search_parameter!(futprun_min_mp))
+                (depth.saturating_mul(search_parameters().futprun_mp_per_ply))
+                    .max(search_parameters().futprun_min_mp)
                     .to_num(),
             );
-            depth <= search_parameter!(futprun_max_depth) && eval + fut_margin < alpha
+            depth <= search_parameters().futprun_max_depth && eval + fut_margin < alpha
         };
 
         let from_tt = self.transposition_table.get(self.game().hash());
@@ -412,10 +413,10 @@ impl ThreadData {
         if depth <= 0 && !is_in_check {
             value = self.quiescence_search(alpha, beta);
         } else {
-            if from_tt.is_none() && N::is_pv() && depth >= search_parameter!(iir_min_depth) {
+            if from_tt.is_none() && N::is_pv() && depth >= search_parameters().iir_min_depth {
                 // Internal iterative reduction
                 // https://www.chessprogramming.org/Internal_Iterative_Reductions
-                depth -= search_parameter!(iir_reduction);
+                depth -= search_parameters().iir_reduction;
             };
 
             // Null move pruning
@@ -423,15 +424,15 @@ impl ThreadData {
             // TODO: increase reduction on deeper depths?
             // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
 
-            let mut r: Depth = search_parameter!(nmr_offset) + Depth::ONE;
+            let mut r: Depth = search_parameters().nmr_offset + Depth::ONE;
             let game = self.game();
             let board = game.board();
             let friendly_pieces = board.get_color(game.to_move());
             let enemy_pieces = board.get_color(game.to_move().other());
             let kp =
                 (board.get_piece(Piece::Pawn) | board.get_piece(Piece::King)) & friendly_pieces;
-            r += eval::game_phase(board) * search_parameter!(nmr_piece_slope);
-            r += depth * search_parameter!(nmr_depth_slope);
+            r += eval::game_phase(board) * search_parameters().nmr_piece_slope;
+            r += depth * search_parameters().nmr_depth_slope;
 
             let side_to_move_only_kp = kp == friendly_pieces;
 
@@ -584,13 +585,13 @@ impl ThreadData {
                         let x = depth.int_log2() * Depth::from_num(moveno).int_log2();
                         let (a, b) = if !is_quiet {
                             (
-                                search_parameter!(lmr_quiescent_slope),
-                                search_parameter!(lmr_quiescent_offset),
+                                search_parameters().lmr_quiescent_slope,
+                                search_parameters().lmr_quiescent_offset,
                             )
                         } else {
                             (
-                                search_parameter!(lmr_quiet_slope),
-                                search_parameter!(lmr_quiet_offset),
+                                search_parameters().lmr_quiet_slope,
+                                search_parameters().lmr_quiet_offset,
                             )
                         };
                         a * x + b

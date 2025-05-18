@@ -10,7 +10,7 @@ use crate::game::Game;
 use crate::millipawns::{Millipawns, DRAW};
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
-use crate::search_parameter;
+use crate::search::parameters::search_parameters;
 
 use super::{ThreadData, N_CONTINUATION_HISTORIES};
 
@@ -395,7 +395,7 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let piece = game.board().occupant_piece(ply.src()).unwrap();
 
     let from_history =
-        thread.history_table.score(color, piece, dst) * search_parameter!(direct_history_weight);
+        thread.history_table.score(color, piece, dst) * search_parameters().direct_history_weight;
     let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
     let see = static_exchange_evaluation(game, ply).0.min(0);
 
@@ -405,7 +405,7 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
             let cont = thread.continuation_histories[i]
                 .get((color, cont_hist.piece_dst(), (piece, dst)))
                 .0
-                * search_parameter!(continuation_weights)[i];
+                * search_parameters().continuation_weights[i];
             val += cont;
         }
     }

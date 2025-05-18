@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use crate::game::Game;
 use crate::history::History;
 use crate::polyglot::PolyglotBook;
-use crate::search_parameter;
+use crate::search::parameters::search_parameters;
 use crate::transposition_table::TranspositionTable;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -535,6 +535,12 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         tunable!(lmr_quiet_slope, fixed::types::I16F16),
         #[cfg(feature = "tunable")]
         tunable!(lmr_quiet_offset, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(futprun_max_depth, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(futprun_mp_per_ply, fixed::types::I16F16),
+        #[cfg(feature = "tunable")]
+        tunable!(futprun_min_mp, fixed::types::I16F16),
     ]
 });
 
