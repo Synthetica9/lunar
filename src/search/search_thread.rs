@@ -682,10 +682,16 @@ impl ThreadData {
                         let to_move = self.game().to_move();
 
                         let continuation_history = |idx: usize, our_dst, our_piece, delta| {
-                            if let Some(oppt_info) = self.history.peek_n(idx + 1) {
-                                let index = (to_move, oppt_info.piece_dst(), (our_piece, our_dst));
-                                self.continuation_histories[idx].gravity_history(index, delta);
+                            let Some(oppt_info) = self.history.peek_n(idx) else {
+                                return;
+                            };
+
+                            if oppt_info.ply.is_null() {
+                                return;
                             }
+
+                            let index = (to_move, oppt_info.piece_dst(), (our_piece, our_dst));
+                            self.continuation_histories[idx].gravity_history(index, delta);
                         };
 
                         self.history_table

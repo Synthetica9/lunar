@@ -397,13 +397,19 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
 
     let cont_weights = continuation_weights();
     for i in 0..N_CONTINUATION_HISTORIES {
-        if let Some(cont_hist) = thread.history.peek_n(i + 1) {
-            let cont = thread.continuation_histories[i]
-                .get((color, cont_hist.piece_dst(), (piece, dst)))
-                .0
-                * cont_weights[i];
-            val += cont;
+        let Some(cont_hist) = thread.history.peek_n(i) else {
+            break;
+        };
+
+        if cont_hist.ply.is_null() {
+            continue; // TODO: Or break? Since the moves after this will be a bit dubious
         }
+
+        let cont = thread.continuation_histories[i]
+            .get((color, cont_hist.piece_dst(), (piece, dst)))
+            .0
+            * cont_weights[i];
+        val += cont;
     }
 
     Millipawns(val)
