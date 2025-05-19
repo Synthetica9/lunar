@@ -6,6 +6,7 @@ pub struct Millipawns(pub i32);
 pub const WIN: Millipawns = Millipawns(100_000_256);
 pub const DRAW: Millipawns = Millipawns(0);
 pub const LOSS: Millipawns = Millipawns(-WIN.0);
+pub const INF: Millipawns = Millipawns(WIN.0 * 2 + 100);
 
 impl Millipawns {
     pub const ONE: Self = Self(1);

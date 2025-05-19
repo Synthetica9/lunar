@@ -563,6 +563,14 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         tunable!(mo_direct_history_weight, i32),
         #[cfg(feature = "tunable")]
         tunable!(mo_move_threatened_piece_bonus, i32),
+        #[cfg(feature = "tunable")]
+        tunable!(aw_min_depth, i32),
+        #[cfg(feature = "tunable")]
+        tunable!(aw_base_window, f32),
+        #[cfg(feature = "tunable")]
+        tunable!(aw_widening_base, f32),
+        #[cfg(feature = "tunable")]
+        tunable!(aw_fail_open_after, i32),
     ]
 });
 

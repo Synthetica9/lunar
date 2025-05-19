@@ -282,34 +282,78 @@ impl ThreadData {
 
     pub fn search(&mut self) -> ThreadCommand {
         use crate::millipawns::*;
+
+        let mut value = DRAW;
+        let base_window = Millipawns(search_parameters().aw_base_window as i32);
+
+        let count_to_window = |count| {
+            if count > search_parameters().aw_fail_open_after {
+                INF // Should be like "INF"
+            } else {
+                Millipawns(
+                    (base_window.0 as f32
+                        * (1.0 + search_parameters().aw_widening_base).powi(count))
+                        as i32,
+                )
+            }
+        };
+
         for depth in 1..=255 {
-            // TODO: narrow alpha and beta? (aspiration windows)
-            // Tried this, available in aspiration-windows branch, but it
-            // seems to significantly weaken self-play.
-            match self.alpha_beta_search::<RootNode>(LOSS, WIN, Depth::from_num(depth)) {
-                Ok((score, best_move)) => {
-                    self.send_status_update();
-                    self.status_channel
-                        .send(ThreadStatus::SearchFinished {
-                            score,
-                            best_move,
-                            depth,
-                            root_hash: self.root_hash,
-                        })
-                        .unwrap();
-                    self.best_move = best_move;
+            let mut fail_highs = 0;
+            let mut fail_lows = 0;
+            let (mut alpha, mut beta) = if depth < search_parameters().aw_min_depth {
+                (LOSS, WIN)
+            } else {
+                (value - base_window, value + base_window)
+            };
 
-                    debug_assert!(self.game().hash() == self.root_hash);
-                    // Debugging move order.
-                    // let mut move_gen = StandardMoveGenerator::init(self);
-                    // let mut plies = Vec::new();
-                    // while let Some(ply) = move_gen.next(self) {
-                    //     plies.push(ply);
-                    // }
+            loop {
+                let (score, best_move) =
+                    match self.alpha_beta_search::<RootNode>(alpha, beta, Depth::from_num(depth)) {
+                        Ok(val) => val,
+                        Err(cmd) => return cmd,
+                    };
 
-                    // println!("{plies:?}")
+                debug_assert!(self.game().hash() == self.root_hash);
+
+                // TODO: message fail high/lows to main threat
+                if score < alpha {
+                    fail_lows += 1;
+                    let alpha_before = alpha;
+                    alpha = score - count_to_window(fail_lows);
+                    alpha = alpha.max(LOSS);
+                    println!(
+                        "info string Fail low! α':{alpha:?} < s:{score:?} < α:{alpha_before:?} < β:{beta:?}"
+                    );
+
+                    continue;
+                } else if score > beta {
+                    fail_highs += 1;
+                    let beta_before = beta;
+                    beta = score + count_to_window(fail_highs);
+                    beta = beta.min(WIN);
+                    println!(
+                        "info string Fail high! α:{alpha:?} < β:{beta_before:?} < s:{score:?} < β':{beta:?}"
+                    );
+                    continue;
                 }
-                Err(command) => return command,
+
+                self.best_move = best_move;
+                value = score;
+
+                self.send_status_update();
+                self.status_channel
+                    .send(ThreadStatus::SearchFinished {
+                        score,
+                        best_move,
+                        depth: depth as usize,
+                        root_hash: self.root_hash,
+                    })
+                    .expect("Can send on channel");
+
+                // In the window!
+
+                break;
             }
         }
         ThreadCommand::StopSearch
