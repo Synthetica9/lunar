@@ -16,7 +16,6 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 use super::countermove::{CounterMove, L2History};
 use super::currently_searching::CurrentlySearching;
 use super::history_heuristic::HistoryTable;
-use crate::eval;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -26,10 +25,11 @@ use crate::search::parameters::search_parameters;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
+use crate::{eval, search};
 
 const N_KILLER_MOVES: usize = 2;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
-const COMMS_INTERVAL: usize = 1 << 14;
+const COMMS_INTERVAL: usize = 1 << 10;
 
 mod move_order;
 
@@ -284,23 +284,29 @@ impl ThreadData {
         use crate::millipawns::*;
 
         let mut value = DRAW;
-        let base_window = Millipawns(search_parameters().aw_base_window as i32);
-
-        let count_to_window = |count| {
-            if count > search_parameters().aw_fail_open_after {
-                INF // Should be like "INF"
-            } else {
-                Millipawns(
-                    (base_window.0 as f32
-                        * (1.0 + search_parameters().aw_widening_base).powi(count))
-                        as i32,
-                )
-            }
-        };
 
         for depth in 1..=255 {
             let mut fail_highs = 0;
             let mut fail_lows = 0;
+
+            let depth_fac = ((depth - search_parameters().aw_min_depth) as f32)
+                .powf(-search_parameters().aw_depth_exp);
+
+            let count_to_window = |count| {
+                if count > search_parameters().aw_fail_open_after {
+                    INF
+                } else {
+                    Millipawns(
+                        (search_parameters().aw_base_window
+                            * depth_fac
+                            * (1.0 + search_parameters().aw_widening_base).powi(count))
+                            as i32,
+                    )
+                }
+            };
+
+            let base_window = count_to_window(0);
+
             let (mut alpha, mut beta) = if depth < search_parameters().aw_min_depth {
                 (LOSS, WIN)
             } else {
@@ -315,6 +321,7 @@ impl ThreadData {
                     };
 
                 debug_assert!(self.game().hash() == self.root_hash);
+                self.send_status_update();
 
                 // TODO: message fail high/lows to main threat
                 if score < alpha {
@@ -341,7 +348,6 @@ impl ThreadData {
                 self.best_move = best_move;
                 value = score;
 
-                self.send_status_update();
                 self.status_channel
                     .send(ThreadStatus::SearchFinished {
                         score,

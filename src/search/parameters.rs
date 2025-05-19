@@ -36,6 +36,7 @@ pub struct SearchParameters {
     pub aw_base_window: f32,
     pub aw_widening_base: f32,
     pub aw_fail_open_after: i32,
+    pub aw_depth_exp: f32,
 }
 
 const fn const_unwrap<T>(val: Result<T, ParseFixedError>) -> T {
@@ -77,6 +78,7 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     aw_base_window: 20.0,
     aw_widening_base: 0.7,
     aw_fail_open_after: 5,
+    aw_depth_exp: 1.2,
 };
 
 #[cfg(feature = "tunable")]
