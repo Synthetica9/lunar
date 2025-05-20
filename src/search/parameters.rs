@@ -74,11 +74,11 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     mo_direct_history_weight: 50,
     mo_move_threatened_piece_bonus: 1000,
 
-    aw_min_depth: 5,
-    aw_base_window: 20.0,
-    aw_widening_base: 0.7,
-    aw_fail_open_after: 5,
-    aw_depth_exp: 1.2,
+    aw_min_depth: 3,
+    aw_base_window: 828.89,
+    aw_widening_base: 1.1006171637571822,
+    aw_fail_open_after: 15,
+    aw_depth_exp: 0.9697363866884341,
 };
 
 #[cfg(feature = "tunable")]
