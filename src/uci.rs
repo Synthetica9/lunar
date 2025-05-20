@@ -1,7 +1,7 @@
 use std::io::Write;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::str::FromStr;
 
 use crate::game::Game;
 use crate::history::History;
@@ -451,7 +451,7 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
                     default: "<>",
                 },
                 setter: |value, _state| {
-                    crate::search::parameters::SEARCH_PARAMETERS.write().unwrap().$name = 
+                    crate::search::parameters::SEARCH_PARAMETERS.write().unwrap().$name =
                         <$tpe>::from_str(value).map_err(|x| format!("Could not parse: {x}"))?;
                     Ok(())
                 },
@@ -549,6 +549,8 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         tunable!(mo_continuation_factor, fixed::types::I16F16),
         #[cfg(feature = "tunable")]
         tunable!(mo_direct_history_weight, i32),
+        #[cfg(feature = "tunable")]
+        tunable!(mo_move_threatened_piece_bonus, i32),
     ]
 });
 

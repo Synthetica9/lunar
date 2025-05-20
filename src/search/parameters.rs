@@ -26,6 +26,7 @@ pub struct SearchParameters {
     pub mo_continuation_start_weight: Depth,
     pub mo_continuation_factor: Depth,
     pub mo_direct_history_weight: i32,
+    pub mo_move_threatened_piece_bonus: i32,
 
     pub futprun_max_depth: Depth,
     pub futprun_mp_per_ply: Depth,
@@ -65,6 +66,7 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     mo_continuation_start_weight: const_depth("40"),
     mo_continuation_factor: const_depth("0.75"),
     mo_direct_history_weight: 50,
+    mo_move_threatened_piece_bonus: 1000,
 };
 
 #[cfg(feature = "tunable")]

@@ -75,6 +75,11 @@ impl ZobristHash {
     pub fn to_usize(&self) -> usize {
         self.0 as usize
     }
+
+    pub fn hash_after_null(mut self) -> Self {
+        self.flip_side();
+        self
+    }
 }
 
 impl Default for ZobristHash {

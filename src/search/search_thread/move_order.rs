@@ -11,6 +11,7 @@ use crate::millipawns::{Millipawns, DRAW};
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
 use crate::search::parameters::search_parameters;
+use crate::square::Square;
 
 use super::{ThreadData, N_CONTINUATION_HISTORIES};
 
@@ -340,8 +341,14 @@ impl MoveGenerator for StandardMoveGenerator {
             GenQuietMoves => {
                 self.phase = YieldOtherMoves;
                 let game = thread.game();
+                let threat = thread
+                    .transposition_table
+                    .get(game.hash().hash_after_null())
+                    .and_then(|x| x.best_move())
+                    .map(Ply::dst);
+
                 for ply in game.quiet_pseudo_legal_moves() {
-                    let value = quiet_move_order(thread, ply);
+                    let value = quiet_move_order(thread, ply, threat);
                     self.queue.push(QuietMove { ply, value });
                 }
                 self.queue.sort_unstable();
@@ -372,7 +379,7 @@ fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
     res
 }
 
-pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
+pub fn quiet_move_order(thread: &ThreadData, ply: Ply, threatened: Option<Square>) -> Millipawns {
     // http://www.talkchess.com/forum3/viewtopic.php?t=66312
     // Based on Andrew Grant's idea.
     let game = thread.game();
@@ -396,6 +403,11 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let mut val = from_history + from_pesto + see;
 
     let cont_weights = continuation_weights();
+
+    if threatened.is_some_and(|threat| src == threat) {
+        val += search_parameters().mo_move_threatened_piece_bonus;
+    }
+
     for i in 0..N_CONTINUATION_HISTORIES {
         let Some(cont_hist) = thread.history.peek_n(i) else {
             break;
