@@ -1,4 +1,6 @@
 /target
+data/*.bin
+
 mutants.out
 mutants.out.old
 result
