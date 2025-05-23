@@ -5,7 +5,6 @@ use std::sync::atomic::Ordering;
 use crate::basic_enums::Color;
 use crate::bitboard::{self, Bitboard};
 use crate::board::Board;
-use crate::eval::ByPiece;
 use crate::game::Game;
 use crate::millipawns::{Millipawns, DRAW};
 use crate::piece::Piece;
@@ -384,11 +383,11 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply, threatened: Option<Square
     // Based on Andrew Grant's idea.
     let game = thread.game();
     let piece = ply.moved_piece(game);
-    let square_table = &crate::eval::STATIC_PARAMETERS
-        .piece_square_table
-        .mg
-        .get(piece)
-        .values;
+    // let square_table = &crate::eval::STATIC_PARAMETERS
+    //     .piece_square_table
+    //     .mg
+    //     .get(piece)
+    //     .values;
 
     let color = game.to_move();
     let dst = ply.dst();
@@ -397,10 +396,11 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply, threatened: Option<Square
 
     let from_history = thread.history_table.score(color, piece, dst)
         * search_parameters().mo_direct_history_weight;
-    let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
+    // let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
     let see = static_exchange_evaluation(game, ply).0.min(0);
 
-    let mut val = from_history + from_pesto + see;
+    // let mut val = from_history + from_pesto + see;
+    let mut val = from_history + see;
 
     let cont_weights = continuation_weights();
 

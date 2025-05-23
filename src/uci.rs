@@ -321,6 +321,8 @@ impl UCIState {
                         println!("{from_book:?}");
                     }
                 }
+
+                println!("Static eval: {:?}", crate::eval::evaluation(&game));
             }
             "stop" => {
                 if let Some(msg) = self.search_thread_pool.maybe_end_search(true) {

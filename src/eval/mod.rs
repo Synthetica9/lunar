@@ -1,20 +1,126 @@
-use std::iter::Sum;
+/*
+This is about as simple as you can get with a network, the arch is
+    (768 -> HIDDEN_SIZE)x2 -> 1
+and the training schedule is pretty sensible.
+There's potentially a lot of elo available by adjusting the wdl
+and lr schedulers, depending on your dataset.
+*/
 
-use crate::basic_enums::Color;
-use crate::bitboard::{self, Bitboard};
-use crate::board::Board;
-use crate::game::Game;
-use crate::millipawns::Millipawns;
-use crate::piece::Piece;
-use crate::square::{files, ranks};
+use crate::{
+    basic_enums::Color, board::Board, game::Game, millipawns::Millipawns, piece::Piece,
+    small_finite_enum::SmallFiniteEnum, square::Square,
+};
 
-pub use crate::generated::parameters::STATIC_PARAMETERS;
-pub use parameters::*;
+const HIDDEN_SIZE: usize = 32;
+const SCALE: i32 = 400;
+const QA: i16 = 255;
+const QB: i16 = 64;
 
-mod pawn_hash_table;
-use pawn_hash_table::PHTEntry;
+/*
+This is how you would load the network in rust.
+Commented out because it will error if it can't find the file.
+*/
+pub static NNUE: Network =
+    unsafe { std::mem::transmute(*include_bytes!("../../nets/simple32.nnue")) };
 
-pub struct Evaluator(pub Parameters);
+pub fn evaluation(game: &Game) -> Millipawns {
+    let (us, them) = match game.to_move() {
+        Color::White => (game.accum(Color::White), game.accum(Color::Black)),
+        Color::Black => (game.accum(Color::Black), game.accum(Color::White)),
+    };
+    Millipawns(NNUE.evaluate(us, them) * 10)
+}
+
+#[inline]
+/// Clipped ReLU - Activation Function.
+/// Note that this takes the i16s in the accumulator to i32s.
+fn crelu(x: i16) -> i32 {
+    i32::from(x).clamp(0, i32::from(QA))
+}
+
+/// This is the quantised format that bullet outputs.
+#[repr(C)]
+pub struct Network {
+    /// Column-Major `HIDDEN_SIZE x 768` matrix.
+    feature_weights: [Accumulator; 768],
+    /// Vector with dimension `HIDDEN_SIZE`.
+    feature_bias: Accumulator,
+    /// Column-Major `1 x (2 * HIDDEN_SIZE)`
+    /// matrix, we use it like this to make the
+    /// code nicer in `Network::evaluate`.
+    output_weights: [i16; 2 * HIDDEN_SIZE],
+    /// Scalar output bias.
+    output_bias: i16,
+}
+
+impl Network {
+    /// Calculates the output of the network, starting from the already
+    /// calculated hidden layer (done efficiently during makemoves).
+    pub fn evaluate(&self, us: &Accumulator, them: &Accumulator) -> i32 {
+        // Initialise output with bias.
+        let mut output = i32::from(self.output_bias);
+
+        // Side-To-Move Accumulator -> Output.
+        for (&input, &weight) in us.vals.iter().zip(&self.output_weights[..HIDDEN_SIZE]) {
+            output += crelu(input) * i32::from(weight);
+        }
+
+        // Not-Side-To-Move Accumulator -> Output.
+        for (&input, &weight) in them.vals.iter().zip(&self.output_weights[HIDDEN_SIZE..]) {
+            output += crelu(input) * i32::from(weight);
+        }
+
+        // Apply eval scale.
+        output *= SCALE;
+
+        // Remove quantisation.
+        output /= i32::from(QA) * i32::from(QB);
+
+        output
+    }
+}
+
+/// A column of the feature-weights matrix.
+/// Note the `align(64)`.
+#[derive(Clone, Copy, PartialEq)]
+#[repr(C, align(64))]
+pub struct Accumulator {
+    vals: [i16; HIDDEN_SIZE],
+}
+
+impl Accumulator {
+    /// Initialised with bias so we can just efficiently
+    /// operate on it afterwards.
+    pub fn new_from(net: &Network) -> Self {
+        net.feature_bias
+    }
+
+    pub fn new() -> Self {
+        Self::new_from(&NNUE)
+    }
+
+    /// Add a feature to an accumulator.
+    pub fn add_feature(&mut self, feature_idx: usize, net: &Network) {
+        for (i, d) in self
+            .vals
+            .iter_mut()
+            .zip(&net.feature_weights[feature_idx].vals)
+        {
+            *i += *d
+        }
+    }
+
+    /// Remove a feature from an accumulator.
+    pub fn remove_feature(&mut self, feature_idx: usize, net: &Network) {
+        for (i, d) in self
+            .vals
+            .iter_mut()
+            .zip(&net.feature_weights[feature_idx].vals)
+        {
+            *i -= *d
+        }
+    }
+}
 
 const fn gamephase_inc(piece: Piece) -> i32 {
     use Piece::*;
@@ -36,227 +142,6 @@ pub fn game_phase(board: &Board) -> i32 {
     std::cmp::min(res, 24)
 }
 
-type Term = fn(&Evaluator, Color, &Game, &PHTEntry) -> parameters::PhaseParameter<Millipawns>;
-impl Evaluator {
-    pub const GENERAL_TERMS: &'static [Term] = &[
-        Evaluator::pesto,
-        Evaluator::queenside_pawns,
-        // Evaluator::connected_rook,
-        // Evaluator::pawn_shield,
-        // Evaluator::outpost_piece,
-    ];
-
-    pub const PAWN_TERMS: &'static [Term] = &[
-        Evaluator::isolated_pawn,
-        Evaluator::doubled_pawn,
-        Evaluator::protected_pawn,
-        Evaluator::passed_pawn,
-        // Evaluator::outpost_squares,
-    ];
-
-    pub fn evaluate(&self, game: &Game, use_pht: bool) -> Millipawns {
-        let pht_entry = if use_pht {
-            pawn_hash_table::get(game)
-        } else {
-            PHTEntry::new(game, self)
-        };
-        let (mut mg, mut eg) = self._evaluate_inline(Self::GENERAL_TERMS, &pht_entry, game);
-
-        mg += pht_entry.mg();
-        eg += pht_entry.eg();
-
-        let phase = game_phase(game.board());
-        let mut res = (mg * phase + eg * (24 - phase)) / 24;
-
-        if game.board().is_likely_draw() {
-            res = Millipawns(res.0 / 256);
-        }
-
-        res * game.to_move().multiplier()
-    }
-
-    #[inline(always)]
-    fn _evaluate_inline(
-        &self,
-        terms: &[Term],
-        pht_entry: &PHTEntry,
-        game: &Game,
-    ) -> (Millipawns, Millipawns) {
-        let mut mg = Millipawns(0);
-        let mut eg = Millipawns(0);
-
-        for color in [Color::White, Color::Black] {
-            for term in terms {
-                let x = term(self, color, game, pht_entry);
-                mg += x.mg * color.multiplier();
-                eg += x.eg * color.multiplier();
-            }
-        }
-
-        (mg, eg)
-    }
-
-    fn pesto(&self, color: Color, game: &Game, _: &PHTEntry) -> PhaseParameter<Millipawns> {
-        let pesto = &self.0.piece_square_table;
-        pesto.map(|x| {
-            Piece::iter()
-                .map(|piece| {
-                    let mut pieces = game.board().get(color, piece);
-
-                    if piece == Piece::Pawn {
-                        // Only "kingside" pawns
-                        let effective_king_side = game.board().effective_king_side(color);
-                        pieces &= effective_king_side;
-                    }
-
-                    pieces = pieces.perspective(color);
-
-                    x.get(piece).dot_product(pieces)
-                        + piece.base_value() * (pieces.popcount() as i32)
-                })
-                .sum()
-        })
-    }
-
-    fn queenside_pawns(
-        &self,
-        color: Color,
-        game: &Game,
-        _: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let queenside_pesto = &self.0.queenside_pawns;
-
-        queenside_pesto.map(|x| {
-            let queenside = !game.board().effective_king_side(color);
-            let pawns = game.board().get(color, Piece::Pawn);
-
-            let queenside_pawns = queenside & pawns;
-
-            x.dot_product(queenside_pawns.perspective(color))
-        })
-    }
-
-    fn isolated_pawn(
-        &self,
-        color: Color,
-        _game: &Game,
-        pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let isolated_pawns = pht_entry.get(color).isolated();
-
-        self.0
-            .isolated_pawns
-            .map(|phase| phase.dot_product(isolated_pawns))
-    }
-
-    fn protected_pawn(
-        &self,
-        color: Color,
-        _game: &Game,
-        pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let protected_pawns = pht_entry.get(color).protected();
-
-        self.0
-            .protected_pawns
-            .map(|x| x.dot_product(protected_pawns))
-    }
-
-    // fn connected_rook(
-    //     &self,
-    //     color: &Color,
-    //     game: &Game,
-    //     _pht_entry: &PHTEntry,
-    // ) -> PhaseParameter<Millipawns> {
-    //     let rooks = game.board().get(color, &Piece::Rook);
-    //     let occupied = game.board().get_occupied();
-
-    //     self.0.connected_rooks.map(|x| {
-    //         rooks
-    //             .iter()
-    //             .map(|square| {
-    //                 let attacks = Bitboard::rook_attacks(square, occupied) & rooks;
-    //                 x.dot_product(&attacks.perspective(color))
-    //             })
-    //             .sum()
-    //     })
-    // }
-
-    // fn outpost_piece(
-    //     &self,
-    //     color: &Color,
-    //     game: &Game,
-    //     pht_entry: &PHTEntry,
-    // ) -> PhaseParameter<Millipawns> {
-    //     let outposts = pht_entry.get(color).outposts();
-
-    //     self.0.outpost_pieces.map(|x| {
-    //         Piece::iter()
-    //             .map(|piece| {
-    //                 x.get(&piece).dot_product(
-    //                     &game
-    //                         .board()
-    //                         .get(color, &piece)
-    //                         .perspective(color)
-    //                         .and(outposts),
-    //                 )
-    //             })
-    //             .sum()
-    //     })
-    // }
-
-    // fn outpost_squares(
-    //     &self,
-    //     color: &Color,
-    //     _game: &Game,
-    //     pht_entry: &PHTEntry,
-    // ) -> PhaseParameter<Millipawns> {
-    //     let outposts = pht_entry.get(color).outposts();
-
-    //     self.0.outpost_squares.map(|x| x.dot_product(&outposts))
-    // }
-
-    // fn pawn_shield(
-    //     &self,
-    //     color: &Color,
-    //     game: &Game,
-    //     _pht_entry: &PHTEntry,
-    // ) -> PhaseParameter<Millipawns> {
-    //     use crate::bitboard_map::{IMMEDIATE_NEIGHBORHOOD, MEDIUM_NEIGHBORHOOD};
-
-    //     let pawns = game.board().get(color, &Piece::Pawn);
-    //     let king = game.board().king_square(color);
-
-    //     let close = (IMMEDIATE_NEIGHBORHOOD[king] & pawns).perspective(color);
-    //     let medium = (MEDIUM_NEIGHBORHOOD[king] & pawns).perspective(color);
-
-    //     // Double counting close pawns because they seem more pertinent.
-    //     self.0
-    //         .pawn_shield
-    //         .map(|x| x.dot_product(&close) + x.dot_product(&medium))
-    // }
-
-    fn doubled_pawn(
-        &self,
-        color: Color,
-        _game: &Game,
-        pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let doubled = pht_entry.get(color).doubled();
-        self.0.doubled_pawns.map(|x| x.dot_product(doubled))
-    }
-
-    fn passed_pawn(
-        &self,
-        color: Color,
-        _game: &Game,
-        pht_entry: &PHTEntry,
-    ) -> PhaseParameter<Millipawns> {
-        let passed = pht_entry.get(color).passed() & !bitboard::ROW_7;
-        self.0.passed_pawns.map(|x| x.dot_product(passed))
-    }
-}
-
 pub fn base_eval(game: &Game) -> Millipawns {
     let mut res = Millipawns(0);
     for (color, piece, _) in game.board().to_piece_list() {
@@ -266,137 +151,25 @@ pub fn base_eval(game: &Game) -> Millipawns {
     res * game.to_move().multiplier()
 }
 
-const STATIC_EVALUATOR: Evaluator = Evaluator(crate::generated::parameters::STATIC_PARAMETERS);
-
-#[inline(always)]
-pub fn evaluation(game: &Game) -> Millipawns {
-    STATIC_EVALUATOR.evaluate(game, true)
-}
-
-pub trait DotProduct {
-    type Output;
-
-    fn dot_product(&self, bitboard: Bitboard) -> Self::Output;
-}
-
-impl DotProduct for BoardParameter {
-    type Output = Millipawns;
-
-    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
-        // let mut result = Millipawns(0);
-        // for idx in 0..64 {
-        //     let square = Square::from_u8(idx as u8);
-        //     if bitboard.get(square) {
-        //         result += Millipawns(self.values[idx] as i32);
-        //     }
-        // }
-        // result
-        bitboard
-            .iter()
-            .map(|sq| Millipawns(self.values[sq.as_index()] as i32))
-            .sum()
-    }
-}
-
-impl DotProduct for ScalarParameter {
-    type Output = Millipawns;
-
-    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
-        Millipawns(self.0) * (bitboard.popcount() as i32)
-    }
-}
-
-impl<T> DotProduct for Pos<T>
-where
-    T: DotProduct,
-{
-    type Output = T::Output;
-
-    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
-        self.0.dot_product(bitboard)
-    }
-}
-
-impl<T> DotProduct for FileParameter<T>
-where
-    T: DotProduct,
-    <T as DotProduct>::Output: Sum,
-{
-    type Output = T::Output;
-
-    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
-        files::ALL
-            .iter()
-            .zip(self.0.iter())
-            .map(|(file, val)| val.dot_product(file.as_bitboard() & bitboard))
-            .sum()
-    }
-}
-
-impl<T> DotProduct for RankParameter<T>
-where
-    T: DotProduct,
-    <T as DotProduct>::Output: Sum,
-{
-    type Output = T::Output;
-
-    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
-        ranks::ALL
-            .iter()
-            .zip(self.0.iter())
-            .map(|(rank, val)| val.dot_product(rank.as_bitboard() & bitboard))
-            .sum()
-    }
-}
-
-impl DotProduct for SparseBoardParameter {
-    type Output = Millipawns;
-
-    fn dot_product(&self, bitboard: Bitboard) -> Self::Output {
-        self.files.dot_product(bitboard) + self.ranks.dot_product(bitboard)
-    }
-}
-
-pub trait ByPiece<'a> {
-    type Output;
-
-    fn get(&'a self, piece: Piece) -> &'a Self::Output;
-}
-
-impl<'a, T> ByPiece<'a> for PieceParameter<T> {
-    type Output = T;
-
-    fn get(&'a self, piece: Piece) -> &'a Self::Output {
-        use Piece::*;
-        match piece {
-            Pawn => &self.pawn,
-            Knight => &self.knight,
-            Bishop => &self.bishop,
-            Rook => &self.rook,
-            Queen => &self.queen,
-            King => &self.king,
-        }
-    }
+pub fn to_feature_idx(piece: Piece, color: Color, square: Square) -> usize {
+    (piece, color, square).to_usize()
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::ply::ApplyPly;
-
     use super::*;
 
     #[test]
-    fn evaluation_symmetric() -> Result<(), String> {
-        let fen = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
-        let mut game = Game::from_fen(fen)?;
+    fn test_to_feature_idx() {
+        assert_eq!(
+            to_feature_idx(Piece::Knight, Color::Black, Square::C1),
+            7 * 64 + 2
+        );
+    }
 
-        let from_white = evaluation(&game);
-        game.flip_side();
-        let from_black = evaluation(&game);
-
-        assert_eq!(from_white, -from_black);
-        println!("{}", from_white.0);
-
-        Ok(())
+    #[test]
+    fn test_extreme_eval() {
+        let game = Game::from_fen("8/4k3/8/8/8/8/QQQ5/1K6 w - - 0 1").unwrap();
+        assert!(evaluation(&game) > Millipawns(10000))
     }
 }

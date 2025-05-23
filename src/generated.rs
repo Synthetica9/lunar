@@ -10,4 +10,3 @@ macro_rules! import_generated {
 
 import_generated! {squares}
 import_generated! {magics}
-import_generated! {parameters}

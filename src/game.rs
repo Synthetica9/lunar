@@ -6,7 +6,9 @@ use crate::bitboard_map::{self, BitboardMap};
 use crate::board::Board;
 use crate::castlerights::CastleRights;
 use crate::direction::directions;
+use crate::eval::{to_feature_idx, Accumulator};
 use crate::legality::LegalityChecker;
+use crate::small_finite_enum::SmallFiniteEnum;
 
 use crate::piece::Piece;
 use crate::ply::{ApplyPly, Ply, SpecialFlag, UndoPly, _combination_moves};
@@ -29,6 +31,9 @@ pub struct Game {
     half_move_total: i16,
     hash: ZobristHash,
     pawn_hash: ZobristHash,
+
+    white_accum: Accumulator,
+    black_accum: Accumulator,
 }
 
 impl std::fmt::Debug for Game {
@@ -80,10 +85,25 @@ impl Game {
         self.pawn_hash
     }
 
+    pub fn accum(&self, side: Color) -> &Accumulator {
+        match side {
+            Color::White => &self.white_accum,
+            Color::Black => &self.black_accum,
+        }
+    }
+
     pub fn recalc_hash(&mut self) {
         // TODO: pawn hash
         self.hash = ZobristHash::from_game(self, false);
         self.pawn_hash = ZobristHash::from_game(self, true);
+
+        let net = &crate::eval::NNUE;
+        for (color, piece, square) in self.board().to_piece_list() {
+            let white_idx = to_feature_idx(piece, color, square);
+            self.white_accum.add_feature(white_idx, net);
+            let black_idx = to_feature_idx(piece, color.other(), square.flip_vert());
+            self.black_accum.add_feature(black_idx, net);
+        }
     }
 
     pub fn check_valid(&self) -> Result<(), String> {
@@ -216,6 +236,9 @@ impl Game {
             half_move_total: (full_move - 1) * 2 + (to_move as i16),
             hash,
             pawn_hash,
+
+            white_accum: Accumulator::new(),
+            black_accum: Accumulator::new(),
         };
 
         res.recalc_hash();
@@ -993,13 +1016,17 @@ impl ApplyPly for Game {
         if piece == Piece::Pawn {
             self.pawn_hash.toggle_piece(color, piece, square);
         }
-    }
 
-    fn toggle_piece_multi(&mut self, color: Color, piece: Piece, squares: &[Square]) {
-        self.board.toggle_piece_multi(color, piece, squares);
-        self.hash.toggle_piece_multi(color, piece, squares);
-        if piece == Piece::Pawn {
-            self.pawn_hash.toggle_piece_multi(color, piece, squares);
+        let exists_after = self.board.get_color(color).get(square);
+        let idx_white = to_feature_idx(piece, color, square);
+        let idx_black = to_feature_idx(piece, color.other(), square.flip_vert());
+        let net = &crate::eval::NNUE;
+        if exists_after {
+            self.white_accum.add_feature(idx_white, net);
+            self.black_accum.add_feature(idx_black, net);
+        } else {
+            self.white_accum.remove_feature(idx_white, net);
+            self.black_accum.remove_feature(idx_black, net);
         }
     }
 
@@ -1522,6 +1549,7 @@ mod tests {
 
             // TODO: replace with GamePlyPair
             let ply = plies[game.hash.0 as usize % plies.len()];
+            println!("{}, {ply:?}", game.to_fen());
             let before = game.clone();
             let mut after = before.clone();
             let undo = after.apply_ply(ply);

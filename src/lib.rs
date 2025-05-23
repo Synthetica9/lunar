@@ -26,6 +26,7 @@ pub mod ply;
 pub mod plyset;
 pub mod polyglot;
 pub mod search;
+pub mod small_finite_enum;
 pub mod square;
 pub mod transposition_table;
 pub mod uci;
