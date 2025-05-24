@@ -1,22 +1,13 @@
 #!/usr/bin/env nix-shell
 #!nix-shell -i bash -p "bash"
 
-set -euxo pipefail 
+set -euxo pipefail
 
 FIFO=/tmp/lunar_fifo
 BULLET_UTILS=../bullet/target/release/bullet-utils
 mkfifo "$FIFO"
 
 ./scripts/build_pgo.sh
-
-./scripts/c_chess_cli.py \
-    -engine cmd=./target/release/lunar_pgo \
-    -engine cmd=./target/release/lunar_pgo \
-    -each depth=8 option.Hash=8 \
-    -sample freq=1 resolve=y file="$FIFO" \
-    -openings file=./test_data/blitz_openings.epd order=random -repeat \
-    -games 200000 \
-    -concurrency 24 &
 
 # Converts to format expected by bullet_convert
 CONVERT_PY='
@@ -38,5 +29,15 @@ def main():
 main()
 '
 
-$BULLET_UTILS convert --from text --input <(cat $FIFO | python -c "$CONVERT_PY") --output data/$(date -u +"%Y-%m-%dT%H:%M:%SZ").bin
+./scripts/book_randomize.py test_data/chess324.fen -n 100000 > /tmp/book.fen
 
+$BULLET_UTILS convert --from text --input <(cat $FIFO | python -c "$CONVERT_PY") --output data/$(date -u +"%Y-%m-%dT%H:%M:%SZ").bin &
+
+./scripts/c_chess_cli.py \
+    -engine cmd=./target/release/lunar_pgo \
+    -engine cmd=./target/release/lunar_pgo \
+    -each depth=8 option.Hash=8 \
+    -sample freq=1 resolve=y file="$FIFO" \
+    -openings file=/tmp/book.fen -repeat \
+    -games 200000 \
+    -concurrency 24
