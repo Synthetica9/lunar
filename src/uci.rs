@@ -345,6 +345,16 @@ impl UCIState {
             "panic" => {
                 panic!("See you on the other side 💀");
             }
+            "perft" => {
+                let depth = parts
+                    .next()
+                    .ok_or("depth not specified")?
+                    .parse::<u8>()
+                    .map_err(|x| x.to_string())?;
+
+                let game = self.history.game();
+                game.perft(depth, true);
+            }
             _ => {
                 self.log(&format!("Unknown command: {command}"));
             }

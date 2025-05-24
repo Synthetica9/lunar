@@ -979,27 +979,42 @@ impl Game {
     }
 
     pub fn perft(&self, depth: u8, print: bool) -> u64 {
-        if depth == 0 {
-            return 1;
+        fn inner(game: &mut Game, depth: u8, print: bool) -> u64 {
+            if depth == 0 {
+                return 1;
+            }
+            let mut count = 0;
+            for ply in game.legal_moves() {
+                let undo = game.apply_ply(ply);
+                if print {
+                    use std::io::Write;
+                    print!("{}: ", ply.long_name());
+                    std::io::stdout().flush().expect("could not flush");
+                }
+                let subres = inner(game, depth - 1, false);
+                if print {
+                    println!("{subres}");
+                }
+                game.undo_ply(&undo);
+                count += subres;
+            }
+            if print {
+                println!("{count} nodes at depth {depth}");
+            }
+            count
         }
-        let mut count = 0;
-        for ply in self.legal_moves() {
-            let mut game = self.clone();
 
-            game.apply_ply(ply);
-            if print {
-                print!("{}: ", ply.long_name());
-            }
-            let subres = &game.perft(depth - 1, false);
-            if print {
-                println!("{subres}");
-            }
-            count += subres;
-        }
+        let t0 = std::time::Instant::now();
+        let mut game = self.clone();
+        let res = inner(&mut game, depth, print);
+        let t1 = std::time::Instant::now();
         if print {
-            println!("{count} nodes at depth {depth}");
+            let dt = t1 - t0;
+            println!("Time: {:#?}", dt);
+            let nps = (res as f64 / dt.as_secs_f64()) as u64;
+            println!("NPS: {nps}");
         }
-        count
+        res
     }
 }
 
