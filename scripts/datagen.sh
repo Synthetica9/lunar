@@ -29,7 +29,7 @@ def main():
 main()
 '
 
-./scripts/book_randomize.py test_data/chess324.fen -n 100000 > /tmp/book.fen
+./scripts/book_randomize.py test_data/chess324.fen -n 200000 > /tmp/book.fen
 
 $BULLET_UTILS convert --from text --input <(cat $FIFO | python -c "$CONVERT_PY") --output data/$(date -u +"%Y-%m-%dT%H:%M:%SZ").bin &
 
@@ -38,6 +38,8 @@ $BULLET_UTILS convert --from text --input <(cat $FIFO | python -c "$CONVERT_PY")
     -engine cmd=./target/release/lunar_pgo \
     -each depth=8 option.Hash=8 \
     -sample freq=1 resolve=y file="$FIFO" \
-    -openings file=/tmp/book.fen -repeat \
+    -openings file=/tmp/book.fen \
     -games 200000 \
     -concurrency 24
+
+rm /tmp/lunar_fifo
