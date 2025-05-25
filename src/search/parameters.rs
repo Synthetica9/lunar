@@ -75,7 +75,7 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     mo_move_threatened_piece_bonus: 1000,
 
     aw_min_depth: 5,
-    aw_base_window: 400.0,
+    aw_base_window: 250.0,
     aw_widening_base: 1.0,
     aw_fail_open_after: 5,
     aw_depth_exp: 0.0,
