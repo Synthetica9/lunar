@@ -11,7 +11,7 @@ use crate::{
     small_finite_enum::SmallFiniteEnum, square::Square,
 };
 
-const HIDDEN_SIZE: usize = 64;
+const HIDDEN_SIZE: usize = 128;
 const SCALE: i32 = 400;
 const QA: i16 = 255;
 const QB: i16 = 64;
@@ -21,7 +21,7 @@ This is how you would load the network in rust.
 Commented out because it will error if it can't find the file.
 */
 pub static NNUE: Network =
-    unsafe { std::mem::transmute(*include_bytes!("../../nets/simple64.nnue")) };
+    unsafe { std::mem::transmute(*include_bytes!("../../nets/simple128.nnue")) };
 
 pub fn evaluation(game: &Game) -> Millipawns {
     let (us, them) = match game.to_move() {
