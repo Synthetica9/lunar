@@ -439,19 +439,16 @@ impl ThreadData {
         let from_tt = self.transposition_table.get(self.game().hash());
 
         if let Some(tte) = from_tt {
-            if depth <= tte.depth && !self.history.may_be_repetition() && !N::is_pv() {
+            if depth <= tte.depth && !self.history.may_be_repetition() {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
-                // TODO: check that the move is legal.
+                let res = Ok((tte.value, tte.best_move()));
                 match tte.value_type() {
-                    Exact => return Ok((tte.value, tte.best_move())),
-                    LowerBound => alpha = alpha.max(tte.value),
-                    UpperBound => beta = beta.min(tte.value),
-                }
-
-                if alpha >= beta {
-                    return Ok((tte.value, tte.best_move()));
+                    Exact => return res,
+                    LowerBound if tte.value >= beta => return res,
+                    UpperBound if tte.value <= alpha => return res,
+                    _ => {}
                 }
             }
         }
