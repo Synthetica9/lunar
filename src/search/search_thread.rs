@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crossbeam_channel as channel;
+use fixed::traits::Fixed;
 use linear_map::LinearMap;
 use smallvec::SmallVec;
 
@@ -614,27 +615,13 @@ impl ThreadData {
 
                 self.history.push(ply);
 
-                let x = if is_first_move {
-                    // What else could we be overwriting here?
-                    // if let Some(best) = best_move {
-                    //     debug_assert_eq!(best, ply);
-                    // }
-
-                    best_move = Some(ply);
-                    -self
-                        .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, depth - Depth::ONE)?
-                        .0
+                let lmr = !is_in_check && !is_first_move;
+                let reduction = if depth <= 3 {
+                    Depth::ONE
                 } else {
-                    // late move reduction
-                    // https://www.chessprogramming.org/Late_Move_Reductions
-                    // TODO: deferred moves should be searched as if they were being searched in-order
+                    let mut r = Depth::ONE;
 
-                    // Weiss reduces by 0.20 + ln(depth) * ln(move number) / 3.35 for captures and
-                    // promotions and 1.35 + ln(depth) * ln(move number) / 2.75 for quiet moves.
-
-                    let reduction = if depth <= 3 || is_in_check || is_check || see.0 > 0 {
-                        Depth::ONE
-                    } else {
+                    if lmr {
                         let x = depth.int_log2() * Depth::from_num(moveno).int_log2();
                         let (a, b) = if !is_quiet {
                             (
@@ -647,18 +634,36 @@ impl ThreadData {
                                 search_parameters().lmr_quiet_offset,
                             )
                         };
-                        let mut base = a * x + b;
 
-                        if is_quiet && tt_is_capture {
-                            base += search_parameters().tt_capture_reduction;
-                        }
+                        r += a * x + b;
+                    }
 
-                        base
-                    };
+                    if !is_first_move && is_quiet && tt_is_capture {
+                        r += search_parameters().tt_capture_reduction;
+                    }
 
-                    let is_reduced = reduction > Depth::ONE;
-                    let next_depth = depth - reduction.max(Depth::ONE);
+                    if is_check && see.0 >= 0 {
+                        r -= Depth::ONE;
+                    }
 
+                    r.max(Depth::ZERO)
+                };
+
+                let next_depth = depth - reduction;
+                let is_reduced = reduction > Depth::ONE;
+                let full_depth = next_depth.max(depth - Depth::ONE);
+
+                let x = if is_first_move {
+                    // What else could we be overwriting here?
+                    // if let Some(best) = best_move {
+                    //     debug_assert_eq!(best, ply);
+                    // }
+
+                    best_move = Some(ply);
+                    -self
+                        .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, full_depth)?
+                        .0
+                } else {
                     if !is_deferred {
                         self.currently_searching
                             .starting_search(hash_before, ply, next_depth);
@@ -678,7 +683,7 @@ impl ThreadData {
                         // but I don't expect that to be a huge issue
 
                         x = -self
-                            .alpha_beta_search::<PVNode>(-beta, -alpha, depth - Depth::ONE)?
+                            .alpha_beta_search::<PVNode>(-beta, -alpha, full_depth)?
                             .0;
                     }
 
