@@ -325,13 +325,13 @@ impl ThreadData {
                 self.send_status_update();
 
                 // TODO: message fail high/lows to main threat
-                if score < alpha {
+                if score <= alpha {
                     fail_lows += 1;
                     let alpha_before = alpha;
                     alpha = score - count_to_window(fail_lows);
                     alpha = alpha.max(LOSS);
                     println!(
-                        "info string Fail low! α':{alpha:?} < s:{score:?} < α:{alpha_before:?} < β:{beta:?}"
+                        "info string Fail low! α':{alpha:?} < s:{score:?} <= α:{alpha_before:?} < β:{beta:?}"
                     );
 
                     continue;
@@ -346,7 +346,13 @@ impl ThreadData {
                     continue;
                 }
 
-                self.best_move = best_move;
+                if best_move.is_none() && self.best_move.is_some() {
+                    println!(
+                        "info string Attempting to overwrite already gotten bestmove? {score:?} {alpha:?} {beta:?}"
+                    );
+                } else {
+                    self.best_move = best_move;
+                }
                 value = score;
 
                 self.status_channel
