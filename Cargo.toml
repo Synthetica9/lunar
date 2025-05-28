@@ -6,6 +6,10 @@ build = "build/main.rs"
 default-run = "lunar"
 authors = ["Patrick Hilhorst"]
 
+[workspace]
+resolver = "3"
+members = ["trainer"]
+
 [features]
 default = ["asm", "readline", "intrinsics", "hugepages"]
 # Enables custom assembly. Can be disabled on platforms that support it
