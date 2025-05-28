@@ -12,7 +12,7 @@ use crate::{
 };
 
 const HIDDEN_SIZE: usize = 128;
-const SCALE: i32 = 400;
+const SCALE: i32 = 4000;
 const QA: i16 = 255;
 const QB: i16 = 64;
 
@@ -28,7 +28,7 @@ pub fn evaluation(game: &Game) -> Millipawns {
         Color::White => (game.accum(Color::White), game.accum(Color::Black)),
         Color::Black => (game.accum(Color::Black), game.accum(Color::White)),
     };
-    Millipawns(NNUE.evaluate(us, them) * 10)
+    Millipawns(NNUE.evaluate(us, them))
 }
 
 #[inline]
@@ -76,58 +76,54 @@ impl Network {
         };
 
         #[cfg(all(target_arch = "x86_64", feature = "asm"))]
-        let acc_sum = || {
-            unsafe {
-                // https://www.chessprogramming.org/NNUE#Lizard_SCReLU
-                use std::arch::x86_64::*;
+        let acc_sum = || unsafe {
+            // https://www.chessprogramming.org/NNUE#Lizard_SCReLU
+            use std::arch::x86_64::*;
 
-                const SUM_SIZE: usize = 256 / 16;
+            const SUM_SIZE: usize = 256 / 16;
 
-                let zero = _mm256_setzero_si256();
-                let qa = _mm256_set1_epi16(QA);
-                let mut sum = zero;
+            let zero = _mm256_setzero_si256();
+            let qa = _mm256_set1_epi16(QA);
+            let mut sum = zero;
 
-                let us_ptr = us.vals.as_ptr().cast::<__m256i>();
-                let them_ptr = them.vals.as_ptr().cast::<__m256i>();
-                let us_weights_ptr = self.output_weights.as_ptr().cast::<__m256i>();
-                let them_weights_ptr = self
-                    .output_weights
-                    .as_ptr()
-                    .add(HIDDEN_SIZE)
-                    .cast::<__m256i>();
+            let us_ptr = us.vals.as_ptr().cast::<__m256i>();
+            let them_ptr = them.vals.as_ptr().cast::<__m256i>();
+            let us_weights_ptr = self.output_weights.as_ptr().cast::<__m256i>();
+            let them_weights_ptr = self
+                .output_weights
+                .as_ptr()
+                .add(HIDDEN_SIZE)
+                .cast::<__m256i>();
 
-                for i in 0..(HIDDEN_SIZE / SUM_SIZE) {
-                    let us = _mm256_load_si256(us_ptr.add(i));
-                    let them = _mm256_load_si256(them_ptr.add(i));
-                    let us_weights = _mm256_load_si256(us_weights_ptr.add(i));
-                    let them_weights = _mm256_load_si256(them_weights_ptr.add(i));
+            for i in 0..(HIDDEN_SIZE / SUM_SIZE) {
+                let us = _mm256_load_si256(us_ptr.add(i));
+                let them = _mm256_load_si256(them_ptr.add(i));
+                let us_weights = _mm256_load_si256(us_weights_ptr.add(i));
+                let them_weights = _mm256_load_si256(them_weights_ptr.add(i));
 
-                    let us_clamped = _mm256_min_epi16(_mm256_max_epi16(us, zero), qa);
-                    let them_clamped = _mm256_min_epi16(_mm256_max_epi16(them, zero), qa);
+                let us_clamped = _mm256_min_epi16(_mm256_max_epi16(us, zero), qa);
+                let them_clamped = _mm256_min_epi16(_mm256_max_epi16(them, zero), qa);
 
-                    let us_results =
-                        _mm256_madd_epi16(_mm256_mullo_epi16(us_weights, us_clamped), us_clamped);
-                    let them_results = _mm256_madd_epi16(
-                        _mm256_mullo_epi16(them_weights, them_clamped),
-                        them_clamped,
-                    );
+                let us_results =
+                    _mm256_madd_epi16(_mm256_mullo_epi16(us_weights, us_clamped), us_clamped);
+                let them_results =
+                    _mm256_madd_epi16(_mm256_mullo_epi16(them_weights, them_clamped), them_clamped);
 
-                    sum = _mm256_add_epi32(sum, us_results);
-                    sum = _mm256_add_epi32(sum, them_results);
-                }
-
-                // sum contains 8 * 32 bits, so 3 shuffles:
-                for _i in 0..2 {
-                    sum = _mm256_hadd_epi32(sum, sum);
-                }
-
-                // But _mm256_hadd_epi32 doesn't cross the 128 bit mark,
-                // so we have to do the last shuffle manually:
-
-                let lower = _mm256_extract_epi32::<0>(sum);
-                let upper = _mm256_extract_epi32::<4>(sum);
-                lower + upper
+                sum = _mm256_add_epi32(sum, us_results);
+                sum = _mm256_add_epi32(sum, them_results);
             }
+
+            // sum contains 8 * 32 bits, so 3 shuffles:
+            for _i in 0..2 {
+                sum = _mm256_hadd_epi32(sum, sum);
+            }
+
+            // But _mm256_hadd_epi32 doesn't cross the 128 bit mark,
+            // so we have to do the last shuffle manually:
+
+            let lower = _mm256_extract_epi32::<0>(sum);
+            let upper = _mm256_extract_epi32::<4>(sum);
+            lower + upper
         };
 
         // Initialise output with bias.
