@@ -454,7 +454,9 @@ impl ThreadData {
                     .max(search_parameters().futprun_min_mp)
                     .to_num(),
             );
-            depth <= search_parameters().futprun_max_depth && eval + fut_margin < alpha
+            depth <= search_parameters().futprun_max_depth
+                && eval + fut_margin < alpha
+                && !N::is_pv()
         };
 
         let from_tt = self.transposition_table.get(self.game().hash());
