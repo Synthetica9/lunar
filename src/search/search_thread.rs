@@ -459,15 +459,6 @@ impl ThreadData {
                 && !N::is_pv()
         };
 
-        let reverse_futility_pruning = {
-            let margin = Millipawns((depth.max(Depth::ONE) * 2500).to_num());
-            !N::is_pv() && eval - margin >= beta && depth <= 4
-        };
-
-        if reverse_futility_pruning {
-            return Ok((beta, None));
-        }
-
         let from_tt = self.transposition_table.get(self.game().hash());
 
         if let Some(tte) = from_tt {
@@ -486,6 +477,29 @@ impl ThreadData {
         }
 
         let mut best_move = from_tt.and_then(|x| x.best_move());
+
+        let game = self.game();
+        let board = game.board();
+        let friendly_pieces = board.get_color(game.to_move());
+        let enemy_pieces = board.get_color(game.to_move().other());
+        let kp = (board.get_piece(Piece::Pawn) | board.get_piece(Piece::King)) & friendly_pieces;
+        let side_to_move_only_kp = kp == friendly_pieces;
+        let tt_is_capture =
+            from_tt.is_some_and(|x| x.best_move().is_some_and(|ply| enemy_pieces.get(ply.dst())));
+
+        let reverse_futility_pruning = {
+            let margin = Millipawns((depth.max(Depth::ONE) * 2500).to_num());
+            !N::is_pv()
+                && eval - margin >= beta
+                && depth <= 4
+                && !tt_is_capture
+                && from_tt.is_some()
+        };
+
+        if reverse_futility_pruning {
+            return Ok((eval, None));
+        }
+
         let mut value = Millipawns(i32::MIN + 12345);
 
         let is_in_check = self.game().is_in_check();
@@ -505,18 +519,9 @@ impl ThreadData {
             // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
 
             let mut r: Depth = search_parameters().nmr_offset + Depth::ONE;
-            let game = self.game();
-            let board = game.board();
-            let friendly_pieces = board.get_color(game.to_move());
-            let enemy_pieces = board.get_color(game.to_move().other());
-            let kp =
-                (board.get_piece(Piece::Pawn) | board.get_piece(Piece::King)) & friendly_pieces;
+
             r += eval::game_phase(board) * search_parameters().nmr_piece_slope;
             r += depth * search_parameters().nmr_depth_slope;
-
-            let side_to_move_only_kp = kp == friendly_pieces;
-            let tt_is_capture = from_tt
-                .is_some_and(|x| x.best_move().is_some_and(|ply| enemy_pieces.get(ply.dst())));
 
             if !N::is_pv()
                 && !side_to_move_only_kp
