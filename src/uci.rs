@@ -671,8 +671,17 @@ fn spawn_reader_thread() -> crossbeam_channel::Receiver<String> {
             let line = match line {
                 Ok(line) => line,
                 Err(e) => {
-                    println!("info string Error reading line: {e:?}");
-                    continue;
+                    use rustyline::error::ReadlineError as E;
+                    match e {
+                        E::Interrupted => {
+                            println!("info string ctrl-c received, interpreting as stop");
+                            "stop".to_owned()
+                        }
+                        _ => {
+                            println!("info string Error reading line: {e:?}");
+                            continue;
+                        }
+                    }
                 }
             };
 
