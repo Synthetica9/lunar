@@ -507,7 +507,7 @@ impl ThreadData {
             let margin = Millipawns((depth.max(Depth::ONE) * 1500).to_num());
 
             if !skip_rfp && eval - margin >= beta && depth <= 4 {
-                return Ok((eval - margin, best_move));
+                return Ok((eval, best_move));
             }
         }
 
