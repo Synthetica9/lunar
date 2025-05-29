@@ -31,6 +31,7 @@ def get_parser():
         "--external-engines",
         type=Path,
         nargs="*",
+        default=[],
     )
     parser.add_argument("--gauntlet", action="store_true")
 
@@ -91,7 +92,7 @@ def selfplay(options, *revs, stockfishes=None):
             "count": 20,
         },
         # log=True,
-        concurrency=6,
+        concurrency=12,
         rounds=1000,
         games=2,
         pgn="out.pgn",
