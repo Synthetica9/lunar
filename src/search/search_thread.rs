@@ -448,6 +448,8 @@ impl ThreadData {
         let mut beta = beta;
 
         let eval = crate::eval::evaluation(self.game());
+        let is_in_check = self.game().is_in_check();
+
         let futility_pruning = {
             let fut_margin = Millipawns(
                 (depth.saturating_mul(search_parameters().futprun_mp_per_ply))
@@ -457,6 +459,7 @@ impl ThreadData {
             depth <= search_parameters().futprun_max_depth
                 && eval + fut_margin < alpha
                 && !N::is_pv()
+                && !is_in_check
         };
 
         let from_tt = self.transposition_table.get(self.game().hash());
@@ -494,7 +497,8 @@ impl ThreadData {
                 && eval - margin >= beta
                 && depth <= 4
                 && !tt_is_capture
-                && from_tt.is_some();
+                && from_tt.is_some()
+                && !is_in_check;
 
             if prune {
                 return Ok((eval - margin, best_move));
@@ -502,8 +506,6 @@ impl ThreadData {
         };
 
         let mut value = Millipawns(i32::MIN + 12345);
-
-        let is_in_check = self.game().is_in_check();
 
         if depth <= 0 && !is_in_check {
             value = self.quiescence_search(alpha, beta);
