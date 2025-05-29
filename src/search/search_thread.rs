@@ -23,7 +23,7 @@ use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
 use crate::search::parameters::search_parameters;
-use crate::transposition_table::TranspositionTable;
+use crate::transposition_table::{TranspositionEntryType, TranspositionTable};
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
 use crate::{eval, search};
@@ -497,7 +497,7 @@ impl ThreadData {
                 && eval - margin >= beta
                 && depth <= 4
                 && !tt_is_capture
-                && from_tt.is_some()
+                && from_tt.is_some_and(|x| x.value_type() != TranspositionEntryType::Exact)
                 && !is_in_check;
 
             if prune {
