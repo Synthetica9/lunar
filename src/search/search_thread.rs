@@ -487,18 +487,19 @@ impl ThreadData {
         let tt_is_capture =
             from_tt.is_some_and(|x| x.best_move().is_some_and(|ply| enemy_pieces.get(ply.dst())));
 
-        let reverse_futility_pruning = {
+        // Reverse futility pruning (also known as static null move pruning)
+        {
             let margin = Millipawns((depth.max(Depth::ONE) * 2500).to_num());
-            !N::is_pv()
+            let prune = !N::is_pv()
                 && eval - margin >= beta
                 && depth <= 4
                 && !tt_is_capture
-                && from_tt.is_some()
-        };
+                && from_tt.is_some();
 
-        if reverse_futility_pruning {
-            return Ok((eval, None));
-        }
+            if prune {
+                return Ok((eval - margin, best_move));
+            }
+        };
 
         let mut value = Millipawns(i32::MIN + 12345);
 
