@@ -652,6 +652,10 @@ impl ThreadData {
                         r -= Depth::ONE;
                     }
 
+                    if lmr && see.0 < 0 {
+                        r += Depth::ONE / 2;
+                    }
+
                     r.max(Depth::ZERO)
                 };
 
