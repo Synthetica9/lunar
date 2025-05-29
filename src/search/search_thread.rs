@@ -492,18 +492,24 @@ impl ThreadData {
 
         // Reverse futility pruning (also known as static null move pruning)
         {
-            let margin = Millipawns((depth.max(Depth::ONE) * 2500).to_num());
-            let prune = !N::is_pv()
-                && eval - margin >= beta
-                && depth <= 4
-                && !tt_is_capture
-                && from_tt.is_some_and(|x| x.value_type() != TranspositionEntryType::Exact)
-                && !is_in_check;
+            // https://www.chessprogramming.org/Reverse_Futility_Pruning
+            // > It is common to skip RFP when one of the following conditions are met:
+            let skip_rfp =
+                // > - Position is in check
+                is_in_check
+                // > - Node type is a PV node.
+                || N::is_pv()
+                // > - Position is or has been a PV node.
+                || from_tt.is_none_or(|x| x.value_type() == TranspositionEntryType::Exact)
+                // > - TT move does not exist or is capture.
+                || tt_is_capture;
 
-            if prune {
+            let margin = Millipawns((depth.max(Depth::ONE) * 1500).to_num());
+
+            if !skip_rfp && eval - margin >= beta && depth <= 4 {
                 return Ok((eval - margin, best_move));
             }
-        };
+        }
 
         let mut value = Millipawns(i32::MIN + 12345);
 
