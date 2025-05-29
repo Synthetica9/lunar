@@ -459,6 +459,15 @@ impl ThreadData {
                 && !N::is_pv()
         };
 
+        let reverse_futility_pruning = {
+            let margin = Millipawns((depth.max(Depth::ONE) * 2500).to_num());
+            !N::is_pv() && eval - margin >= beta && depth <= 4
+        };
+
+        if reverse_futility_pruning {
+            return Ok((beta, None));
+        }
+
         let from_tt = self.transposition_table.get(self.game().hash());
 
         if let Some(tte) = from_tt {
