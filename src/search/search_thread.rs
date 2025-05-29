@@ -50,6 +50,7 @@ pub enum ThreadStatus {
         quiescence_nodes_searched: usize,
         tt_puts: usize,
         root_hash: ZobristHash,
+        seldepth: u16,
     },
     SearchFinished {
         score: Millipawns,
@@ -150,6 +151,7 @@ pub struct ThreadData {
     total_nodes_searched: usize,
     quiescence_nodes_searched: usize,
     tt_puts: usize,
+    seldepth: u16,
 
     root_move_counts: Arc<LinearMap<Ply, AtomicUsize>>,
     root_hash: ZobristHash,
@@ -194,6 +196,8 @@ impl ThreadData {
             total_nodes_searched: 0,
             quiescence_nodes_searched: 0,
             tt_puts: 0,
+            seldepth: 0,
+
             root_move_counts,
             root_hash: game.hash(),
             best_move: None,
@@ -241,6 +245,7 @@ impl ThreadData {
                     SearchThis(new_history, root_moves) => {
                         self.history = new_history.as_ref().clone();
                         self.searching = true;
+                        self.seldepth = 0;
                         self.root_move_counts = root_moves;
                         self.root_hash = new_history.game().hash();
                     }
@@ -258,6 +263,7 @@ impl ThreadData {
                 quiescence_nodes_searched: self.quiescence_nodes_searched,
                 tt_puts: self.tt_puts,
                 root_hash: self.root_hash,
+                seldepth: self.seldepth,
             };
             self.nodes_searched = 0;
             self.quiescence_nodes_searched = 0;
@@ -315,11 +321,15 @@ impl ThreadData {
             };
 
             loop {
-                let (score, best_move) =
-                    match self.alpha_beta_search::<RootNode>(alpha, beta, Depth::from_num(depth)) {
-                        Ok(val) => val,
-                        Err(cmd) => return cmd,
-                    };
+                let (score, best_move) = match self.alpha_beta_search::<RootNode>(
+                    alpha,
+                    beta,
+                    Depth::from_num(depth),
+                    0,
+                ) {
+                    Ok(val) => val,
+                    Err(cmd) => return cmd,
+                };
 
                 debug_assert!(self.game().hash() == self.root_hash);
                 self.send_status_update();
@@ -404,6 +414,7 @@ impl ThreadData {
         alpha: Millipawns,
         beta: Millipawns,
         mut depth: Depth,
+        root_dist: u16,
     ) -> Result<(Millipawns, Option<Ply>), ThreadCommand>
     where
         N: Node,
@@ -412,10 +423,13 @@ impl ThreadData {
         use crate::transposition_table::TranspositionEntryType::*;
         use move_order::*;
 
+        debug_assert_eq!(root_dist == 0, N::IS_ROOT);
+
         // Must be only incremented here because it is also used to initiate
         // communication.
         self.nodes_searched += 1;
         self.total_nodes_searched += 1;
+        self.seldepth = self.seldepth.max(root_dist);
 
         // This causes a lot of branch mispredictions...
         if self.nodes_searched % COMMS_INTERVAL == 0 {
@@ -501,7 +515,12 @@ impl ThreadData {
             {
                 self.history.push(Ply::NULL);
                 let null_value = -self
-                    .alpha_beta_search::<CutNode>(-beta, -(beta - Millipawns::ONE), depth - r)?
+                    .alpha_beta_search::<CutNode>(
+                        -beta,
+                        -(beta - Millipawns::ONE),
+                        depth - r,
+                        root_dist + 1,
+                    )?
                     .0;
                 self.history.pop();
                 if null_value >= beta {
@@ -671,7 +690,12 @@ impl ThreadData {
 
                     best_move = Some(ply);
                     -self
-                        .alpha_beta_search::<N::FirstSuccessor>(-beta, -alpha, full_depth)?
+                        .alpha_beta_search::<N::FirstSuccessor>(
+                            -beta,
+                            -alpha,
+                            full_depth,
+                            root_dist + 1,
+                        )?
                         .0
                 } else {
                     if !is_deferred {
@@ -685,6 +709,7 @@ impl ThreadData {
                             -alpha - Millipawns::ONE,
                             -alpha,
                             next_depth,
+                            root_dist + 1,
                         )?
                         .0;
 
@@ -693,7 +718,7 @@ impl ThreadData {
                         // but I don't expect that to be a huge issue
 
                         x = -self
-                            .alpha_beta_search::<PVNode>(-beta, -alpha, full_depth)?
+                            .alpha_beta_search::<PVNode>(-beta, -alpha, full_depth, root_dist + 1)?
                             .0;
                     }
 

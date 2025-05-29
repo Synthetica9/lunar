@@ -55,6 +55,7 @@ enum PoolState {
 
         nodes_searched: usize,
         quiescence_nodes_searched: usize,
+        seldepth: u16,
     },
     Stopping,
     Quitting,
@@ -207,6 +208,7 @@ impl SearchThreadPool {
 
             nodes_searched: 0,
             quiescence_nodes_searched: 0,
+            seldepth: 0,
         };
     }
 
@@ -360,6 +362,7 @@ impl SearchThreadPool {
             ref mut depth_increase_nodes,
             ref mut last_depth_increase,
             ref history,
+            ref mut seldepth,
             ..
         } = &mut self.state
         else {
@@ -400,12 +403,14 @@ impl SearchThreadPool {
                 nodes_searched: extra_nodes_searched,
                 quiescence_nodes_searched: extra_qnodes_searched,
                 tt_puts,
+                seldepth: thread_seldepth,
                 ..
             } => {
                 *nodes_searched += extra_nodes_searched + extra_qnodes_searched;
                 *quiescence_nodes_searched += extra_qnodes_searched;
                 self.transposition_table.add_occupancy(tt_puts);
                 thread.is_searching = true;
+                *seldepth = thread_seldepth.max(*seldepth);
                 false
             }
 
@@ -599,6 +604,7 @@ impl SearchThreadPool {
             pv,
             nodes_searched,
             quiescence_nodes_searched,
+            seldepth,
             ..
         } = &self.state
         {
@@ -610,6 +616,7 @@ impl SearchThreadPool {
 
             let mut info = String::new();
             info.push_str(&format!("info depth {best_depth} "));
+            info.push_str(&format!("seldepth {seldepth} "));
             info.push_str(&if let Some(n) = score.is_mate_in_n() {
                 format!("score mate {n} ")
             } else {
