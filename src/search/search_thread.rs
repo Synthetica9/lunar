@@ -292,6 +292,11 @@ impl ThreadData {
 
         let mut value = DRAW;
 
+        if self.game().is_in_mate() {
+            println!("info string Position is mated, what do you even want to search?");
+            return ThreadCommand::StopSearch;
+        }
+
         for depth in 1..=255 {
             let mut fail_highs = 0;
             let mut fail_lows = 0;

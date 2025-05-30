@@ -145,6 +145,13 @@ impl SearchThreadPool {
         let now = Instant::now();
         let clock_start_time = (!is_pondering).then_some(now);
 
+        if history.game().is_in_mate() {
+            println!("info string Position is mated, what do you want to search?");
+            // Send a null move? What is the GUI even expecting to happen?
+            println!("bestmove 0000");
+            return;
+        }
+
         if let PoolState::Searching {
             history: ref hist,
             time_policy: ref mut policy,
