@@ -6,10 +6,10 @@ There's potentially a lot of elo available by adjusting the wdl
 and lr schedulers, depending on your dataset.
 */
 use bullet_lib::{
-    nn::{optimiser, Activation},
+    nn::{Activation, optimiser},
     trainer::{
-        default::{inputs, loader, Loss, TrainerBuilder},
-        schedule::{lr, wdl, TrainingSchedule, TrainingSteps},
+        default::{Loss, TrainerBuilder, inputs, loader},
+        schedule::{TrainingSchedule, TrainingSteps, lr, wdl},
         settings::LocalSettings,
     },
 };
