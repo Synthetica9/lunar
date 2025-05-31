@@ -58,7 +58,7 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     iir_reduction: const_depth("2"),
     iir_min_depth: const_depth("6"),
 
-    lmr_quiescent_slope: const_depth("0"),
+    lmr_quiescent_slope: const_depth("0.12"),
     lmr_quiescent_offset: const_depth("1.41"),
     lmr_quiet_slope: const_depth("0.36"),
     lmr_quiet_offset: const_depth("1.50"),
