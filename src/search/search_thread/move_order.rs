@@ -330,6 +330,7 @@ impl MoveGenerator for StandardMoveGenerator {
                     // Save quiet moves.
                     debug_assert!(other.is_none());
 
+                    self.bad_captures.sort_unstable();
                     self.queue.append(&mut self.bad_captures);
                     self.phase = GenKillerMoves;
                 }
