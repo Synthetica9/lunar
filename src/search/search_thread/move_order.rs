@@ -304,7 +304,7 @@ impl MoveGenerator for StandardMoveGenerator {
             GenQuiescenceMoves => {
                 self.phase = GenKillerMoves;
                 for ply in thread.game().quiescence_pseudo_legal_moves() {
-                    let value = static_exchange_evaluation(thread.game(), ply);
+                    let value = quiescent_move_order(thread.game(), ply);
 
                     let command = if value >= DRAW {
                         WinningOrEqualCapture { ply, value }
@@ -376,6 +376,35 @@ fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
     }
 
     res
+}
+
+pub fn quiescent_move_order(game: &Game, ply: Ply) -> Millipawns {
+    let board = game.board();
+    let promotion = ply
+        .promotion_piece()
+        .map(|x| x.base_value())
+        .unwrap_or(Millipawns(0));
+
+    let victim = board
+        .occupant_piece(ply.dst())
+        .map(Piece::base_value)
+        // Default: 1 Pawn for en passant
+        .unwrap_or(Millipawns(1000));
+
+    let attacker = board
+        .occupant_piece(ply.src())
+        .map(Piece::base_value)
+        // What?
+        .unwrap_or(Millipawns(0));
+
+    debug_assert!(attacker.0 > 0, "No attacker? {ply:?} {}", game.to_fen());
+
+    let do_see = victim <= attacker;
+    if do_see {
+        static_exchange_evaluation(game, ply)
+    } else {
+        victim - attacker / 16 + promotion
+    }
 }
 
 pub fn quiet_move_order(thread: &ThreadData, ply: Ply, threatened: Option<Square>) -> Millipawns {
