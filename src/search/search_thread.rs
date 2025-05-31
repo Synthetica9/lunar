@@ -302,6 +302,7 @@ impl ThreadData {
             let mut fail_highs = 0;
             let mut fail_lows = 0;
 
+            consistent = consistent.max(0);
             let consistency_fac = search_parameters().aw_consistency_base.powi(consistent);
 
             let count_to_window = |count| {
@@ -349,6 +350,8 @@ impl ThreadData {
                         "info string Fail low! α':{alpha:?} < s:{score:?} <= α:{alpha_before:?} < β:{beta:?}"
                     );
 
+                    consistent -= 2;
+
                     continue;
                 } else if score > beta {
                     fail_highs += 1;
@@ -358,6 +361,9 @@ impl ThreadData {
                     println!(
                         "info string Fail high! α:{alpha:?} < β:{beta_before:?} < s:{score:?} < β':{beta:?}"
                     );
+
+                    consistent -= 2;
+
                     continue;
                 }
 
