@@ -143,7 +143,7 @@ pub enum QueuedPly {
     LosingCapture { value: Millipawns, ply: Ply },
     QuietMove { value: Millipawns, ply: Ply },
     KillerMove { ply: Ply },
-    WinningOrEqualCapture { value: Millipawns, ply: Ply },
+    MVVLVACapture { value: Millipawns, ply: Ply },
     // Should be searched _first_
 }
 
@@ -154,7 +154,7 @@ impl QueuedPly {
         match self {
             LosingCapture { ply, .. }
             | QuietMove { ply, .. }
-            | WinningOrEqualCapture { ply, .. }
+            | MVVLVACapture { ply, .. }
             | KillerMove { ply, .. } => ply,
         }
     }
@@ -162,7 +162,7 @@ impl QueuedPly {
     fn guarantee(self) -> GuaranteeLevel {
         use QueuedPly::*;
         match self {
-            LosingCapture { .. } | WinningOrEqualCapture { .. } | QuietMove { .. } => {
+            LosingCapture { .. } | MVVLVACapture { .. } | QuietMove { .. } => {
                 GuaranteeLevel::PseudoLegal
             }
             KillerMove { .. } => GuaranteeLevel::HashLike,
@@ -183,7 +183,7 @@ impl QueuedPly {
         match self {
             LosingCapture { .. } | QuietMove { .. } => YieldOtherMoves,
             KillerMove { .. } => YieldKillerMoves,
-            WinningOrEqualCapture { .. } => YieldWinningOrEqualCaptures,
+            MVVLVACapture { .. } => GenKillerMoves,
         }
     }
 }
@@ -254,6 +254,7 @@ impl MoveGenerator for RootMoveGenerator {
 pub struct StandardMoveGenerator {
     phase: GeneratorPhase,
     queue: SmallVec<[QueuedPly; 32]>,
+    bad_captures: SmallVec<[QueuedPly; 32]>,
 }
 
 impl MoveGenerator for StandardMoveGenerator {
@@ -261,6 +262,7 @@ impl MoveGenerator for StandardMoveGenerator {
         Self {
             phase: GeneratorPhase::GetHashMove,
             queue: SmallVec::new(),
+            bad_captures: SmallVec::new(),
         }
     }
 
@@ -302,20 +304,36 @@ impl MoveGenerator for StandardMoveGenerator {
                 });
             }
             GenQuiescenceMoves => {
-                self.phase = GenKillerMoves;
+                self.phase = YieldWinningOrEqualCaptures;
                 for ply in thread.game().quiescence_pseudo_legal_moves() {
-                    let value = quiescent_move_order(thread.game(), ply);
+                    let value = mvv_lva(thread.game(), ply);
 
-                    let command = if value >= DRAW {
-                        WinningOrEqualCapture { ply, value }
-                    } else {
-                        LosingCapture { ply, value }
-                    };
-
+                    let command = MVVLVACapture { ply, value };
                     self.queue.push(command);
                 }
                 self.queue.sort_unstable();
             }
+            YieldWinningOrEqualCaptures => match self.queue.pop() {
+                Some(MVVLVACapture { ply, .. }) => {
+                    let game = thread.game();
+                    let see = static_exchange_evaluation(game, ply);
+                    if see.0 < 0 {
+                        self.bad_captures.push(LosingCapture { value: see, ply });
+                    } else {
+                        return Some(Generated {
+                            ply: GeneratedMove::Ply(ply),
+                            guarantee: PseudoLegal,
+                        });
+                    }
+                }
+                other => {
+                    // Save quiet moves.
+                    debug_assert!(other.is_none());
+
+                    self.queue.append(&mut self.bad_captures);
+                    self.phase = GenKillerMoves;
+                }
+            },
             GenKillerMoves => {
                 self.phase = GenQuietMoves;
 
@@ -378,7 +396,7 @@ fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
     res
 }
 
-pub fn quiescent_move_order(game: &Game, ply: Ply) -> Millipawns {
+pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
     let board = game.board();
     let promotion = ply
         .promotion_piece()
@@ -397,14 +415,9 @@ pub fn quiescent_move_order(game: &Game, ply: Ply) -> Millipawns {
         // What?
         .unwrap_or(Millipawns(0));
 
-    debug_assert!(attacker.0 > 0, "No attacker? {ply:?} {}", game.to_fen());
-
-    let do_see = victim <= attacker;
-    if do_see {
-        static_exchange_evaluation(game, ply)
-    } else {
-        victim - attacker / 16 + promotion
-    }
+    let res = victim - attacker / 128 + promotion;
+    // println!("{attacker:?} x {victim:?} = {res:?}");
+    res
 }
 
 pub fn quiet_move_order(thread: &ThreadData, ply: Ply, threatened: Option<Square>) -> Millipawns {
