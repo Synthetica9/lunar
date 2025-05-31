@@ -572,7 +572,7 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         #[cfg(feature = "tunable")]
         tunable!(aw_fail_open_after, i32),
         #[cfg(feature = "tunable")]
-        tunable!(aw_depth_exp, f32),
+        tunable!(aw_consistency_base, f32),
     ]
 });
 

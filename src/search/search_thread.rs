@@ -291,6 +291,7 @@ impl ThreadData {
         use crate::millipawns::*;
 
         let mut value = DRAW;
+        let mut consistent = 0;
 
         if self.game().is_in_mate() {
             println!("info string Position is mated, what do you even want to search?");
@@ -301,8 +302,7 @@ impl ThreadData {
             let mut fail_highs = 0;
             let mut fail_lows = 0;
 
-            let depth_fac = ((depth - search_parameters().aw_min_depth) as f32)
-                .powf(-search_parameters().aw_depth_exp);
+            let consistency_fac = search_parameters().aw_consistency_base.powi(consistent);
 
             let count_to_window = |count| {
                 if count > search_parameters().aw_fail_open_after {
@@ -310,7 +310,7 @@ impl ThreadData {
                 } else {
                     Millipawns(
                         (search_parameters().aw_base_window
-                            * depth_fac
+                            * consistency_fac
                             * (1.0 + search_parameters().aw_widening_base).powi(count))
                             as i32,
                     )
@@ -366,6 +366,11 @@ impl ThreadData {
                         "info string Attempting to overwrite already gotten bestmove? {score:?} {alpha:?} {beta:?}"
                     );
                 } else {
+                    if self.best_move == best_move {
+                        consistent += 1;
+                    } else {
+                        consistent = 0;
+                    }
                     self.best_move = best_move;
                 }
                 value = score;
