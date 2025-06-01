@@ -206,7 +206,6 @@ pub enum GuaranteeLevel {
     HashLike,
     PseudoLegal,
     Legal,
-    Deferred,
 }
 
 pub trait MoveGenerator {

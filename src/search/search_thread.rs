@@ -15,7 +15,6 @@ use smallvec::SmallVec;
 use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
-use super::currently_searching::CurrentlySearching;
 use super::history_heuristic::HistoryTable;
 use crate::game::Game;
 use crate::history::History;
@@ -160,7 +159,6 @@ pub struct ThreadData {
     best_move: Option<Ply>,
 
     transposition_table: Arc<TranspositionTable>,
-    currently_searching: CurrentlySearching,
 
     killer_moves: Vec<[Option<Ply>; N_KILLER_MOVES]>,
     history_table: Box<HistoryTable>,
@@ -173,7 +171,6 @@ impl ThreadData {
         thread_id: usize,
         command_channel: channel::Receiver<ThreadCommand>,
         status_channel: channel::Sender<ThreadStatus>,
-        search_coordinator: CurrentlySearching,
         transposition_table: Arc<TranspositionTable>,
     ) -> Self {
         let game = Game::new();
@@ -192,7 +189,6 @@ impl ThreadData {
 
             command_channel,
             status_channel,
-            currently_searching: search_coordinator,
             transposition_table,
 
             searching: false,
@@ -574,7 +570,6 @@ impl ThreadData {
                 }
             }
 
-            let mut deferred_moves = VecDeque::new();
             let mut hash_moves_played = [Ply::NULL; 8];
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
 
@@ -585,17 +580,7 @@ impl ThreadData {
             let mut bad_quiet_moves: SmallVec<[_; 16]> = SmallVec::new();
 
             while let Some((moveno, Generated { ply, guarantee })) =
-                generator.next(self).map(|x| (i, x)).or_else(|| {
-                    deferred_moves.pop_front().map(|(moveno, ply)| {
-                        (
-                            moveno,
-                            Generated {
-                                ply: GeneratedMove::Ply(ply),
-                                guarantee: GuaranteeLevel::Deferred,
-                            },
-                        )
-                    })
-                })
+                generator.next(self).map(|x| (i, x))
             {
                 let ply = {
                     use GeneratedMove::*;
@@ -610,13 +595,11 @@ impl ThreadData {
 
                 let total_nodes_before = self.total_nodes_searched;
 
-                let is_deferred;
                 {
                     use GuaranteeLevel::*;
 
-                    is_deferred = matches!(guarantee, Deferred);
                     let hash_like = matches!(guarantee, HashLike);
-                    let legal = is_deferred || matches!(guarantee, Deferred);
+                    let legal = matches!(guarantee, Legal);
                     let pseudo_legal = legal || matches!(guarantee, PseudoLegal);
 
                     let game = self.game();
@@ -662,15 +645,6 @@ impl ThreadData {
                 i += 1;
 
                 let hash_before = self.game().hash();
-                if !is_first_move && !is_deferred
-                    && !N::IS_ROOT // TODO: Should we defer in the root? Probably not...?
-                    && self
-                        .currently_searching
-                        .defer_move(hash_before, ply, depth.int())
-                {
-                    deferred_moves.push_back((moveno, ply));
-                    continue;
-                }
 
                 // Do the actual futility prune
                 // TODO: skip negative SEE captures?
@@ -744,11 +718,6 @@ impl ThreadData {
                         )?
                         .0
                 } else {
-                    if !is_deferred {
-                        self.currently_searching
-                            .starting_search(hash_before, ply, next_depth);
-                    }
-
                     // Null-window search
                     let mut x = -self
                         .alpha_beta_search::<N::OtherSuccessors>(
@@ -760,17 +729,9 @@ impl ThreadData {
                         .0;
 
                     if x > alpha && (x < beta || is_reduced) {
-                        // TODO: should probably check again if we need to defer technically,
-                        // but I don't expect that to be a huge issue
-
                         x = -self
                             .alpha_beta_search::<PVNode>(-beta, -alpha, full_depth, root_dist + 1)?
                             .0;
-                    }
-
-                    if !is_deferred {
-                        self.currently_searching
-                            .finished_search(hash_before, ply, next_depth);
                     }
 
                     x

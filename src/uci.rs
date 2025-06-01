@@ -306,12 +306,7 @@ impl UCIState {
                 println!("{}", game.to_fen());
                 println!();
                 self.transposition_table.print_cache_stats();
-                println!(
-                    "Coordination buckets: {}",
-                    self.search_thread_pool
-                        .currently_searching
-                        .num_buckets_filled()
-                );
+
                 if let Some(book) = &self.search_thread_pool.opening_book {
                     println!("Opening book:");
                     let from_book = book.get(&game);

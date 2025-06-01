@@ -13,7 +13,6 @@ use lru::LruCache;
 use rand::rngs::SmallRng;
 use rand::SeedableRng;
 
-use super::currently_searching::CurrentlySearching;
 use super::search_thread::{ThreadCommand, ThreadData, ThreadStatus};
 use crate::history::History;
 use crate::hugepages_mmap_alloc::HugePagesAlloc;
@@ -77,7 +76,6 @@ pub struct SearchThreadPool {
 
     state: PoolState,
     pv_hash: LruCache<ZobristHash, Ply>,
-    pub currently_searching: CurrentlySearching,
     pub(crate) opening_book: Option<Arc<PolyglotBook, HugePagesAlloc>>,
 }
 
@@ -88,23 +86,16 @@ impl SearchThreadPool {
     ) -> SearchThreadPool {
         let mut threads = Vec::new();
 
-        let currently_searching = CurrentlySearching::new();
         let rng = SmallRng::from_entropy();
 
         for thread_id in 0..num_threads {
             let (command_s, command_r) = channel::unbounded();
             let (status_s, status_r) = channel::unbounded();
             let transposition_table = transposition_table.clone();
-            let currently_searching = currently_searching.clone();
 
             let thread = spawn(move || {
-                let mut runner: ThreadData = ThreadData::new(
-                    thread_id,
-                    command_r,
-                    status_s,
-                    currently_searching,
-                    transposition_table,
-                );
+                let mut runner: ThreadData =
+                    ThreadData::new(thread_id, command_r, status_s, transposition_table);
                 runner.run();
             });
 
@@ -125,7 +116,6 @@ impl SearchThreadPool {
 
             ponder: false,
             state: PoolState::Idle,
-            currently_searching,
             opening_book: None,
             rng,
 
@@ -185,8 +175,6 @@ impl SearchThreadPool {
             root_moves.clone(),
         ))
         .unwrap();
-
-        self.currently_searching.clear();
 
         let in_book = self
             .opening_book
