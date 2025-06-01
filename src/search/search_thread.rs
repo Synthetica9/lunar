@@ -141,6 +141,8 @@ impl Node for AllNode {
 pub type Depth = fixed::types::I16F16;
 
 pub struct ThreadData {
+    thread_id: usize,
+
     searching: bool,
     history: History,
 
@@ -168,6 +170,7 @@ pub struct ThreadData {
 
 impl ThreadData {
     pub fn new(
+        thread_id: usize,
         command_channel: channel::Receiver<ThreadCommand>,
         status_channel: channel::Sender<ThreadStatus>,
         search_coordinator: CurrentlySearching,
@@ -185,6 +188,8 @@ impl ThreadData {
         let continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
 
         Self {
+            thread_id,
+
             command_channel,
             status_channel,
             currently_searching: search_coordinator,

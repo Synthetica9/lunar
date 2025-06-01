@@ -91,7 +91,7 @@ impl SearchThreadPool {
         let currently_searching = CurrentlySearching::new();
         let rng = SmallRng::from_entropy();
 
-        for _ in 0..num_threads {
+        for thread_id in 0..num_threads {
             let (command_s, command_r) = channel::unbounded();
             let (status_s, status_r) = channel::unbounded();
             let transposition_table = transposition_table.clone();
@@ -99,6 +99,7 @@ impl SearchThreadPool {
 
             let thread = spawn(move || {
                 let mut runner: ThreadData = ThreadData::new(
+                    thread_id,
                     command_r,
                     status_s,
                     currently_searching,
