@@ -701,7 +701,7 @@ impl ThreadData {
                 let full_depth = next_depth.max(depth - Depth::ONE);
 
                 // Late move pruning
-                if lmr && virtual_depth < Depth::from_num(-3) && is_quiet {
+                if lmr && virtual_depth < Depth::from_num(-3) && is_quiet && !is_check {
                     continue;
                 }
 
