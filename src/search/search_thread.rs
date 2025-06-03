@@ -658,12 +658,8 @@ impl ThreadData {
 
                 let see = crate::search::static_exchange_evaluation(self.game(), ply);
 
-                self.history.push(ply);
-
                 let lmr = !is_in_check && !is_first_move;
-                let reduction = if depth <= 3 {
-                    Depth::ONE
-                } else {
+                let reduction = {
                     let mut r = Depth::ONE;
 
                     if lmr {
@@ -698,9 +694,18 @@ impl ThreadData {
                     r.max(Depth::ZERO)
                 };
 
-                let next_depth = depth - reduction;
-                let is_reduced = reduction > Depth::ONE;
+                let real_reduction = if depth <= 3 { Depth::ONE } else { reduction };
+                let is_reduced = real_reduction > Depth::ONE;
+                let next_depth = depth - real_reduction;
+                let virtual_depth = depth - reduction;
                 let full_depth = next_depth.max(depth - Depth::ONE);
+
+                // Late move pruning
+                if lmr && virtual_depth < Depth::from_num(-3) {
+                    continue;
+                }
+
+                self.history.push(ply);
 
                 let x = if is_first_move {
                     // What else could we be overwriting here?
