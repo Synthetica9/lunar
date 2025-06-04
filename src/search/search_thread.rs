@@ -35,6 +35,8 @@ mod move_order;
 
 pub use move_order::static_exchange_evaluation;
 
+use std::convert::Infallible as Never;
+
 #[derive(Clone, Debug)]
 pub enum ThreadCommand {
     Quit,
@@ -143,10 +145,11 @@ pub struct ThreadData {
     thread_id: usize,
 
     searching: bool,
+    stopping: bool,
+
     history: History,
 
-    command_channel: channel::Receiver<ThreadCommand>,
-    status_channel: channel::Sender<ThreadStatus>,
+    callback: Box<dyn FnMut(ThreadStatus) -> Option<ThreadCommand>>,
 
     nodes_searched: usize,
     total_nodes_searched: usize,
@@ -169,9 +172,8 @@ pub struct ThreadData {
 impl ThreadData {
     pub fn new(
         thread_id: usize,
-        command_channel: channel::Receiver<ThreadCommand>,
-        status_channel: channel::Sender<ThreadStatus>,
         transposition_table: Arc<TranspositionTable>,
+        callback: Box<dyn FnMut(ThreadStatus) -> Option<ThreadCommand>>,
     ) -> Self {
         let game = Game::new();
         let root_move_counts = Arc::new({
@@ -187,11 +189,12 @@ impl ThreadData {
         Self {
             thread_id,
 
-            command_channel,
-            status_channel,
+            callback,
             transposition_table,
 
             searching: false,
+            stopping: true,
+
             history: History::new(Game::new()),
             nodes_searched: 0,
             total_nodes_searched: 0,
@@ -212,52 +215,52 @@ impl ThreadData {
     }
 
     pub fn run(&mut self) {
+        let mut command = None;
+
+        // If callback doesn't back off properly, this loop would become very hot. Caller is
+        // responsible for providing a callback that doesn't blow it up.
         loop {
-            let command = if self.searching {
-                Some(self.search())
-            } else {
-                self.command_channel
-                    .recv_timeout(Duration::from_millis(1000))
-                    .ok()
-            };
+            use ThreadCommand as C;
+            command = match &command {
+                _ if self.stopping => {
+                    self.stopping = false;
+                    (self.callback)(ThreadStatus::Idle)
+                }
+                None if self.searching => match self.search() {
+                    Err(command) => Some(command),
+                },
+                None => (self.callback)(ThreadStatus::Idle),
+                Some(C::Quit) => {
+                    let _ = (self.callback)(ThreadStatus::Quitting);
+                    return;
+                }
+                Some(C::StopSearch) => {
+                    // Send last node counts
+                    let cmd = self.send_status_update();
 
-            if let Some(command) = command {
-                use ThreadCommand::*;
-                match command {
-                    Quit => {
-                        // Explicitly ignore result, we are tearing down so the status_channel
-                        // may be gone already.
-                        let _ = self.status_channel.send(ThreadStatus::Quitting);
-                        return;
-                    }
-                    StopSearch => {
-                        // Send last node counts
-                        self.send_status_update();
-                        self.searching = false;
-                        // Send idle message:
-                        self.send_status_update();
+                    self.searching = false;
+                    self.stopping = true;
+                    self.history_table = ZeroInit::zero_box();
+                    self.countermove = ZeroInit::zero_box();
+                    self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
 
-                        self.history_table = ZeroInit::zero_box();
-                        self.countermove = ZeroInit::zero_box();
-                        self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
+                    cmd
+                }
+                Some(C::SearchThis(new_history, root_moves)) => {
+                    self.history = new_history.as_ref().clone();
+                    self.searching = true;
+                    self.seldepth = 0;
+                    self.root_move_counts = root_moves.clone();
+                    self.root_hash = new_history.game().hash();
 
-                        // self.history_table.print_debug();
-                    }
-                    SearchThis(new_history, root_moves) => {
-                        self.history = new_history.as_ref().clone();
-                        self.searching = true;
-                        self.seldepth = 0;
-                        self.root_move_counts = root_moves;
-                        self.root_hash = new_history.game().hash();
-                    }
-                };
-            } else {
-                self.send_status_update();
+                    None
+                }
             }
         }
     }
 
-    fn send_status_update(&mut self) {
+    #[must_use]
+    fn send_status_update(&mut self) -> Option<ThreadCommand> {
         let msg = if self.searching {
             let msg = ThreadStatus::StatusUpdate {
                 nodes_searched: self.nodes_searched,
@@ -273,22 +276,18 @@ impl ThreadData {
         } else {
             ThreadStatus::Idle
         };
-        self.status_channel
-            .send(msg)
-            .expect("Error sending status update");
+        (self.callback)(msg)
     }
 
+    #[must_use]
     fn communicate(&mut self) -> Result<(), ThreadCommand> {
-        self.send_status_update();
-
-        match self.command_channel.try_recv() {
-            Ok(command) => Err(command),
-            Err(channel::TryRecvError::Empty) => Ok(()),
-            Err(channel::TryRecvError::Disconnected) => panic!("Thread channel disconnected"),
+        match self.send_status_update() {
+            Some(cmd) => Err(cmd),
+            None => Ok(()),
         }
     }
 
-    pub fn search(&mut self) -> ThreadCommand {
+    pub fn search(&mut self) -> Result<Never, ThreadCommand> {
         use crate::millipawns::*;
 
         let mut value = DRAW;
@@ -296,7 +295,7 @@ impl ThreadData {
 
         if self.game().is_in_mate() {
             println!("info string Position is mated, what do you even want to search?");
-            return ThreadCommand::StopSearch;
+            return Err(ThreadCommand::StopSearch);
         }
 
         for depth in 1..=255 {
@@ -328,18 +327,12 @@ impl ThreadData {
             };
 
             loop {
-                let (score, best_move) = match self.alpha_beta_search::<RootNode>(
-                    alpha,
-                    beta,
-                    Depth::from_num(depth),
-                    0,
-                ) {
-                    Ok(val) => val,
-                    Err(cmd) => return cmd,
-                };
+                let (score, best_move) =
+                    self.alpha_beta_search::<RootNode>(alpha, beta, Depth::from_num(depth), 0)?;
 
                 debug_assert!(self.game().hash() == self.root_hash);
-                self.send_status_update();
+
+                self.communicate()?;
 
                 // TODO: message fail high/lows to main threat
                 if score <= alpha {
@@ -382,21 +375,23 @@ impl ThreadData {
                 }
                 value = score;
 
-                self.status_channel
-                    .send(ThreadStatus::SearchFinished {
-                        score,
-                        best_move,
-                        depth: depth as usize,
-                        root_hash: self.root_hash,
-                    })
-                    .expect("Can send on channel");
+                let msg = ThreadStatus::SearchFinished {
+                    score,
+                    best_move,
+                    depth: depth as usize,
+                    root_hash: self.root_hash,
+                };
+
+                if let Some(cmd) = (self.callback)(msg) {
+                    return Err(cmd);
+                }
 
                 // In the window!
 
                 break;
             }
         }
-        ThreadCommand::StopSearch
+        Err(ThreadCommand::StopSearch)
     }
 
     fn draw_value(&self, depth: Depth) -> Millipawns {
@@ -420,10 +415,6 @@ impl ThreadData {
         }
 
         res
-    }
-
-    fn game(&self) -> &'_ Game {
-        self.history.game()
     }
 
     fn alpha_beta_search<N>(
@@ -910,6 +901,10 @@ impl ThreadData {
             this[1] = this[0];
             this[0] = Some(ply);
         }
+    }
+
+    fn game(&self) -> &'_ Game {
+        self.history.game()
     }
 
     fn countermove_cell(&self) -> Option<&Cell<Ply>> {

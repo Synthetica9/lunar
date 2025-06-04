@@ -93,9 +93,32 @@ impl SearchThreadPool {
             let (status_s, status_r) = channel::unbounded();
             let transposition_table = transposition_table.clone();
 
+            let mut is_idle = true;
+            let callback = move |status| {
+                // println!("callback!");
+                use ThreadStatus as S;
+
+                // rustc bug it seems?
+                is_idle = matches!(status, S::Idle | S::Quitting);
+
+                status_s.send(status).expect("Error sending message");
+
+                let timeout = Duration::from_millis(if is_idle { 1000 } else { 0 });
+                match command_r.recv_timeout(timeout) {
+                    Ok(command) => Some(command),
+                    Err(no_command) => {
+                        use crossbeam_channel::RecvTimeoutError as E;
+                        match no_command {
+                            E::Timeout => None,
+                            E::Disconnected => panic!("Channel disconnected!"),
+                        }
+                    }
+                }
+            };
+
             let thread = spawn(move || {
-                let mut runner: ThreadData =
-                    ThreadData::new(thread_id, command_r, status_s, transposition_table);
+                let mut runner =
+                    ThreadData::new(thread_id, transposition_table, Box::new(callback));
                 runner.run();
             });
 
