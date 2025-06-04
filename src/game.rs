@@ -363,7 +363,7 @@ impl Game {
         _combination_moves(plyset, &srcs, &dsts, move_table, None);
     }
 
-    fn _knight_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+    pub fn knight_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
         self._step_moves_for::<QUIESCENCE>(plyset, Piece::Knight, &bitboard_map::KNIGHT_MOVES);
     }
 
@@ -412,7 +412,7 @@ impl Game {
         }
     }
 
-    pub fn _king_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+    pub fn king_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
         self._simple_king_moves::<QUIESCENCE>(plyset);
 
         if !QUIESCENCE {
@@ -498,7 +498,7 @@ impl Game {
         }
     }
 
-    fn _pawn_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+    pub fn pawn_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
         use Piece::*;
         if QUIESCENCE {
             self._pawn_captures(plyset, None);
@@ -536,11 +536,11 @@ impl Game {
         }
     }
 
-    fn _bishop_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+    pub fn bishop_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
         self._magic_moves::<QUIESCENCE>(plyset, Piece::Bishop);
     }
 
-    fn _rook_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
+    pub fn rook_moves<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
         self._magic_moves::<QUIESCENCE>(plyset, Piece::Rook);
     }
 
@@ -552,12 +552,42 @@ impl Game {
     }
 
     fn _pseudo_legal_moves_by_quiescence<const QUIESCENCE: bool>(&self, plyset: &mut PlySet) {
-        self._pawn_moves::<QUIESCENCE>(plyset);
-        self._knight_moves::<QUIESCENCE>(plyset);
-        self._bishop_moves::<QUIESCENCE>(plyset);
-        self._rook_moves::<QUIESCENCE>(plyset);
+        self.pawn_moves::<QUIESCENCE>(plyset);
+        self.knight_moves::<QUIESCENCE>(plyset);
+        self.bishop_moves::<QUIESCENCE>(plyset);
+        self.rook_moves::<QUIESCENCE>(plyset);
         // Queen moves included in bishop and rook.
-        self._king_moves::<QUIESCENCE>(plyset);
+        self.king_moves::<QUIESCENCE>(plyset);
+    }
+
+    pub fn for_each_pseudo_legal_move<const QUIESCENCE: bool>(&self, mut f: impl FnMut(Ply)) {
+        // TODO: here we can fully eliminate the plyset, just pass a
+        // function that you want to call for each ply...
+
+        const PIECES: [Piece; 5] = {
+            use Piece::*;
+            // No queen, handled by Rook + Bishop implicitly
+            [Pawn, Knight, Bishop, Rook, King]
+        };
+
+        let mut plyset = PlySet::new();
+        for piece in PIECES {
+            // TODO: check that this is unrolled (should be, right?)
+            match piece {
+                Piece::Pawn => self.pawn_moves::<QUIESCENCE>(&mut plyset),
+                Piece::Knight => self.knight_moves::<QUIESCENCE>(&mut plyset),
+                Piece::Bishop => self.bishop_moves::<QUIESCENCE>(&mut plyset),
+                Piece::Rook => self.rook_moves::<QUIESCENCE>(&mut plyset),
+                Piece::King => self.king_moves::<QUIESCENCE>(&mut plyset),
+                Piece::Queen => unreachable!(),
+            };
+
+            for ply in plyset.iter() {
+                f(*ply);
+            }
+
+            plyset.clear()
+        }
     }
 
     pub fn quiet_pseudo_legal_moves(&self) -> PlySet {

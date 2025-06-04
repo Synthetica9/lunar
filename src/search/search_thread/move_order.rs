@@ -9,6 +9,7 @@ use crate::game::Game;
 use crate::millipawns::{Millipawns, DRAW};
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
+use crate::plyset::PlySet;
 use crate::search::parameters::search_parameters;
 use crate::square::Square;
 
@@ -304,12 +305,14 @@ impl MoveGenerator for StandardMoveGenerator {
             }
             GenQuiescenceMoves => {
                 self.phase = YieldWinningOrEqualCaptures;
-                for ply in thread.game().quiescence_pseudo_legal_moves() {
+
+                thread.game().for_each_pseudo_legal_move::<true>(|ply| {
                     let value = mvv_lva(thread.game(), ply);
 
                     let command = MVVLVACapture { ply, value };
                     self.queue.push(command);
-                }
+                });
+
                 self.queue.sort_unstable();
             }
             YieldWinningOrEqualCaptures => match self.queue.pop() {
@@ -364,10 +367,11 @@ impl MoveGenerator for StandardMoveGenerator {
                     .and_then(|x| x.best_move())
                     .map(Ply::dst);
 
-                for ply in game.quiet_pseudo_legal_moves() {
+                game.for_each_pseudo_legal_move::<false>(|ply| {
                     let value = quiet_move_order(thread, ply, threat);
                     self.queue.push(QuietMove { ply, value });
-                }
+                });
+
                 self.queue.sort_unstable();
 
                 self.phase = YieldOtherMoves;
