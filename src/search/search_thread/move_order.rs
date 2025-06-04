@@ -252,7 +252,7 @@ impl MoveGenerator for RootMoveGenerator {
 
 pub struct StandardMoveGenerator {
     phase: GeneratorPhase,
-    queue: SmallVec<[QueuedPly; 32]>,
+    queue: SmallVec<[QueuedPly; 64]>,
     bad_captures: SmallVec<[QueuedPly; 32]>,
 }
 
