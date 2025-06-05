@@ -29,7 +29,7 @@ use crate::{eval, search};
 
 const N_KILLER_MOVES: usize = 2;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
-const COMMS_INTERVAL: usize = 1 << 10;
+const COMMS_INTERVAL: usize = 1 << 13;
 
 mod move_order;
 
