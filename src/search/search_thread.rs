@@ -678,7 +678,7 @@ impl ThreadData {
                         r -= Depth::ONE;
                     }
 
-                    if lmr && see.0 < 0 {
+                    if lmr && see.0 < 0 && !is_check {
                         r += Depth::ONE / 2;
                     }
 
