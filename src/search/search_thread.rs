@@ -334,7 +334,16 @@ impl ThreadData {
 
                 self.communicate()?;
 
-                // TODO: message fail high/lows to main threat
+                // TODO: message fail high/lows to main thread
+                if score > alpha && best_move.is_some() {
+                    if self.best_move == best_move {
+                        consistent += 1;
+                    } else {
+                        consistent = 0;
+                    }
+                    self.best_move = best_move;
+                }
+
                 if score <= alpha {
                     fail_lows += 1;
                     let alpha_before = alpha;
@@ -361,18 +370,6 @@ impl ThreadData {
                     continue;
                 }
 
-                if best_move.is_none() && self.best_move.is_some() {
-                    println!(
-                        "info string Attempting to overwrite already gotten bestmove? {score:?} {alpha:?} {beta:?}"
-                    );
-                } else {
-                    if self.best_move == best_move {
-                        consistent += 1;
-                    } else {
-                        consistent = 0;
-                    }
-                    self.best_move = best_move;
-                }
                 value = score;
 
                 let msg = ThreadStatus::SearchFinished {
