@@ -39,7 +39,10 @@ fn main() {
             start_superbatch: 1,
             end_superbatch: 40,
         },
-        wdl_scheduler: wdl::ConstantWDL { value: 0.5 },
+        wdl_scheduler: wdl::LinearWDL {
+            start: 0.0,
+            end: 0.5,
+        },
         lr_scheduler: lr::StepLR {
             start: 0.001,
             gamma: 0.1,
