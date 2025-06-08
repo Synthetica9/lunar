@@ -14,7 +14,7 @@ use bullet_lib::{
     },
 };
 
-const HIDDEN_SIZE: usize = 256;
+const HIDDEN_SIZE: usize = 512;
 const SCALE: i32 = 400;
 const QA: i16 = 255;
 const QB: i16 = 64;
@@ -31,7 +31,7 @@ fn main() {
         .build();
 
     let schedule = TrainingSchedule {
-        net_id: "screlu256".to_string(),
+        net_id: "screlu512".to_string(),
         eval_scale: SCALE as f32,
         steps: TrainingSteps {
             batch_size: 16_384,
