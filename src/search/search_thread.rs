@@ -442,7 +442,7 @@ impl ThreadData {
         }
 
         if self.game().half_move() >= 100
-            || self.history.repetition_count_at_least_3()
+            || (self.history.is_repetition() && !N::IS_ROOT)
             || self.game().board().is_fide_draw()
         {
             return Ok((self.draw_value(depth), None));

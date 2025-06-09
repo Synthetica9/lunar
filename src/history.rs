@@ -100,22 +100,30 @@ impl History {
         *self.hash_count(self.game.hash()) > 1
     }
 
-    pub fn repetition_count_at_least_3(&self) -> bool {
+    fn repeat_at_least(&self, at_least: u8) -> bool {
         let hash_count = *self.hash_count(self.game.hash());
-        debug_assert!(hash_count != 0);
-        if hash_count < 3 {
+        debug_assert!(hash_count > 0);
+        if hash_count < at_least {
             // No false positives possible.
             false
         } else {
             let mut count = 1;
             for hash in self.hash_history.iter().rev() {
                 count += (self.game.hash() == *hash) as u8;
-                if count >= 3 {
+                if count >= at_least {
                     return true;
                 }
             }
             false
         }
+    }
+
+    pub fn is_repetition(&self) -> bool {
+        self.repeat_at_least(2)
+    }
+
+    pub fn repetition_count_at_least_3(&self) -> bool {
+        self.repeat_at_least(3)
     }
 
     pub fn game_is_finished(&self) -> bool {
