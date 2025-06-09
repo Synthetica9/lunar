@@ -309,7 +309,7 @@ impl UCIState {
 
                 if let Some(book) = &self.search_thread_pool.opening_book {
                     println!("Opening book:");
-                    let from_book = book.get(&game);
+                    let from_book = book.get(game);
                     if from_book.is_empty() {
                         println!("[out of book]");
                     } else {
@@ -317,7 +317,7 @@ impl UCIState {
                     }
                 }
 
-                println!("Static eval: {:?}", crate::eval::evaluation(&game));
+                println!("Static eval: {:?}", crate::eval::evaluation(game));
             }
             "stop" => {
                 if let Some(msg) = self.search_thread_pool.maybe_end_search(true) {

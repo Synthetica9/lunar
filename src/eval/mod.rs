@@ -170,7 +170,7 @@ impl Accumulator {
             .iter_mut()
             .zip(&net.feature_weights[feature_idx].vals)
         {
-            *i += *d
+            *i += *d;
         }
     }
 
@@ -181,7 +181,7 @@ impl Accumulator {
             .iter_mut()
             .zip(&net.feature_weights[feature_idx].vals)
         {
-            *i -= *d
+            *i -= *d;
         }
     }
 }

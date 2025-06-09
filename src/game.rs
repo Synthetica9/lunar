@@ -586,7 +586,7 @@ impl Game {
                 f(*ply);
             }
 
-            plyset.clear()
+            plyset.clear();
         }
     }
 
@@ -1001,7 +1001,9 @@ impl Game {
             .collect::<SmallVec<[Ply; 4]>>();
 
         assert!(res.len() <= 1);
-        res.get(0).copied().ok_or("Could not parse move".to_owned())
+        res.first()
+            .copied()
+            .ok_or("Could not parse move".to_owned())
     }
 
     pub fn simple_render(&self) -> String {
@@ -1040,7 +1042,7 @@ impl Game {
         let t1 = std::time::Instant::now();
         if print {
             let dt = t1 - t0;
-            println!("Time: {:#?}", dt);
+            println!("Time: {dt:#?}");
             let nps = (res as f64 / dt.as_secs_f64()) as u64;
             println!("NPS: {nps}");
         }

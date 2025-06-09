@@ -2,13 +2,9 @@
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
 use std::cell::Cell;
-use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
-use crossbeam_channel as channel;
-use fixed::traits::Fixed;
 use linear_map::LinearMap;
 use smallvec::SmallVec;
 
@@ -16,16 +12,16 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
 use super::history_heuristic::HistoryTable;
+use crate::eval;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
-use crate::ply::{Ply, SpecialFlag};
+use crate::ply::Ply;
 use crate::search::parameters::search_parameters;
-use crate::transposition_table::{TranspositionEntryType, TranspositionTable};
+use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
-use crate::{eval, search};
 
 const N_KILLER_MOVES: usize = 2;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
@@ -636,7 +632,7 @@ impl ThreadData {
 
                 // Do the actual futility prune
                 // TODO: skip negative SEE captures?
-                let is_quiet = !ply.promotion_piece().is_some_and(|x| x == Piece::Queen)
+                let is_quiet = ply.promotion_piece().is_none_or(|x| x != Piece::Queen)
                     && !enemy_pieces.get(ply.dst());
                 let is_check = self.game().is_check(ply);
 

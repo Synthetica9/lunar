@@ -6,10 +6,9 @@ use crate::basic_enums::Color;
 use crate::bitboard::{self, Bitboard};
 use crate::board::Board;
 use crate::game::Game;
-use crate::millipawns::{Millipawns, DRAW};
+use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
-use crate::plyset::PlySet;
 use crate::search::parameters::search_parameters;
 use crate::square::Square;
 
@@ -24,8 +23,7 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
 
     let full_pawn_value = |piece| match piece {
         Piece::Pawn => 1,
-        Piece::Knight => 3,
-        Piece::Bishop => 3,
+        Piece::Knight | Piece::Bishop => 3,
         Piece::Rook => 5,
         Piece::Queen => 9,
         Piece::King => 50,
@@ -404,24 +402,18 @@ pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
     let board = game.board();
     let promotion = ply
         .promotion_piece()
-        .map(|x| x.base_value())
-        .unwrap_or(Millipawns(0));
+        .map_or(Millipawns(0), |x| x.base_value());
 
+    // Default: 1 Pawn for en passant
     let victim = board
         .occupant_piece(ply.dst())
-        .map(Piece::base_value)
-        // Default: 1 Pawn for en passant
-        .unwrap_or(Millipawns(1000));
+        .map_or(Millipawns(1000), Piece::base_value);
 
     let attacker = board
         .occupant_piece(ply.src())
-        .map(Piece::base_value)
-        // What?
-        .unwrap_or(Millipawns(0));
+        .map_or(Millipawns(0), Piece::base_value);
 
-    let res = victim - attacker / 128 + promotion;
-    // println!("{attacker:?} x {victim:?} = {res:?}");
-    res
+    victim - attacker / 128 + promotion
 }
 
 pub fn quiet_move_order(thread: &ThreadData, ply: Ply, threatened: Option<Square>) -> Millipawns {
