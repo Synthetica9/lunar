@@ -41,7 +41,7 @@ fn main() {
         },
         wdl_scheduler: wdl::LinearWDL {
             start: 0.0,
-            end: 0.5,
+            end: 0.3,
         },
         lr_scheduler: lr::StepLR {
             start: 0.001,
