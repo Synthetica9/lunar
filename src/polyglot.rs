@@ -3,15 +3,11 @@ use std::num::NonZeroUsize;
 use smallvec::SmallVec;
 
 use crate::{
-    basic_enums::CastleDirection,
-    game::Game,
-    hugepages_mmap_alloc::{self, HugePagesAlloc},
-    piece::Piece,
-    ply::Ply,
-    square::Square,
+    basic_enums::CastleDirection, game::Game, piece::Piece, ply::Ply, square::Square,
     zobrist_hash::ZobristHash,
 };
 
+#[derive(Debug)]
 #[repr(C, packed)]
 pub struct PolyglotEntry {
     hash: u64,
@@ -109,63 +105,41 @@ impl PolyglotPly {
 pub struct PolyglotBook([PolyglotEntry]);
 
 impl PolyglotBook {
-    pub fn load_from_file(file: std::fs::File) -> Result<Box<Self, HugePagesAlloc>, String> {
-        use nix::sys::mman::{madvise, mmap, MapFlags, MmapAdvise, ProtFlags};
+    pub fn load_from_file(mut file: std::fs::File) -> Result<Box<Self>, String> {
+        use std::io::Read;
+        const ENTRY_SIZE: usize = std::mem::size_of::<PolyglotEntry>();
 
-        let file_length = file.metadata().map_err(|x| x.to_string())?.len() as usize;
-        let unit_size = std::mem::size_of::<PolyglotEntry>();
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)
+            .map_err(|e| format!("Error reading file: {e:?}"))?;
 
-        let slice_len = file_length / unit_size;
-        if file_length % unit_size != 0 {
-            return Err(format!(
-                "Got non-aligned size {file_length} (should be multiple of {unit_size})"
-            ));
+        let len = bytes.len();
+        if len % ENTRY_SIZE != 0 {
+            Err(format!("{len} not a multiple of {ENTRY_SIZE}"))?
         }
 
-        let length = NonZeroUsize::new(file_length).ok_or("Got zero length for file")?;
+        let vec = {
+            let mut res = Vec::new();
+            for window in bytes.chunks_exact(ENTRY_SIZE) {
+                let window = TryInto::<[u8; ENTRY_SIZE]>::try_into(window).unwrap();
+                let entry = unsafe { std::mem::transmute(window) };
+                res.push(entry);
+            }
 
-        let addr = unsafe {
-            mmap(
-                None,
-                length,
-                ProtFlags::PROT_READ,
-                MapFlags::MAP_FILE | MapFlags::MAP_SHARED,
-                file,
-                0,
-            )
-        }
-        .map_err(|x| format!("Could not mmap: {x:?}"))?;
+            res
+        };
 
-        for advice in [
-            MmapAdvise::MADV_RANDOM,
-            MmapAdvise::MADV_WILLNEED,
-            MmapAdvise::MADV_DONTDUMP,
-        ] {
-            unsafe { madvise(addr, length.get(), advice) }.map_err(|x| x.to_string())?;
-        }
-
-        let addr = addr.as_ptr() as *mut PolyglotEntry;
-        let boxed = unsafe {
-            Vec::from_raw_parts_in(
-                addr,
-                slice_len,
-                slice_len,
-                hugepages_mmap_alloc::HugePagesAlloc,
-            )
-        }
-        .into_boxed_slice();
+        let boxed = vec.into_boxed_slice();
 
         let res = unsafe {
             // TODO: is there a way to do this without unsafe?
-            std::mem::transmute::<
-                Box<[PolyglotEntry], HugePagesAlloc>,
-                Box<PolyglotBook, HugePagesAlloc>,
-            >(boxed)
+            std::mem::transmute::<Box<[PolyglotEntry]>, Box<PolyglotBook>>(boxed)
         };
 
         Ok(res)
     }
-    pub fn load_from_path(path: &str) -> Result<Box<Self, HugePagesAlloc>, String> {
+
+    pub fn load_from_path(path: &str) -> Result<Box<Self>, String> {
         let file =
             std::fs::File::open(path).map_err(|x| format!("Could not open file {path}: {x}"))?;
         Self::load_from_file(file)

@@ -15,7 +15,6 @@ use rand::SeedableRng;
 
 use super::search_thread::{ThreadCommand, ThreadData, ThreadStatus};
 use crate::history::History;
-use crate::hugepages_mmap_alloc::HugePagesAlloc;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
 use crate::polyglot::PolyglotBook;
@@ -76,7 +75,7 @@ pub struct SearchThreadPool {
 
     state: PoolState,
     pv_hash: LruCache<ZobristHash, Ply>,
-    pub(crate) opening_book: Option<Arc<PolyglotBook, HugePagesAlloc>>,
+    pub(crate) opening_book: Option<Arc<PolyglotBook>>,
 }
 
 impl SearchThreadPool {
@@ -657,13 +656,19 @@ impl SearchThreadPool {
         }
     }
 
-    pub fn move_in_state(&mut self, game: &crate::game::Game, force: bool) -> Option<Ply> {
+    pub fn move_in_state(
+        &mut self,
+        game: &crate::game::Game,
+        force: bool,
+        allow_book: bool,
+    ) -> Option<Ply> {
         let hash = game.hash();
         let legal = game.legal_moves();
 
         let from_book = self
             .opening_book
             .as_ref()
+            .filter(|_| allow_book)
             .and_then(|x| {
                 use rand::seq::SliceRandom;
                 x.get(game)
@@ -703,7 +708,7 @@ impl SearchThreadPool {
             }
 
             let game = history.game();
-            let to_play = self.move_in_state(game, false);
+            let to_play = self.move_in_state(game, false, false);
 
             match to_play {
                 Some(ply) => {
@@ -742,7 +747,7 @@ impl SearchThreadPool {
 
         let mut game = history.game().clone();
 
-        let best_move = best_move.or(self.move_in_state(&game, true));
+        let best_move = best_move.or(self.move_in_state(&game, true, true));
         debug_assert!(
             best_move.is_some_and(|x| game.is_legal(x)),
             "generated best move not legal in position {} {:?}",
@@ -751,7 +756,7 @@ impl SearchThreadPool {
         );
         let ponder = best_move.and_then(|best| {
             game.apply_ply(best);
-            self.move_in_state(&game, true)
+            self.move_in_state(&game, true, true)
         });
 
         self.correct_instability(pv_instability);
@@ -776,7 +781,7 @@ impl SearchThreadPool {
         }
     }
 
-    pub(crate) fn set_opening_book(&mut self, book: Option<Box<PolyglotBook, HugePagesAlloc>>) {
+    pub(crate) fn set_opening_book(&mut self, book: Option<Box<PolyglotBook>>) {
         let Some(book) = book else {
             self.opening_book = None;
             return;
@@ -784,7 +789,7 @@ impl SearchThreadPool {
 
         // TODO: this actually reallocates...
         // https://stackoverflow.com/questions/51638604/mmap-file-with-larger-fixed-length-with-zero-padding
-        let arc: Arc<PolyglotBook, HugePagesAlloc> = book.into();
+        let arc: Arc<PolyglotBook> = book.into();
         self.opening_book = Some(arc);
     }
 }
