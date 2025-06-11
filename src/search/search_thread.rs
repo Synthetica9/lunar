@@ -505,7 +505,8 @@ impl ThreadData {
                 // > - TT move does not exist or is capture.
                 || tt_is_capture;
 
-            let margin = Millipawns((depth.max(Depth::ONE) * 1500).to_num());
+            let depth_slope = Depth::from_num(1500);
+            let margin = Millipawns((depth.max(Depth::ONE).saturating_mul(depth_slope)).to_num());
 
             if !skip_rfp && eval - margin >= beta && depth <= 4 {
                 return Ok((eval, best_move));
