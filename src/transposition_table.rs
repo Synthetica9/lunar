@@ -10,14 +10,14 @@ use crate::millipawns::Millipawns;
 use crate::ply::Ply;
 use crate::zobrist_hash::ZobristHash;
 
-#[cfg(feature = "hugepages")]
+#[cfg(unix)]
 use crate::hugepages_mmap_alloc::HugePagesAlloc;
 
 pub struct TranspositionTable {
-    #[cfg(not(feature = "hugepages"))]
+    #[cfg(not(unix))]
     table: Box<NonEmptySlice<TranspositionLine>>,
 
-    #[cfg(feature = "hugepages")]
+    #[cfg(unix)]
     table: Box<NonEmptySlice<TranspositionLine>, HugePagesAlloc>,
 
     occupancy: AtomicIsize,
@@ -155,10 +155,10 @@ impl TranspositionTable {
         let needed_lines = needed_entries / ITEMS_PER_BUCKET;
 
         let mut table = {
-            #[cfg(not(feature = "hugepages"))]
+            #[cfg(not(unix))]
             let res = Vec::with_capacity(needed_lines);
 
-            #[cfg(feature = "hugepages")]
+            #[cfg(unix)]
             let res = Vec::with_capacity_in(needed_lines, HugePagesAlloc {});
 
             res
@@ -190,7 +190,7 @@ impl TranspositionTable {
     }
 
     fn madv_random(&mut self) {
-        #[cfg(feature = "nix")]
+        #[cfg(unix)]
         {
             use nix::sys::mman::{madvise, MmapAdvise};
             use std::os::raw::c_void;

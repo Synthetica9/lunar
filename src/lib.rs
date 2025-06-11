@@ -1,5 +1,5 @@
 #![cfg_attr(feature = "simd", feature(portable_simd))]
-#![cfg_attr(feature = "hugepages", feature(allocator_api, slice_ptr_get))]
+#![cfg_attr(unix, feature(allocator_api, slice_ptr_get))]
 #![cfg_attr(feature = "intrinsics", feature(core_intrinsics))]
 #![feature(generic_const_exprs)]
 #![feature(new_zeroed_alloc)]
@@ -16,7 +16,7 @@ pub mod eval;
 pub mod game;
 pub mod history;
 
-#[cfg(feature = "hugepages")]
+#[cfg(unix)]
 pub mod hugepages_mmap_alloc;
 
 pub mod legality;
