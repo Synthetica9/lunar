@@ -75,7 +75,7 @@ impl Network {
             res
         };
 
-        #[cfg(all(target_arch = "x86_64", feature = "asm"))]
+        #[cfg(all(target_arch = "x86_64", feature = "asm", target_feature = "avx2"))]
         let acc_sum = || unsafe {
             // https://www.chessprogramming.org/NNUE#Lizard_SCReLU
             use std::arch::x86_64::*;
