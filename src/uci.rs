@@ -128,9 +128,8 @@ impl UCIState {
         };
         match command {
             "uci" => {
-                self.send(&format!("id name {NAME}"));
+                self.send(&format!("id name {NAME} {VERSION}"));
                 self.send(&format!("id author {AUTHOR}"));
-                self.send(&format!("id version {VERSION}"));
                 AVAILABLE_OPTIONS.print_uci_options(self);
                 self.send("uciok");
             }
