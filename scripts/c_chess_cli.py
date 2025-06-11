@@ -23,9 +23,10 @@ def setup_chess_cli():
             ["git", "clone", "https://github.com/Synthetica9/c-chess-cli"],
             cwd=d,
         )
-        subprocess.check_call(["python", "./make.py"], cwd=p)
+        print("Starting compile...")
+
         TARGET_DIR.mkdir(exist_ok=True, parents=True)
-        shutil.copy(p / "c-chess-cli", OUT_FILE)
+        subprocess.check_call(["python", "./make.py", "-c", "gcc", "-o", str(OUT_FILE)], cwd=p)
         print("Done compiling", file=sys.stderr)
 
 

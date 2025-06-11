@@ -1,16 +1,12 @@
 name: Rust
 
-on:
-  push:
-    branches: ["master"]
-  pull_request:
-    branches: ["master"]
+on: push
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  test:
     strategy:
       matrix:
         hugepages: [true, false]
@@ -26,7 +22,6 @@ jobs:
           sudo su
           echo "madvise" | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
           echo 128 | sudo tee /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
-          echo "FEATURES=$FEATURES --features=hugepages" >> "$GITHUB_ENV"
           cat /sys/kernel/mm/transparent_hugepage/enabled
         if: ${{ matrix.hugepages }}
       - name: Build
@@ -35,3 +30,40 @@ jobs:
         run: cargo test --verbose $FEATURES
       - name: Run tests (release)
         run: cargo test --release --verbose $FEATURES
+  build:
+    strategy:
+      matrix:
+        os:
+          - platform: ubuntu-latest
+            exe_extension: ''
+            name: linux
+          - platform: windows-latest
+            exe_extension: '.exe'
+            name: windows
+        rustflags:
+          - name: basic
+            flags: "-C target-cpu=x86-64"
+          - name: popcnt
+            flags: "-C target-cpu=x86-64 -C target-feature=+popcnt"
+          - name: x64-v2
+            flags: "-C target-cpu=x86-64-v2"
+          - name: x64-v3
+            flags: "-C target-cpu=x86-64-v3"
+          # - name: x64-v4
+          #   flags: "-C target-cpu=x86-64-v4"
+
+    runs-on: '${{matrix.os.platform}}'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build (PGO) executable
+        run: |
+          cargo install cargo-pgo
+          rustup component add llvm-tools-preview
+          bash ./scripts/build_pgo.sh
+        env:
+          RUSTFLAGS: '${{ matrix.rustflags.flags }}'
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: 'lunar-${{ matrix.os.name }}-${{ matrix.rustflags.name }}'
+          path: 'target/release/lunar_pgo${{ matrix.os.exe_extension }}'

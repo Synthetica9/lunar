@@ -80,6 +80,14 @@ impl UCIState {
         loop {
             if let Ok(line) = reader_chan.try_recv() {
                 let line = line.trim().to_string();
+
+                #[cfg(windows)]
+                if line == "quit" {
+                    // Remove when adding nicer UCI handling
+                    println!("info string ugly windows hack");
+                    return;
+                }
+
                 match self.interpret(&line) {
                     Ok(()) => {}
                     Err(msg) => self.info(&msg),
