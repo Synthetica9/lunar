@@ -433,7 +433,7 @@ impl TranspositionTable {
     fn effective_age(&self, entry: TranspositionEntry) -> u8 {
         let global_age = self.age();
 
-        (global_age - entry.age()) & MAX_AGE
+        global_age.wrapping_sub(entry.age()) & MAX_AGE
     }
 }
 
