@@ -134,9 +134,8 @@ impl UCIState {
                 self.send("uciok");
             }
             "isready" => {
-                // std::thread::sleep(Duration::from_millis(50));
-                self.manage_thread_pool();
-                self.search_thread_pool.wait_ready();
+                // Only main thread needs to be ready, and when we're executing this
+                // on the main thread we should be ready.
                 self.send("readyok");
             }
             "ucinewgame" => {

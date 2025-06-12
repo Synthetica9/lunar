@@ -257,28 +257,6 @@ impl SearchThreadPool {
         self.threads.iter().all(|handle| !handle.is_searching)
     }
 
-    pub fn wait_ready(&mut self) {
-        use PoolState::*;
-        self.wait_channels_empty();
-
-        match self.state {
-            Stopping => {
-                // We want to wait until we have received a message from each thread that they are
-                // actually idle.
-                while !self.stopped() {
-                    self.communicate();
-                }
-                self.state = PoolState::Idle;
-            }
-            Quitting => {
-                self.kill();
-            }
-            _ => {
-                // Nothing to do!
-            }
-        }
-    }
-
     pub fn update_pv(&mut self, force: bool) {
         let Some(new) = self.build_pv() else { return };
 

@@ -141,7 +141,6 @@ pub struct ThreadData {
     thread_id: usize,
 
     searching: bool,
-    stopping: bool,
 
     history: History,
 
@@ -189,7 +188,6 @@ impl ThreadData {
             transposition_table,
 
             searching: false,
-            stopping: true,
 
             history: History::new(Game::new()),
             nodes_searched: 0,
@@ -218,10 +216,6 @@ impl ThreadData {
         loop {
             use ThreadCommand as C;
             command = match &command {
-                _ if self.stopping => {
-                    self.stopping = false;
-                    (self.callback)(ThreadStatus::Idle)
-                }
                 None if self.searching => match self.search() {
                     Err(command) => Some(command),
                 },
@@ -235,7 +229,6 @@ impl ThreadData {
                     let cmd = self.send_status_update();
 
                     self.searching = false;
-                    self.stopping = true;
                     self.history_table = ZeroInit::zero_box();
                     self.countermove = ZeroInit::zero_box();
                     self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
