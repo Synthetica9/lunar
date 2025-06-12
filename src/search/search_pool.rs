@@ -535,7 +535,7 @@ impl SearchThreadPool {
 
                         // If we are running up against the real limits of time, we should return
                         // regardles`s to avoid losing on time.
-                        if time - time_spent <= Duration::from_millis(30) {
+                        if time <= time_spent + Duration::from_millis(30) {
                             println!("info string exiting because lt 30ms remain");
                             return true;
                         }
