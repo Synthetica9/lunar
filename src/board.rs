@@ -442,7 +442,11 @@ impl Board {
         res
     }
 
-    pub fn least_valuable_attacker(&self, square: Square, attacker_color: Color) -> Option<Square> {
+    pub fn least_valuable_attacker(
+        &self,
+        square: Square,
+        attacker_color: Color,
+    ) -> Option<(Piece, Square)> {
         let occupancy = self.get_occupied();
 
         // Get all possible locations an attacker would have to be in for the attack to land.
@@ -463,7 +467,7 @@ impl Board {
         for piece in Piece::iter() {
             let bb = attacker_pieces & attacks_by_piece_to(piece) & self.get_piece(piece);
             if let Some(sq) = bb.first_occupied() {
-                return Some(sq);
+                return Some((piece, sq));
             }
         }
         None

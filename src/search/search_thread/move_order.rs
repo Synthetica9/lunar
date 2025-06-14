@@ -255,6 +255,12 @@ pub struct StandardMoveGenerator {
     bad_captures: SmallVec<[QueuedPly; 32]>,
 }
 
+// impl Drop for StandardMoveGenerator {
+//     fn drop(&mut self) {
+//         println!("Drop movegen at {:?}", self.phase);
+//     }
+// }
+
 impl MoveGenerator for StandardMoveGenerator {
     fn init(_thread: &ThreadData) -> Self {
         Self {
@@ -293,11 +299,21 @@ impl MoveGenerator for StandardMoveGenerator {
 
                 let game = thread.game();
                 let dst = last_undo.ply.dst();
-                let Some(lva) = game.board().least_valuable_attacker(dst, game.to_move()) else {
+                let Some((lva_piece, lva_square)) =
+                    game.board().least_valuable_attacker(dst, game.to_move())
+                else {
                     break 'lva;
                 };
+
+                let ply = Ply::simple(lva_square, dst);
+                let good_capture = lva_piece.base_value() <= last_undo.info.our_piece.base_value();
+
+                if !good_capture && static_exchange_evaluation(game, ply) < Millipawns(0) {
+                    break 'lva;
+                }
+
                 return Some(Generated {
-                    ply: GeneratedMove::Ply(Ply::simple(lva, dst)),
+                    ply: GeneratedMove::Ply(ply),
                     guarantee: GuaranteeLevel::HashLike,
                 });
             }
