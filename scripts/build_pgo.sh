@@ -4,7 +4,7 @@ set -euxo pipefail
 
 TARGET=$(rustc -vV | sed -n 's|host: ||p')
 BIN=lunar
-RUSTFLAGS="${RUSTFLAGS:- -Ctarget-cpu=native}"
+export RUSTFLAGS="${RUSTFLAGS:- -Ctarget-cpu=native}"
 echo "Using RUSTFLAGS: $RUSTFLAGS"
 
 cargo pgo -V
