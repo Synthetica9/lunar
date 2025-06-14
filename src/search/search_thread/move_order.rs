@@ -308,7 +308,7 @@ impl MoveGenerator for StandardMoveGenerator {
                 let ply = Ply::simple(lva_square, dst);
                 let good_capture = lva_piece.base_value() <= last_undo.info.our_piece.base_value();
 
-                if !good_capture && static_exchange_evaluation(game, ply) < Millipawns(0) {
+                if !good_capture {
                     break 'lva;
                 }
 
