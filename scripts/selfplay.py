@@ -33,6 +33,11 @@ def get_parser():
         nargs="*",
         default=[],
     )
+    parser.add_argument(
+        "--no-regression",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument("--gauntlet", action="store_true")
 
     parser.add_argument("--stockfish", type=int, nargs="*")
@@ -73,10 +78,18 @@ def selfplay(options, *revs, stockfishes=None):
         kwargs["tournament"] = "gauntlet"
         kwargs["seeds"] = str(len(revs))
 
+    if len(engines) == 2:
+        if options.no_regression:
+            sprt = {"elo0": "-5", "elo1": "0"}
+        else:
+            sprt = {"elo0": "0", "elo1": "5"}
+    else:
+        sprt = False
+
     c_chess_cli(
         backend=backend,
         engines=engines,
-        sprt=len(engines) == 2,
+        sprt=sprt,
         openings={
             "file": "./test_data/blitz_openings.fen",
             "order": "random",
@@ -93,7 +106,7 @@ def selfplay(options, *revs, stockfishes=None):
         },
         # log=True,
         concurrency=12,
-        rounds=1000,
+        rounds=10000,
         games=2,
         pgn="out.pgn",
         # tournament="swiss-tcec",
