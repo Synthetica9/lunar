@@ -555,7 +555,7 @@ impl ThreadData {
             let mut i = 0;
 
             let mut any_moves_seen = false;
-            let mut bad_quiet_moves: SmallVec<[_; 16]> = SmallVec::new();
+            let mut bad_quiet_moves: SmallVec<[_; 32]> = SmallVec::new();
 
             while let Some((moveno, Generated { ply, guarantee })) =
                 generator.next(self).map(|x| (i, x))
