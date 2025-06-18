@@ -933,10 +933,10 @@ impl ThreadData {
             use std::cmp::Reverse;
 
             let res = self.game().quiescence_pseudo_legal_moves();
+            let game = self.game();
             let mut res: SmallVec<[_; 32]> = res
                 .iter()
-                .map(|x| (*x, move_order::static_exchange_evaluation(self.game(), *x)))
-                .filter(|x| x.1 >= crate::millipawns::DRAW)
+                .map(|ply| (*ply, move_order::mvv_lva(game, *ply)))
                 .collect();
             res.sort_unstable_by_key(|x| Reverse(x.1));
             res
@@ -947,6 +947,10 @@ impl ThreadData {
         let mut best_score = stand_pat;
         for (ply, _millipawns) in candidates {
             if !legality_checker.is_legal(ply, self.game()) {
+                continue;
+            }
+
+            if move_order::static_exchange_evaluation(self.game(), ply) < crate::millipawns::DRAW {
                 continue;
             }
 
