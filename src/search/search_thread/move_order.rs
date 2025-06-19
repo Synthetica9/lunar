@@ -219,15 +219,15 @@ pub struct RootMoveGenerator {
 impl MoveGenerator for RootMoveGenerator {
     fn init(thread: &ThreadData) -> Self {
         let mut items = thread
-            .root_move_counts
+            .prev_ply_root_move_counts
             .iter()
             .map(|(ply, count)| {
                 let sort_key = if thread.best_move.is_some_and(|x| x == *ply) {
                     // Best ply last
-                    usize::MAX
+                    u64::MAX
                 } else {
                     // Highest number of nodes to refute last.
-                    count.load(Ordering::Relaxed)
+                    *count
                 };
                 (sort_key, *ply)
             })

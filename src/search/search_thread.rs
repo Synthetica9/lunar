@@ -12,7 +12,6 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
 use super::history_heuristic::HistoryTable;
-use crate::eval;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -22,6 +21,7 @@ use crate::search::parameters::search_parameters;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
+use crate::{eval, search};
 
 const N_KILLER_MOVES: usize = 2;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
@@ -153,6 +153,8 @@ pub struct ThreadData {
     seldepth: u16,
 
     root_move_counts: Arc<LinearMap<Ply, AtomicUsize>>,
+    curr_ply_root_move_counts: LinearMap<Ply, u64>,
+    prev_ply_root_move_counts: LinearMap<Ply, u64>,
     root_hash: ZobristHash,
     best_move: Option<Ply>,
 
@@ -181,7 +183,7 @@ impl ThreadData {
 
         let continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
 
-        Self {
+        let mut res = Self {
             thread_id,
 
             callback,
@@ -197,6 +199,8 @@ impl ThreadData {
             seldepth: 0,
 
             root_move_counts,
+            prev_ply_root_move_counts: LinearMap::new(),
+            curr_ply_root_move_counts: LinearMap::new(),
             root_hash: game.hash(),
             best_move: None,
 
@@ -205,7 +209,13 @@ impl ThreadData {
             history_table: ZeroInit::zero_box(),
             countermove: ZeroInit::zero_box(),
             continuation_histories,
-        }
+        };
+
+        // Twice, to clear both prev and curr:
+        res.reset_ply_root_move_count();
+        res.reset_ply_root_move_count();
+
+        res
     }
 
     pub fn run(&mut self) {
@@ -241,6 +251,9 @@ impl ThreadData {
                     self.seldepth = 0;
                     self.root_move_counts = root_moves.clone();
                     self.root_hash = new_history.game().hash();
+
+                    self.reset_ply_root_move_count();
+                    self.reset_ply_root_move_count();
 
                     None
                 }
@@ -315,6 +328,8 @@ impl ThreadData {
                 (value - base_window, value + base_window)
             };
 
+            self.reset_ply_root_move_count();
+
             loop {
                 let (score, best_move) =
                     self.alpha_beta_search::<RootNode>(alpha, beta, Depth::from_num(depth), 0)?;
@@ -378,6 +393,22 @@ impl ThreadData {
             }
         }
         Err(ThreadCommand::StopSearch)
+    }
+
+    pub fn reset_ply_root_move_count(&mut self) {
+        std::mem::swap(
+            &mut self.curr_ply_root_move_counts,
+            &mut self.prev_ply_root_move_counts,
+        );
+
+        self.curr_ply_root_move_counts = {
+            let mut local = LinearMap::new();
+            for (ply, _) in self.root_move_counts.iter() {
+                local.insert(*ply, 0);
+            }
+
+            local
+        };
     }
 
     fn draw_value(&self, depth: Depth) -> Millipawns {
@@ -728,6 +759,7 @@ impl ThreadData {
                     // println!("{ply:?} {searched}");
                     let atom = &self.root_move_counts[&ply];
                     atom.fetch_add(searched, Ordering::Relaxed);
+                    *self.curr_ply_root_move_counts.get_mut(&ply).unwrap() += searched as u64;
                 }
 
                 value = value.max(x);
