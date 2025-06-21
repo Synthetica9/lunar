@@ -475,7 +475,7 @@ impl ThreadData {
         let eval = self.history.eval();
         let is_in_check = self.game().is_in_check();
 
-        let futility_pruning = {
+        let futility_pruning = if let Some(eval) = eval {
             let fut_margin = Millipawns(
                 (depth.saturating_mul(search_parameters().futprun_mp_per_ply))
                     .max(search_parameters().futprun_min_mp)
@@ -485,6 +485,8 @@ impl ThreadData {
                 && eval + fut_margin < alpha
                 && !N::is_pv()
                 && !is_in_check
+        } else {
+            false
         };
 
         let from_tt = self.transposition_table.get(self.game().hash());
@@ -516,7 +518,7 @@ impl ThreadData {
             from_tt.is_some_and(|x| x.best_move().is_some_and(|ply| enemy_pieces.get(ply.dst())));
 
         // Reverse futility pruning (also known as static null move pruning)
-        {
+        if let Some(eval) = eval {
             // https://www.chessprogramming.org/Reverse_Futility_Pruning
             // > It is common to skip RFP when one of the following conditions are met:
             let skip_rfp =
@@ -927,7 +929,23 @@ impl ThreadData {
     }
 
     fn countermove_cell(&self) -> Option<&Cell<Ply>> {
-        let last_info = self.history.peek()?;
+        let last_info = self.history.peek_n(0)?;
+
+        // TODO: uncomment bugfix, but may influence playing strength:
+        // if last_info.ply.is_null() {
+        //     return None;
+        // }
+
+        debug_assert!(
+            last_info.ply.is_null()
+                || self
+                    .game()
+                    .board()
+                    .occupant_color(last_info.ply.dst())
+                    .unwrap()
+                    == self.game().to_move().other()
+        );
+
         Some(self.countermove.get_cell((
             self.game().to_move(),
             last_info.info.our_piece,

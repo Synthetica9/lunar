@@ -287,7 +287,7 @@ impl MoveGenerator for StandardMoveGenerator {
             }
             LastMovedLVA => 'lva: {
                 self.phase = GenQuiescenceMoves;
-                let Some(last_undo) = thread.history.peek() else {
+                let Some(last_undo) = thread.history.peek_n(0) else {
                     break 'lva;
                 };
 

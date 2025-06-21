@@ -7,8 +7,8 @@ pub const HASH_TABLE_SIZE: usize = 1 << 14;
 
 #[derive(Clone, Debug)]
 pub struct StackElement {
-    undo: UndoPly,
-    eval: Millipawns,
+    undo: Option<UndoPly>,
+    eval: Option<Millipawns>,
     hash: ZobristHash,
 }
 
@@ -17,7 +17,6 @@ pub struct History {
     // TODO: stack or heap allocation?
     game: Game,
     stack: Vec<StackElement>,
-    cur_eval: Millipawns,
     hash_table: Box<[u8; HASH_TABLE_SIZE]>,
 }
 
@@ -31,12 +30,16 @@ impl History {
             hash_table.assume_init()
         };
 
-        let cur_eval = crate::eval::evaluation(&game);
+        let eval = (!game.is_in_check()).then(|| crate::eval::evaluation(&game));
+        let stack_base = StackElement {
+            undo: None,
+            eval,
+            hash,
+        };
 
         let mut res = Self {
             game,
-            cur_eval,
-            stack: Vec::new(),
+            stack: vec![stack_base],
             hash_table,
         };
         *res.hash_count_mut(hash) = 1;
@@ -47,8 +50,8 @@ impl History {
         &self.game
     }
 
-    pub fn eval(&self) -> Millipawns {
-        self.cur_eval
+    pub fn eval(&self) -> Option<Millipawns> {
+        self.stack.last().unwrap().eval
     }
 
     #[allow(clippy::len_without_is_empty)]
@@ -58,38 +61,44 @@ impl History {
     }
 
     pub fn push(&mut self, ply: Ply) {
-        let hash = self.game.hash();
         let undo = self.game.apply_ply(ply);
-        *self.hash_count_mut(self.game.hash()) += 1;
+        let hash = self.game.hash();
+        *self.hash_count_mut(hash) += 1;
+
+        let eval = (!self.game.is_in_check()).then(|| crate::eval::evaluation(&self.game));
+
         self.stack.push(StackElement {
-            eval: self.cur_eval,
-            undo,
+            undo: Some(undo),
+            eval,
             hash,
         });
-        self.cur_eval = crate::eval::evaluation(&self.game);
     }
 
     pub fn hard_push(&mut self, ply: Ply) {
         self.push(ply);
-        debug_assert!(!self.stack.is_empty());
+        debug_assert!(!self.len() >= 2);
         if self.game.half_move() == 0 {
             // Drop all except last
-            self.stack.drain(0..self.stack.len() - 1);
-            debug_assert!(self.stack.len() <= 1);
+            self.stack.drain(0..self.stack.len() - 2);
+            debug_assert!(self.stack.len() <= 2);
         }
     }
 
     pub fn pop(&mut self) -> UndoPly {
         let prev = self.stack.pop().unwrap();
         *self.hash_count_mut(self.game.hash()) -= 1;
-        self.game.undo_ply(&prev.undo);
-        self.cur_eval = prev.eval;
-        debug_assert_eq!(prev.hash, self.game.hash());
-        prev.undo
+
+        let undo = prev.undo.unwrap();
+        self.game.undo_ply(&undo);
+        debug_assert_eq!(self.stack.last().unwrap().hash, self.game.hash());
+        undo
     }
 
     pub fn last_is_null(&self) -> bool {
-        self.stack.last().is_some_and(|top| top.undo.ply.is_null())
+        self.stack
+            .last()
+            .and_then(|top| top.undo)
+            .is_some_and(|x| x.ply.is_null())
     }
 
     fn hash_index(&self, hash: ZobristHash) -> usize {
@@ -115,9 +124,11 @@ impl History {
             // No false positives possible.
             false
         } else {
-            let mut count = 1;
-            for elem in self.stack.iter().rev() {
+            let mut count = 0;
+            for (i, elem) in self.stack.iter().rev().enumerate() {
                 count += (self.game.hash() == elem.hash) as u8;
+                debug_assert!(count <= hash_count);
+                debug_assert!(i != 0 || elem.hash == self.game().hash());
                 if count >= at_least {
                     return true;
                 }
@@ -154,14 +165,14 @@ impl History {
     }
 
     pub(crate) fn peek(&self) -> Option<&UndoPly> {
-        self.stack.last().map(|x| &x.undo)
+        self.stack.last().and_then(|x| x.undo.as_ref())
     }
 
     pub(crate) fn peek_n(&self, n: usize) -> Option<&UndoPly> {
         let len = self.len();
 
         if len > n {
-            self.stack.get(len - n - 1).map(|x| &x.undo)
+            self.stack.get(len - n - 1).and_then(|x| x.undo.as_ref())
         } else {
             None
         }
