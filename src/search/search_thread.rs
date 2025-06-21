@@ -5,6 +5,7 @@ use std::cell::Cell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use fixed::traits::Fixed;
 use linear_map::LinearMap;
 use smallvec::SmallVec;
 
@@ -687,7 +688,8 @@ impl ThreadData {
                             )
                         };
 
-                        r += a * x + b;
+                        let improving_rate = self.history.improving_rate();
+                        r += (a * x + b) * (Depth::ONE - improving_rate / 4).max(Depth::ONE);
                     }
 
                     if !is_first_move && is_quiet && tt_is_capture {

@@ -4,12 +4,15 @@ use crate::ply::{Ply, UndoPly};
 use crate::zobrist_hash::ZobristHash;
 
 pub const HASH_TABLE_SIZE: usize = 1 << 14;
+use fixed::traits::Fixed;
+use fixed::types::I16F16 as ImprovingRate;
 
 #[derive(Clone, Debug)]
 pub struct StackElement {
     undo: Option<UndoPly>,
     eval: Option<Millipawns>,
     hash: ZobristHash,
+    improving_rate: ImprovingRate,
 }
 
 #[derive(Clone, Debug)]
@@ -35,6 +38,7 @@ impl History {
             undo: None,
             eval,
             hash,
+            improving_rate: ImprovingRate::ZERO,
         };
 
         let mut res = Self {
@@ -67,10 +71,34 @@ impl History {
 
         let eval = (!self.game.is_in_check()).then(|| crate::eval::evaluation(&self.game));
 
+        let mut prev = None;
+
+        for i in [1, 3] {
+            let Some(sp) = self.full_peek_n(i) else {
+                continue;
+            };
+
+            if sp.eval.is_none() {
+                continue;
+            }
+
+            prev = Some(sp);
+        }
+
+        let improving_rate = if let (Some(prev), Some(eval)) = (prev, eval) {
+            let prev_eval = prev.eval.unwrap();
+            let diff = eval - prev_eval;
+            (prev.improving_rate + ImprovingRate::saturating_from_num(diff.0) / 500)
+                .clamp(ImprovingRate::NEG_ONE, ImprovingRate::ONE)
+        } else {
+            ImprovingRate::ZERO
+        };
+
         self.stack.push(StackElement {
             undo: Some(undo),
             eval,
             hash,
+            improving_rate,
         });
     }
 
@@ -168,13 +196,32 @@ impl History {
         self.stack.last().and_then(|x| x.undo.as_ref())
     }
 
-    pub(crate) fn peek_n(&self, n: usize) -> Option<&UndoPly> {
+    fn full_peek_n_mut(&mut self, n: usize) -> Option<&mut StackElement> {
         let len = self.len();
 
         if len > n {
-            self.stack.get(len - n - 1).and_then(|x| x.undo.as_ref())
+            self.stack.get_mut(len - n - 1)
         } else {
             None
         }
+    }
+
+    fn full_peek_n(&self, n: usize) -> Option<&StackElement> {
+        let len = self.len();
+
+        if len > n {
+            self.stack.get(len - n - 1)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn peek_n(&self, n: usize) -> Option<&UndoPly> {
+        self.full_peek_n(n).and_then(|x| x.undo.as_ref())
+    }
+
+    /// Improving rate, between -1 and 1.
+    pub fn improving_rate(&self) -> fixed::types::I16F16 {
+        self.full_peek_n(0).unwrap().improving_rate
     }
 }
