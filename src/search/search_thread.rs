@@ -472,7 +472,7 @@ impl ThreadData {
         let mut alpha = alpha;
         let mut beta = beta;
 
-        let eval = crate::eval::evaluation(self.game());
+        let eval = self.history.eval();
         let is_in_check = self.game().is_in_check();
 
         let futility_pruning = {

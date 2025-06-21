@@ -1,15 +1,23 @@
 use crate::game::Game;
+use crate::millipawns::Millipawns;
 use crate::ply::{Ply, UndoPly};
 use crate::zobrist_hash::ZobristHash;
 
 pub const HASH_TABLE_SIZE: usize = 1 << 14;
 
 #[derive(Clone, Debug)]
+pub struct StackElement {
+    undo: UndoPly,
+    eval: Millipawns,
+    hash: ZobristHash,
+}
+
+#[derive(Clone, Debug)]
 pub struct History {
     // TODO: stack or heap allocation?
     game: Game,
-    undo_history: Vec<UndoPly>,
-    hash_history: Vec<ZobristHash>,
+    stack: Vec<StackElement>,
+    cur_eval: Millipawns,
     hash_table: Box<[u8; HASH_TABLE_SIZE]>,
 }
 
@@ -23,10 +31,12 @@ impl History {
             hash_table.assume_init()
         };
 
+        let cur_eval = crate::eval::evaluation(&game);
+
         let mut res = Self {
             game,
-            undo_history: Vec::new(),
-            hash_history: Vec::new(),
+            cur_eval,
+            stack: Vec::new(),
             hash_table,
         };
         *res.hash_count_mut(hash) = 1;
@@ -37,44 +47,49 @@ impl History {
         &self.game
     }
 
+    pub fn eval(&self) -> Millipawns {
+        self.cur_eval
+    }
+
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
-        let res = self.undo_history.len();
-        debug_assert_eq!(res, self.hash_history.len());
+        let res = self.stack.len();
         res
     }
 
     pub fn push(&mut self, ply: Ply) {
-        self.hash_history.push(self.game.hash());
+        let hash = self.game.hash();
         let undo = self.game.apply_ply(ply);
         *self.hash_count_mut(self.game.hash()) += 1;
-        self.undo_history.push(undo);
+        self.stack.push(StackElement {
+            eval: self.cur_eval,
+            undo,
+            hash,
+        });
+        self.cur_eval = crate::eval::evaluation(&self.game);
     }
 
     pub fn hard_push(&mut self, ply: Ply) {
         self.push(ply);
-        debug_assert!(!self.undo_history.is_empty());
+        debug_assert!(!self.stack.is_empty());
         if self.game.half_move() == 0 {
             // Drop all except last
-            self.hash_history.drain(0..self.hash_history.len() - 1);
-            self.undo_history.drain(0..self.undo_history.len() - 1);
-            debug_assert!(self.undo_history.len() <= 1);
+            self.stack.drain(0..self.stack.len() - 1);
+            debug_assert!(self.stack.len() <= 1);
         }
     }
 
     pub fn pop(&mut self) -> UndoPly {
-        let undo = self.undo_history.pop().unwrap();
+        let prev = self.stack.pop().unwrap();
         *self.hash_count_mut(self.game.hash()) -= 1;
-        self.game.undo_ply(&undo);
-        let old_hash = self.hash_history.pop().unwrap();
-        debug_assert_eq!(old_hash, self.game.hash());
-        undo
+        self.game.undo_ply(&prev.undo);
+        self.cur_eval = prev.eval;
+        debug_assert_eq!(prev.hash, self.game.hash());
+        prev.undo
     }
 
     pub fn last_is_null(&self) -> bool {
-        self.undo_history
-            .last()
-            .is_some_and(|undo| undo.ply.is_null())
+        self.stack.last().is_some_and(|top| top.undo.ply.is_null())
     }
 
     fn hash_index(&self, hash: ZobristHash) -> usize {
@@ -101,8 +116,8 @@ impl History {
             false
         } else {
             let mut count = 1;
-            for hash in self.hash_history.iter().rev() {
-                count += (self.game.hash() == *hash) as u8;
+            for elem in self.stack.iter().rev() {
+                count += (self.game.hash() == elem.hash) as u8;
                 if count >= at_least {
                     return true;
                 }
@@ -139,14 +154,14 @@ impl History {
     }
 
     pub(crate) fn peek(&self) -> Option<&UndoPly> {
-        self.undo_history.last()
+        self.stack.last().map(|x| &x.undo)
     }
 
     pub(crate) fn peek_n(&self, n: usize) -> Option<&UndoPly> {
-        let len = self.undo_history.len();
+        let len = self.len();
 
         if len > n {
-            self.undo_history.get(len - n - 1)
+            self.stack.get(len - n - 1).map(|x| &x.undo)
         } else {
             None
         }
