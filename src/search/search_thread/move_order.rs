@@ -1,3 +1,4 @@
+use fixed::traits::Fixed;
 use smallvec::SmallVec;
 
 use std::sync::atomic::Ordering;
@@ -10,6 +11,7 @@ use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
 use crate::search::parameters::search_parameters;
+use crate::search::search_thread::Depth;
 use crate::square::Square;
 
 use super::{ThreadData, N_CONTINUATION_HISTORIES};
@@ -359,11 +361,7 @@ impl MoveGenerator for StandardMoveGenerator {
             GenQuietMoves => {
                 self.phase = YieldOtherMoves;
                 let game = thread.game();
-                let threat = thread
-                    .transposition_table
-                    .get(game.hash().hash_after_null())
-                    .and_then(|x| x.best_move())
-                    .map(Ply::dst);
+                let threat = thread.history.threat();
 
                 game.for_each_pseudo_legal_move::<false>(|ply| {
                     let value = quiet_move_order(thread, ply, threat);
@@ -416,7 +414,11 @@ pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
     victim - attacker / 128 + promotion
 }
 
-pub fn quiet_move_order(thread: &ThreadData, ply: Ply, threatened: Option<Square>) -> Millipawns {
+pub fn quiet_move_order(
+    thread: &ThreadData,
+    ply: Ply,
+    threatened: Option<(Ply, Millipawns, Piece)>,
+) -> Millipawns {
     // http://www.talkchess.com/forum3/viewtopic.php?t=66312
     // Based on Andrew Grant's idea.
     let game = thread.game();
@@ -432,6 +434,8 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply, threatened: Option<Square
     let src = ply.src();
     let piece = game.board().occupant_piece(ply.src()).unwrap();
 
+    let ply_idx = (piece, dst);
+
     let from_history = thread.history_table.score(color, piece, dst)
         * search_parameters().mo_direct_history_weight;
     // let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
@@ -442,8 +446,28 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply, threatened: Option<Square
 
     let cont_weights = continuation_weights();
 
-    if threatened.is_some_and(|threat| src == threat) {
-        val += search_parameters().mo_move_threatened_piece_bonus;
+    let mut threat_history_bonus = 0;
+    if let Some((threat, threat_severity, threat_piece)) = threatened {
+        let threat_sq = threat.dst();
+        if src == threat_sq {
+            val += search_parameters().mo_move_threatened_piece_bonus;
+        }
+
+        let severity_scaling_max = Depth::from_num(2500);
+        let severity_scaling = Depth::from_num(threat_severity.0)
+            .clamp(Depth::ZERO, severity_scaling_max)
+            / severity_scaling_max;
+
+        let base = Depth::from_num(
+            thread
+                .threat_history
+                .get((color, (threat_piece, threat_sq), ply_idx))
+                .0,
+        );
+
+        threat_history_bonus = base.saturating_mul(severity_scaling * 50).to_num();
+
+        val += threat_history_bonus;
     }
 
     for i in 0..N_CONTINUATION_HISTORIES {
@@ -456,7 +480,7 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply, threatened: Option<Square
         }
 
         let cont = thread.continuation_histories[i]
-            .get((color, cont_hist.piece_dst(), (piece, dst)))
+            .get((color, cont_hist.piece_dst(), ply_idx))
             .0
             * cont_weights[i];
         val += cont;

@@ -1,5 +1,6 @@
 use crate::game::Game;
 use crate::millipawns::Millipawns;
+use crate::piece::Piece;
 use crate::ply::{Ply, UndoPly};
 use crate::zobrist_hash::ZobristHash;
 
@@ -13,6 +14,7 @@ pub struct StackElement {
     eval: Option<Millipawns>,
     hash: ZobristHash,
     improving_rate: ImprovingRate,
+    threat: Option<(Ply, Millipawns, Piece)>,
 }
 
 #[derive(Clone, Debug)]
@@ -39,6 +41,7 @@ impl History {
             eval,
             hash,
             improving_rate: ImprovingRate::ZERO,
+            threat: None,
         };
 
         let mut res = Self {
@@ -99,6 +102,7 @@ impl History {
             eval,
             hash,
             improving_rate,
+            threat: None,
         });
     }
 
@@ -223,5 +227,28 @@ impl History {
     /// Improving rate, between -1 and 1.
     pub fn improving_rate(&self) -> fixed::types::I16F16 {
         self.full_peek_n(0).unwrap().improving_rate
+    }
+
+    pub fn set_threat(&mut self, ply: Ply, threat_severity: Millipawns) {
+        let src = ply.src();
+        debug_assert_eq!(
+            self.game().board().occupant_color(src),
+            Some(self.game().to_move().other())
+        );
+
+        let piece = self
+            .game()
+            .board()
+            .occupant_piece(src)
+            .expect("Threat is being set but no piece there?");
+
+        let top = self.full_peek_n_mut(0).unwrap();
+        debug_assert_eq!(top.threat, None);
+        top.threat = Some((ply, threat_severity, piece));
+    }
+
+    pub fn threat(&self) -> Option<(Ply, Millipawns, Piece)> {
+        let top = self.full_peek_n(0).unwrap();
+        top.threat
     }
 }

@@ -165,6 +165,7 @@ pub struct ThreadData {
     history_table: Box<HistoryTable>,
     countermove: Box<CounterMove>,
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
+    threat_history: Box<L2History>,
 }
 
 impl ThreadData {
@@ -210,6 +211,7 @@ impl ThreadData {
             history_table: ZeroInit::zero_box(),
             countermove: ZeroInit::zero_box(),
             continuation_histories,
+            threat_history: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -243,6 +245,7 @@ impl ThreadData {
                     self.history_table = ZeroInit::zero_box();
                     self.countermove = ZeroInit::zero_box();
                     self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
+                    self.threat_history = ZeroInit::zero_box();
 
                     cmd
                 }
@@ -568,19 +571,26 @@ impl ThreadData {
                 && !self.history.last_is_null()
             {
                 self.history.push(Ply::NULL);
-                let null_value = -self
-                    .alpha_beta_search::<CutNode>(
-                        -beta,
-                        -(beta - Millipawns::ONE),
-                        depth - r,
-                        root_dist + 1,
-                    )?
-                    .0;
+                let null_res = self.alpha_beta_search::<CutNode>(
+                    -beta,
+                    -(beta - Millipawns::ONE),
+                    depth - r,
+                    root_dist + 1,
+                )?;
                 self.history.pop();
+
+                let null_value = -null_res.0;
+
                 if null_value >= beta {
                     return Ok((null_value, best_move));
                 }
-            }
+
+                if let Some(threat) = null_res.1 {
+                    let threat_score = beta - null_value;
+                    self.history.set_threat(threat, threat_score);
+                    debug_assert!(threat_score >= Millipawns(0));
+                }
+            };
 
             let mut hash_moves_played = [Ply::NULL; 8];
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
@@ -781,7 +791,9 @@ impl ThreadData {
                         let bonus = (depth.saturating_mul(depth)).to_num();
                         let to_move = self.game().to_move();
 
-                        let continuation_history = |idx: usize, our_dst, our_piece, delta| {
+                        let ply_idx = (our_piece, ply.dst());
+
+                        let continuation_history = |idx: usize, ply_idx, delta| {
                             let Some(oppt_info) = self.history.peek_n(idx) else {
                                 return;
                             };
@@ -790,25 +802,37 @@ impl ThreadData {
                                 return;
                             }
 
-                            let index = (to_move, oppt_info.piece_dst(), (our_piece, our_dst));
+                            let index = (to_move, oppt_info.piece_dst(), ply_idx);
                             self.continuation_histories[idx].gravity_history(index, delta);
                         };
 
                         self.history_table
                             .update(to_move, our_piece, ply.dst(), bonus);
 
+                        if let Some((threat_ply, _, piece)) = self.history.threat() {
+                            let threat_idx = (piece, threat_ply.dst());
+
+                            self.threat_history
+                                .gravity_history((to_move, threat_idx, ply_idx), bonus);
+
+                            for bad in bad_quiet_moves.iter() {
+                                self.threat_history
+                                    .gravity_history((to_move, threat_idx, *bad), -bonus);
+                            }
+                        }
+
                         for i in 0..N_CONTINUATION_HISTORIES {
-                            continuation_history(i, ply.dst(), undo.info.our_piece, bonus);
+                            continuation_history(i, ply_idx, bonus);
                         }
 
                         if let Some(c) = self.countermove_cell() {
                             c.set(ply);
                         }
 
-                        for (piece, square) in bad_quiet_moves {
-                            self.history_table.update(to_move, piece, square, -bonus);
+                        for bad in bad_quiet_moves {
+                            self.history_table.update(to_move, bad.0, bad.1, -bonus);
                             for i in 0..N_CONTINUATION_HISTORIES {
-                                continuation_history(i, square, our_piece, -bonus);
+                                continuation_history(i, bad, -bonus);
                             }
                         }
                     }
