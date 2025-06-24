@@ -664,7 +664,7 @@ impl SearchThreadPool {
         let mut res = Vec::new();
 
         loop {
-            if history.repetition_count_at_least_3() {
+            if history.game_is_finished() {
                 break;
             }
 
