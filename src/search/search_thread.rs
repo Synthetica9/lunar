@@ -596,14 +596,15 @@ impl ThreadData {
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
 
             let mut generator = N::Gen::init(self);
-            let mut i = 0;
+            let mut moveno = 0;
 
             let mut any_moves_seen = false;
             let mut bad_quiet_moves: SmallVec<[_; 32]> = SmallVec::new();
+            let mut any_moves_pruned = false;
 
-            while let Some((moveno, Generated { ply, guarantee })) =
-                generator.next(self).map(|x| (i, x))
-            {
+            while let Some(Generated { ply, guarantee }) = generator.next(self) {
+                // May be skipped
+                let is_first_move = moveno == 0;
                 let ply = {
                     use GeneratedMove::*;
                     match ply {
@@ -616,6 +617,17 @@ impl ThreadData {
                 };
 
                 let total_nodes_before = self.total_nodes_searched;
+
+                let is_quiet = ply.promotion_piece().is_none_or(|x| x != Piece::Queen)
+                    && !enemy_pieces.get(ply.dst());
+                let is_check = self.game().is_check(ply);
+
+                // Do the actual futility prune
+                // TODO: also do LMP here.
+                if !N::is_pv() && is_quiet && !is_check && futility_pruning && !is_first_move {
+                    any_moves_pruned = true;
+                    continue;
+                }
 
                 {
                     use GuaranteeLevel::*;
@@ -663,20 +675,9 @@ impl ThreadData {
                     .prefetch_read(self.history.game().speculative_hash_after_ply(ply));
 
                 any_moves_seen = true;
-                let is_first_move = i == 0;
-                i += 1;
+                moveno += 1;
 
                 let hash_before = self.game().hash();
-
-                // Do the actual futility prune
-                // TODO: skip negative SEE captures?
-                let is_quiet = ply.promotion_piece().is_none_or(|x| x != Piece::Queen)
-                    && !enemy_pieces.get(ply.dst());
-                let is_check = self.game().is_check(ply);
-
-                if !N::is_pv() && is_quiet && !is_check && futility_pruning && !is_first_move {
-                    continue;
-                }
 
                 let see = crate::search::static_exchange_evaluation(self.game(), ply);
 
@@ -845,7 +846,19 @@ impl ThreadData {
             }
 
             if !any_moves_seen {
-                return Ok((if is_in_check { LOSS } else { DRAW }, None));
+                let score = if any_moves_pruned {
+                    // Maybe there was some legal move that we didn't even check for legality?
+                    alpha
+                } else if is_in_check {
+                    // Checkmate
+                    debug_assert!(self.game().is_in_checkmate());
+                    LOSS
+                } else {
+                    // Stalemate
+                    debug_assert!(self.game().is_in_stalemate());
+                    DRAW
+                };
+                return Ok((score, None));
             }
         }
 

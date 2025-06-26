@@ -792,9 +792,11 @@ impl Game {
 
     pub fn is_check(&self, ply: Ply) -> bool {
         let enemy_king = self.board().king_square(self.to_move().other());
-        let moved_piece = ply.moved_piece(self);
         let dst = ply.dst();
         let src = ply.src();
+        let Some(moved_piece) = self.board().occupant_piece(src) else {
+            return false;
+        };
 
         if self
             .blockers(enemy_king, self.to_move, self.to_move)
