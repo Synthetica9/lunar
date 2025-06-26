@@ -24,7 +24,7 @@ def get_parser():
     have_cutechess = shutil.which("cutechess-cli") is not None
     parser.add_argument(
         "--backend",
-        choices=["internal", "cutechess-cli"],
+        choices=["internal", "cutechess-cli", "fastchess"],
         default="cutechess-cli" if have_cutechess else "internal",
     )
     parser.add_argument(

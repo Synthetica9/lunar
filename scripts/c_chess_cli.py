@@ -39,10 +39,11 @@ def to_args(kwargs):
 
     engines = kwargs.pop("engines", [])
 
-    it = list(kwargs.items())
-
+    it = []
     for engine in engines:
         it.append(("engine", engine))
+
+    it += list(kwargs.items())
 
     for k, v in it:
         if v == False:
@@ -74,7 +75,7 @@ def c_chess_cli(output=False, backend=None, defaults=True, **kwargs):
     if backend is None:
         backend = str(OUT_FILE)
 
-    if backend == "cutechess-cli":
+    if backend == "cutechess-cli" or backend == "fastchess":
         # Do conversions!
         kwargs["debug"] = kwargs.pop("log", False)
 
@@ -92,7 +93,6 @@ def c_chess_cli(output=False, backend=None, defaults=True, **kwargs):
         each = kwargs.get("each", {})
         each["proto"] = "uci"
         kwargs["ratinginterval"] = 10
-        kwargs["outcomeinterval"] = 100
         kwargs["recover"] = True
 
         sprt = kwargs.get("sprt", None)
@@ -108,6 +108,9 @@ def c_chess_cli(output=False, backend=None, defaults=True, **kwargs):
             kwargs["sprt"] = sprt
 
         kwargs["pgnout"] = kwargs.pop("pgn", None)
+
+    if backend == "cutechess-cli":
+        kwargs["outcomeinterval"] = 100
 
     call = [backend, *to_args(kwargs)]
 
