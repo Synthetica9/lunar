@@ -564,6 +564,8 @@ impl ThreadData {
             r += eval::game_phase(board) * search_parameters().nmr_piece_slope;
             r += depth * search_parameters().nmr_depth_slope;
 
+            let mut is_mate_threat = false;
+
             if !N::is_pv()
                 && !side_to_move_only_kp
                 && depth >= r
@@ -590,6 +592,7 @@ impl ThreadData {
                     self.history.set_threat(threat, threat_score);
                     debug_assert!(threat_score >= Millipawns(0));
                 }
+                is_mate_threat = null_value.is_mate_in_n().is_some();
             };
 
             let mut hash_moves_played = [Ply::NULL; 8];
@@ -713,6 +716,10 @@ impl ThreadData {
 
                     if lmr && see.0 < 0 && !is_check {
                         r += Depth::ONE / 2;
+                    }
+
+                    if is_mate_threat {
+                        r -= Depth::ONE / 2;
                     }
 
                     r.max(Depth::ZERO)
