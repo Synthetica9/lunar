@@ -619,6 +619,8 @@ impl ThreadData {
                     }
                 };
 
+                // Pruning may make us see shorter mates that don't exist...
+                let pruning_allowed = !is_first_move && value.is_mate_in_n().is_none();
                 let total_nodes_before = self.total_nodes_searched;
 
                 let is_quiet = ply.promotion_piece().is_none_or(|x| x != Piece::Queen)
@@ -627,7 +629,13 @@ impl ThreadData {
 
                 // Do the actual futility prune
                 // TODO: also do LMP here.
-                if !N::is_pv() && is_quiet && !is_check && futility_pruning && !is_first_move {
+                if !N::is_pv()
+                    && pruning_allowed
+                    && is_quiet
+                    && !is_check
+                    && futility_pruning
+                    && !is_first_move
+                {
                     any_moves_pruned = true;
                     continue;
                 }
@@ -732,7 +740,12 @@ impl ThreadData {
                 let full_depth = next_depth.max(depth - Depth::ONE);
 
                 // Late move pruning
-                if lmr && virtual_depth < Depth::from_num(-2) && is_quiet && !is_check {
+                if pruning_allowed
+                    && lmr
+                    && virtual_depth < Depth::from_num(-2)
+                    && is_quiet
+                    && !is_check
+                {
                     continue;
                 }
 
