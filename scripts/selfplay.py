@@ -80,9 +80,9 @@ def selfplay(options, *revs, stockfishes=None):
 
     if len(engines) == 2:
         if options.no_regression:
-            sprt = {"elo0": "-5", "elo1": "0"}
+            sprt = {"elo0": "-5", "elo1": "0", "beta": 0.1}
         else:
-            sprt = {"elo0": "0", "elo1": "5"}
+            sprt = {"elo0": "0", "elo1": "5", "beta": 0.1}
     else:
         sprt = False
 
