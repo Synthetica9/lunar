@@ -536,7 +536,9 @@ impl ThreadData {
                 || tt_is_capture;
 
             let depth_slope = Depth::from_num(1500);
-            let margin = Millipawns((depth.max(Depth::ONE).saturating_mul(depth_slope)).to_num());
+            let improving_fac = (Depth::ONE - self.history.improving_rate() / 2).min(Depth::ONE);
+            let base_margin = depth.max(Depth::ONE).saturating_mul(depth_slope);
+            let margin = Millipawns((base_margin * improving_fac).to_num());
 
             if !skip_rfp && eval - margin >= beta && depth <= 4 {
                 return Ok((eval, best_move));
