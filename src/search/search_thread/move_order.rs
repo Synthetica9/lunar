@@ -68,7 +68,9 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
 
     let mut attack_def = board.squares_attacking_defending(square);
 
-    let mut attacked_piece = board.occupant_piece(from).expect("Piece must be set");
+    let Some(mut attacked_piece) = board.occupant_piece(from) else {
+        return Millipawns(0);
+    };
 
     let target = board.occupant_piece(square).map_or(0, full_pawn_value);
 

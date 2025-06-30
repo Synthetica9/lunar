@@ -607,6 +607,13 @@ impl ThreadData {
             let mut bad_quiet_moves: SmallVec<[_; 32]> = SmallVec::new();
             let mut any_moves_pruned = false;
 
+            let depth_clamp_zero = depth.max(Depth::ZERO);
+            let depth_squared = depth_clamp_zero * depth_clamp_zero;
+            let see_pruning_noisy_scaling_factor = Depth::from_num(-500);
+            let see_pruning_noisy_cutoff =
+                depth_squared.saturating_mul(see_pruning_noisy_scaling_factor);
+
+            // XXX: currently bugged! depth * depth starts increasing again with negative arguments.
             let lmp_cutoff: i32 = 5 + 2 * (depth * depth).to_num::<i32>();
 
             while let Some(Generated { ply, guarantee }) = generator.next(self) {
@@ -697,9 +704,14 @@ impl ThreadData {
                 any_moves_seen = true;
                 moveno += 1;
 
-                let hash_before = self.game().hash();
-
                 let see = crate::search::static_exchange_evaluation(self.game(), ply);
+
+                // SEE Pruning
+                if !N::is_pv() && !is_quiet && !is_check && see.0 < see_pruning_noisy_cutoff {
+                    continue;
+                }
+
+                let hash_before = self.game().hash();
 
                 let lmr = !is_in_check && !is_first_move;
                 let reduction = {
