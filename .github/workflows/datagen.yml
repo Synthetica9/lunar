@@ -38,6 +38,6 @@ jobs:
           shell nixpkgs#croc --command sh -c '
             while :
             do
-              { cat data/*.bin | croc send } && break
+              (cat data/*.bin | croc send) && break
             done
           '
