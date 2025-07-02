@@ -22,13 +22,11 @@ jobs:
         cargo build --release --bin bullet-utils
         popd
     - name: Datagen
-      run: |
-        ./scripts/datagen.sh
-        ls data
-    - name: Exfiltrate data
       env:
         CROC_SECRET: 'lunar-${{ secrets.CROC_TOKEN_PART }}'
       run: |
+        ./scripts/datagen.sh
+        ls data
         nix \
           --extra-experimental-features flakes \
           --extra-experimental-features nix-command \
