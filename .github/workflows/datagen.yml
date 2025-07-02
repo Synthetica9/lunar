@@ -32,12 +32,10 @@ jobs:
       run: |
         ./scripts/datagen.sh
         ls -la data
-        nix \
-          --extra-experimental-features flakes \
-          --extra-experimental-features nix-command \
-          shell nixpkgs#croc --command sh -c '
-            while :
-            do
-              (cat data/*.bin | croc send) && break
-            done
-          '
+    - uses: actions/upload-artifact@v4
+      with:
+        name: generated.bin
+        path: data/*.bin
+        retention-days: 2
+        compression-level: 9
+        include-hidden-files: true
