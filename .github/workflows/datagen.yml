@@ -24,6 +24,7 @@ jobs:
     - name: Datagen
       run: |
         ./scripts/datagen.sh
+        ls data
     - name: Exfiltrate data
       env:
         CROC_SECRET: 'lunar-${{ secrets.CROC_TOKEN_PART }}'
@@ -32,4 +33,4 @@ jobs:
           --extra-experimental-features flakes \
           --extra-experimental-features nix-command \
           run nixpkgs#croc -- \
-          send data/*.bin
+          send data
