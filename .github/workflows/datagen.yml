@@ -28,7 +28,7 @@ jobs:
         popd
     - name: Datagen
       env:
-        CROC_SECRET: 'lunar-${{ secrets.CROC_TOKEN_PART }}'
+        CROC_SECRET: 'lunar-${{ secrets.CROC_TOKEN_PART }}-${{ matrix.a }}-${{ matrix.b }}-${{ matrix.c }}'
       run: |
         ./scripts/datagen.sh
         ls -la data
