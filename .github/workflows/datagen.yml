@@ -20,4 +20,4 @@ jobs:
         popd
     - name: Datagen
       run: |
-        ./scripts/datagen.sh
+        bash ./scripts/datagen.sh
