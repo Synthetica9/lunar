@@ -31,7 +31,8 @@ jobs:
         CROC_SECRET: 'lunar-${{ secrets.CROC_TOKEN_PART }}-${{ matrix.a }}-${{ matrix.b }}-${{ matrix.c }}'
       run: |
         ./scripts/datagen.sh
-        ls -la data
+        mv data/*.bin data/$(date +%s).bin
+        ls -lh data
     - uses: actions/upload-artifact@v4
       with:
         name: generated.bin
