@@ -32,5 +32,4 @@ jobs:
         nix \
           --extra-experimental-features flakes \
           --extra-experimental-features nix-command \
-          run nixpkgs#croc -- \
-          send $BIN_NAME
+          shell nixpkgs#croc --command 'croc send $BIN_NAME'
