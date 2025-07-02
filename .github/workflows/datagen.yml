@@ -27,9 +27,8 @@ jobs:
         BIN_NAME: 'github-${{ github.job }}.bin'
       run: |
         ./scripts/datagen.sh
-        mv data/*.bin ./$BIN_NAME
-        ls -la $BIN_NAME
+        ls -la data
         nix \
           --extra-experimental-features flakes \
           --extra-experimental-features nix-command \
-          shell nixpkgs#croc --command croc send $BIN_NAME
+          shell nixpkgs#croc --command sh -c 'cat data/*.bin | croc send'
