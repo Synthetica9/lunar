@@ -31,6 +31,8 @@ main()
 
 ./scripts/book_randomize.py test_data/chess324.fen -n 100 > /tmp/book.fen
 
+mkdir -p data
+
 $BULLET_UTILS convert --from text --input <(cat $FIFO | python -c "$CONVERT_PY") --output data/$(date -u +"%Y-%m-%dT%H:%M:%SZ").bin &
 
 ./scripts/c_chess_cli.py \
