@@ -24,11 +24,13 @@ jobs:
     - name: Datagen
       env:
         CROC_SECRET: 'lunar-${{ secrets.CROC_TOKEN_PART }}'
+        BIN_NAME: 'github-${{ github.job }}.bin'
       run: |
         ./scripts/datagen.sh
-        ls data
+        mv data/*.bin ./$BIN_NAME
+        ls -la $BIN_NAME
         nix \
           --extra-experimental-features flakes \
           --extra-experimental-features nix-command \
           run nixpkgs#croc -- \
-          send data
+          send $BIN_NAME
