@@ -16,5 +16,5 @@ jobs:
         git clone https://github.com/jw1912/bullet
         cd bullet
         git checkout "main@{2025-07-02}"
-        cargo build --release
+        cargo build --release --bin bullet-utils
         popd
