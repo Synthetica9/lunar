@@ -607,6 +607,8 @@ impl ThreadData {
             let mut bad_quiet_moves: SmallVec<[_; 32]> = SmallVec::new();
             let mut any_moves_pruned = false;
 
+            let lmp_cutoff: i32 = 5 + 2 * (depth * depth).to_num::<i32>();
+
             while let Some(Generated { ply, guarantee }) = generator.next(self) {
                 // May be skipped
                 let is_first_move = moveno == 0;
@@ -638,6 +640,11 @@ impl ThreadData {
                     && futility_pruning
                     && !is_first_move
                 {
+                    any_moves_pruned = true;
+                    continue;
+                }
+
+                if !N::is_pv() && pruning_allowed && is_quiet && !is_check && moveno > lmp_cutoff {
                     any_moves_pruned = true;
                     continue;
                 }
