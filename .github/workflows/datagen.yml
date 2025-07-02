@@ -7,3 +7,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Setup
+      run: |
+        cargo install cargo-pgo
+        rustup component add llvm-tools-preview
+
+        pushd ..
+        git clone https://github.com/jw1912/bullet
+        cd bullet
+        git checkout "main@{2025-07-02}"
+        cargo build --release
+        popd
