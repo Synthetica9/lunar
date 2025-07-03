@@ -1,57 +1,70 @@
-/*
-This is about as simple as you can get with a network, the arch is
-    (768 -> HIDDEN_SIZE)x2 -> 1
-and the training schedule is pretty sensible.
-There's potentially a lot of elo available by adjusting the wdl
-and lr schedulers, depending on your dataset.
-*/
 use bullet_lib::{
-    nn::{Activation, optimiser},
+    game::inputs::Chess768,
+    nn::optimiser::AdamW,
     trainer::{
-        default::{Loss, TrainerBuilder, inputs, loader},
+        save::SavedFormat,
         schedule::{TrainingSchedule, TrainingSteps, lr, wdl},
         settings::LocalSettings,
     },
+    value::{ValueTrainerBuilder, loader::DirectSequentialDataLoader},
 };
 
-const HIDDEN_SIZE: usize = 512;
-const SCALE: i32 = 400;
-const QA: i16 = 255;
-const QB: i16 = 64;
-
 fn main() {
-    let mut trainer = TrainerBuilder::default()
-        .quantisations(&[QA, QB])
-        .optimiser(optimiser::AdamW)
-        .loss_fn(Loss::SigmoidMSE)
-        .input(inputs::Chess768)
-        .feature_transformer(HIDDEN_SIZE)
-        .activate(Activation::SCReLU)
-        .add_layer(1)
-        .build();
+    // hyperparams to fiddle with
+    let hl_size = 512;
+    let dataset_path = "data/baseline.bin";
+    let initial_lr = 0.001;
+    let final_lr = 0.001 * 0.3f32.powi(5);
+    let superbatches = 160;
+    let wdl_proportion = 0.75;
+    let qa = 255;
+    let qb = 64;
+
+    let scale = 400;
+
+    let mut trainer = ValueTrainerBuilder::default()
+        .dual_perspective()
+        .optimiser(AdamW)
+        .inputs(Chess768)
+        .save_format(&[
+            SavedFormat::id("l0w").quantise::<i16>(qa),
+            SavedFormat::id("l0b").quantise::<i16>(qa),
+            SavedFormat::id("l1w").quantise::<i16>(qb),
+            SavedFormat::id("l1b").quantise::<i16>(qa * qb),
+        ])
+        .loss_fn(|output, target| output.sigmoid().squared_error(target))
+        .build(|builder, stm_inputs, ntm_inputs| {
+            // weights
+            let l0 = builder.new_affine("l0", 768, hl_size);
+            let l1 = builder.new_affine("l1", 2 * hl_size, 1);
+
+            // inference
+            let stm_hidden = l0.forward(stm_inputs).screlu();
+            let ntm_hidden = l0.forward(ntm_inputs).screlu();
+            let hidden_layer = stm_hidden.concat(ntm_hidden);
+            l1.forward(hidden_layer)
+        });
 
     let schedule = TrainingSchedule {
         net_id: "screlu512".to_string(),
-        eval_scale: SCALE as f32,
+        eval_scale: scale as f32,
         steps: TrainingSteps {
             batch_size: 16_384,
             batches_per_superbatch: 6104,
             start_superbatch: 1,
-            end_superbatch: 40,
+            end_superbatch: superbatches,
         },
         wdl_scheduler: wdl::LinearWDL {
             start: 0.0,
-            end: 0.3,
+            end: 0.5,
         },
-        lr_scheduler: lr::StepLR {
-            start: 0.001,
-            gamma: 0.1,
-            step: 18,
+        lr_scheduler: lr::CosineDecayLR {
+            initial_lr,
+            final_lr,
+            final_superbatch: superbatches,
         },
         save_rate: 10,
     };
-
-    trainer.set_optimiser_params(optimiser::AdamWParams::default());
 
     let settings = LocalSettings {
         threads: 4,
@@ -60,8 +73,7 @@ fn main() {
         batch_queue_size: 64,
     };
 
-    // loading directly from a `BulletFormat` file
-    let data_loader = loader::DirectSequentialDataLoader::new(&["../lunar_bak/data/baseline.bin"]);
+    let dataloader = DirectSequentialDataLoader::new(&[dataset_path]);
 
-    trainer.run(&schedule, &settings, &data_loader);
+    trainer.run(&schedule, &settings, &dataloader);
 }
