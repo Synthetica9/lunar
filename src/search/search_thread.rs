@@ -19,7 +19,9 @@ use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::Ply;
+use crate::search::countermove::Stats;
 use crate::search::parameters::search_parameters;
+use crate::square::Square;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
@@ -168,6 +170,7 @@ pub struct ThreadData {
     countermove: Box<CounterMove>,
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
+    capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
 }
 
 impl ThreadData {
@@ -214,6 +217,7 @@ impl ThreadData {
             countermove: ZeroInit::zero_box(),
             continuation_histories,
             threat_history: ZeroInit::zero_box(),
+            capture_history: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -251,6 +255,7 @@ impl ThreadData {
                     self.countermove = ZeroInit::zero_box();
                     self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
                     self.threat_history = ZeroInit::zero_box();
+                    self.capture_history = ZeroInit::zero_box();
 
                     None
                 }
@@ -610,6 +615,7 @@ impl ThreadData {
 
             let mut any_moves_searched = false;
             let mut bad_quiet_moves: SmallVec<[_; 32]> = SmallVec::new();
+            let mut bad_captures: SmallVec<[_; 16]> = SmallVec::new();
             let mut any_moves_pruned = false;
 
             let depth_clamp_zero = depth.max(Depth::ZERO);
@@ -855,12 +861,12 @@ impl ThreadData {
                 }
 
                 if alpha >= beta {
+                    let bonus = (depth.saturating_mul(depth)).to_num();
                     if is_quiet {
                         self.insert_killer_move(ply, self.game().half_move_total() as usize);
 
                         let our_piece = undo.info.our_piece;
 
-                        let bonus = (depth.saturating_mul(depth)).to_num();
                         let to_move = self.game().to_move();
 
                         let ply_idx = (our_piece, ply.dst());
@@ -907,12 +913,21 @@ impl ThreadData {
                                 continuation_history(i, bad, -bonus);
                             }
                         }
+                    } else if let Some(captured) = undo.info.captured_piece {
+                        self.capture_history
+                            .gravity_history((undo.info.our_piece, ply.dst(), captured), bonus);
+                    }
+
+                    for bad in bad_captures {
+                        self.capture_history.gravity_history(bad, -bonus);
                     }
                     break;
                 }
 
                 if is_quiet {
                     bad_quiet_moves.push((undo.info.our_piece, undo.ply.dst()));
+                } else if let Some(captured) = undo.info.captured_piece {
+                    bad_captures.push((undo.info.our_piece, undo.ply.dst(), captured))
                 }
             }
 
