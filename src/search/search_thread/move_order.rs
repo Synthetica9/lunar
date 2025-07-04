@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 
 use crate::basic_enums::Color;
 use crate::bitboard::{self, Bitboard};
-use crate::board::Board;
+use crate::board::{self, Board};
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
@@ -309,7 +309,18 @@ impl MoveGenerator for StandardMoveGenerator {
                 self.phase = YieldWinningOrEqualCaptures;
 
                 thread.game().for_each_pseudo_legal_move::<true>(|ply| {
-                    let value = mvv_lva(thread.game(), ply);
+                    let mut value = Millipawns(0);
+                    if ply.is_promotion() {
+                        debug_assert_eq!(ply.promotion_piece(), Some(Piece::Queen));
+                        value += Millipawns(8000);
+                    }
+                    let dst = ply.dst();
+                    let src = ply.src();
+                    let moved_piece = thread.game().board().occupant_piece(src).unwrap();
+                    if let Some(victim) = thread.game().board().occupant_piece(dst) {
+                        value += thread.capture_history.get((moved_piece, src, victim));
+                        value += victim.base_value();
+                    }
 
                     let command = MVVLVACapture { ply, value };
                     self.queue.push(command);
