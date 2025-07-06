@@ -64,14 +64,6 @@ pub enum ThreadStatus {
     Quitting,
 }
 
-struct RootNode;
-
-struct PVNode;
-
-struct CutNode;
-
-struct AllNode;
-
 enum NodeType {
     Pv,
     Cut,
@@ -86,6 +78,7 @@ where
 {
     const TYPE: NodeType;
     const IS_ROOT: bool = false;
+    const IS_SE: bool = false;
 
     type Gen;
     type FirstSuccessor;
@@ -104,6 +97,7 @@ where
     }
 }
 
+struct RootNode;
 impl Node for RootNode {
     const TYPE: NodeType = NodeType::Pv;
     const IS_ROOT: bool = true;
@@ -114,6 +108,7 @@ impl Node for RootNode {
     type OtherSuccessors = CutNode;
 }
 
+struct PVNode;
 impl Node for PVNode {
     const TYPE: NodeType = NodeType::Pv;
     type Gen = StandardMoveGenerator;
@@ -122,6 +117,7 @@ impl Node for PVNode {
     type OtherSuccessors = CutNode;
 }
 
+struct CutNode;
 impl Node for CutNode {
     const TYPE: NodeType = NodeType::Cut;
 
@@ -131,6 +127,7 @@ impl Node for CutNode {
     type OtherSuccessors = AllNode;
 }
 
+struct AllNode;
 impl Node for AllNode {
     const TYPE: NodeType = NodeType::All;
 
@@ -138,6 +135,18 @@ impl Node for AllNode {
 
     type FirstSuccessor = CutNode;
     type OtherSuccessors = CutNode;
+}
+
+struct SENode;
+impl Node for SENode {
+    // We _expect_ something to fail high in most nodes; actually doing the SE is the exceptional case.
+    const IS_SE: bool = true;
+    const TYPE: NodeType = NodeType::Cut;
+
+    type Gen = StandardMoveGenerator;
+
+    type FirstSuccessor = AllNode;
+    type OtherSuccessors = AllNode;
 }
 
 pub type Depth = fixed::types::I16F16;
@@ -506,7 +515,7 @@ impl ThreadData {
         let from_tt = self.transposition_table.get(self.game().hash());
 
         if let Some(tte) = from_tt {
-            if depth <= tte.depth && !self.history.may_be_repetition() {
+            if !N::IS_SE && depth <= tte.depth && !self.history.may_be_repetition() {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
@@ -543,7 +552,8 @@ impl ThreadData {
                 // > - Position is or has been a PV node.
                 // || from_tt.is_none_or(|x| x.value_type() == TranspositionEntryType::Exact)
                 // > - TT move does not exist or is capture.
-                || tt_is_capture;
+                || tt_is_capture
+                || N::IS_SE;
 
             let depth_slope = Depth::from_num(1500);
             let improving_fac = (Depth::ONE - self.history.improving_rate() / 2).min(Depth::ONE);
@@ -579,6 +589,7 @@ impl ThreadData {
             let mut is_mate_threat = false;
 
             if N::is_cut()
+                && !N::IS_SE
                 && !side_to_move_only_kp
                 && depth >= r
                 && !is_in_check
@@ -607,6 +618,33 @@ impl ThreadData {
                 is_mate_threat = null_value.is_mate_in_n().is_some();
             };
 
+            // Singular extension check
+            let is_singular = !N::IS_ROOT
+                && !N::IS_SE
+                && !N::is_all()
+                && depth >= 8
+                && from_tt.is_some_and(|x| {
+                    x.best_move().is_some()
+                        && x.depth >= depth - Depth::from_num(3)
+                        && x.value_type() != UpperBound
+                })
+                && {
+                    let tt_score = from_tt.unwrap().value;
+                    let singular_margin = tt_score - Millipawns((20 * depth).to_num());
+
+                    // TODO: we get a interresting second move from this, if it fails high...
+                    let singular_value = self
+                        .alpha_beta_search::<SENode>(
+                            singular_margin,
+                            singular_margin + Millipawns(1),
+                            (depth - Depth::ONE) / 2,
+                            root_dist,
+                        )?
+                        .0;
+
+                    singular_value <= singular_margin
+                };
+
             let mut hash_moves_played = [Ply::NULL; 8];
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
 
@@ -634,7 +672,16 @@ impl ThreadData {
             // XXX: currently bugged! depth * depth starts increasing again with negative arguments.
             let lmp_cutoff: i32 = 5 + 2 * (depth * depth).to_num::<i32>();
 
+            if N::IS_SE {
+                moveno += 1;
+                hash_moves_played[0] = from_tt.and_then(|x| x.best_move()).unwrap_or(Ply::NULL);
+            }
+
             while let Some(Generated { ply, guarantee }) = generator.next(self) {
+                if N::IS_SE && matches!(ply, GeneratedMove::HashMove) {
+                    continue;
+                }
+
                 // May be skipped
                 let is_first_move = moveno == 0;
                 let ply = {
@@ -788,6 +835,10 @@ impl ThreadData {
 
                     if is_mate_threat {
                         r -= Depth::ONE / 2;
+                    }
+
+                    if is_singular && is_first_move {
+                        r -= Depth::ONE;
                     }
 
                     r.max(Depth::ZERO)
@@ -973,8 +1024,8 @@ impl ThreadData {
             value -= Millipawns::ONE;
         }
 
-        // if depth >= 0 {
-        {
+        // Don't write worse SE move to TT
+        if !N::IS_SE {
             use crate::transposition_table::*;
             let value_type = if value <= alpha_orig {
                 UpperBound
