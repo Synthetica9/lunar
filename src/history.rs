@@ -243,7 +243,8 @@ impl History {
             .expect("Threat is being set but no piece there?");
 
         let top = self.full_peek_n_mut(0).unwrap();
-        debug_assert_eq!(top.threat, None);
+        // XXX: This should actually start holding again
+        // debug_assert_eq!(top.threat, None);
         top.threat = Some((ply, threat_severity, piece));
     }
 

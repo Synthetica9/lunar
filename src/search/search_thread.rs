@@ -772,25 +772,23 @@ impl ThreadData {
 
                 self.history.push(ply);
 
-                let x = if is_first_move {
-                    // What else could we be overwriting here?
-                    // if let Some(best) = best_move {
-                    //     debug_assert_eq!(best, ply);
-                    // }
-
+                // Null-window search
+                let mut x;
+                if is_first_move {
+                    // XXX: Highly dubious, but gotta test removal seperately.
                     best_move = Some(ply);
-                    -self
-                        .alpha_beta_search::<N::FirstSuccessor>(
-                            -beta,
+
+                    x = -self
+                        .alpha_beta_search::<N::OtherSuccessors>(
+                            -alpha - Millipawns::ONE,
                             -alpha,
                             full_depth,
                             root_dist + 1,
                         )?
                         .0
                 } else {
-                    // Null-window search
-                    let mut x = -self
-                        .alpha_beta_search::<N::OtherSuccessors>(
+                    x = -self
+                        .alpha_beta_search::<CutNode>(
                             -alpha - Millipawns::ONE,
                             -alpha,
                             next_depth,
@@ -798,16 +796,32 @@ impl ThreadData {
                         )?
                         .0;
 
-                    if x > alpha && (x < beta || is_reduced) {
+                    if is_reduced && x > alpha {
                         x = -self
-                            .alpha_beta_search::<PVNode>(-beta, -alpha, full_depth, root_dist + 1)?
+                            .alpha_beta_search::<N::OtherSuccessors>(
+                                -alpha - Millipawns::ONE,
+                                -alpha,
+                                full_depth,
+                                root_dist + 1,
+                            )?
                             .0;
                     }
+                };
 
-                    x
+                if N::is_pv() && (is_first_move || x > alpha) {
+                    debug_assert!(beta - alpha > Millipawns(1), "{beta:?} {alpha:?}");
+                    x = -self
+                        .alpha_beta_search::<PVNode>(-beta, -alpha, full_depth, root_dist + 1)?
+                        .0
                 };
 
                 let undo = self.history.pop();
+
+                value = value.max(x);
+                if value > alpha {
+                    alpha = value;
+                    best_move = Some(ply);
+                }
 
                 if N::IS_ROOT {
                     let total_nodes_after = self.total_nodes_searched;
@@ -816,12 +830,6 @@ impl ThreadData {
                     let atom = &self.root_move_counts[&ply];
                     atom.fetch_add(searched, Ordering::Relaxed);
                     *self.curr_ply_root_move_counts.get_mut(&ply).unwrap() += searched as u64;
-                }
-
-                value = value.max(x);
-                if value > alpha {
-                    alpha = value;
-                    best_move = Some(ply);
                 }
 
                 if alpha >= beta {
