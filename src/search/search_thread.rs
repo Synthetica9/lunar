@@ -569,7 +569,7 @@ impl ThreadData {
 
             let mut is_mate_threat = false;
 
-            if !N::is_pv()
+            if N::is_cut()
                 && !side_to_move_only_kp
                 && depth >= r
                 && !is_in_check
