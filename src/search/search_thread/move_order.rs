@@ -456,7 +456,7 @@ pub fn quiet_move_order(
         }
 
         let severity_scaling_max = Depth::from_num(2500);
-        let severity_scaling = Depth::from_num(threat_severity.0)
+        let severity_scaling = Depth::saturating_from_num(threat_severity.0)
             .clamp(Depth::ZERO, severity_scaling_max)
             / severity_scaling_max;
 

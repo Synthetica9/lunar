@@ -604,7 +604,7 @@ impl ThreadData {
             let mut generator = N::Gen::init(self);
             let mut moveno = 0;
 
-            let mut any_moves_seen = false;
+            let mut any_moves_searched = false;
             let mut bad_quiet_moves: SmallVec<[_; 32]> = SmallVec::new();
             let mut any_moves_pruned = false;
 
@@ -613,6 +613,10 @@ impl ThreadData {
             let see_pruning_noisy_scaling_factor = Depth::from_num(-500);
             let see_pruning_noisy_cutoff =
                 depth_squared.saturating_mul(see_pruning_noisy_scaling_factor);
+
+            let see_pruning_quiet_scaling_factor = Depth::from_num(-800);
+            let see_pruning_quiet_cutoff =
+                depth_clamp_zero.saturating_mul(see_pruning_quiet_scaling_factor);
 
             // XXX: currently bugged! depth * depth starts increasing again with negative arguments.
             let lmp_cutoff: i32 = 5 + 2 * (depth * depth).to_num::<i32>();
@@ -702,13 +706,20 @@ impl ThreadData {
                 self.transposition_table
                     .prefetch_read(self.history.game().speculative_hash_after_ply(ply));
 
-                any_moves_seen = true;
                 moveno += 1;
 
                 let see = crate::search::static_exchange_evaluation(self.game(), ply);
 
                 // SEE Pruning
                 if !N::is_pv() && !is_quiet && !is_check && see.0 < see_pruning_noisy_cutoff {
+                    any_moves_pruned = true;
+                    continue;
+                }
+
+                if !N::is_pv() && is_quiet && !is_check && see.0 < see_pruning_quiet_cutoff {
+                    // XXX: this is post legality checking, so we should be able to tell that when we don't
+                    // see any moves we can return stale-/checkmate
+                    any_moves_pruned = true;
                     continue;
                 }
 
@@ -818,6 +829,8 @@ impl ThreadData {
                         .0
                 };
 
+                any_moves_searched = true;
+
                 debug_assert_ne!(x, Millipawns(i32::MIN + 1234));
 
                 let undo = self.history.pop();
@@ -899,7 +912,9 @@ impl ThreadData {
                 }
             }
 
-            if !any_moves_seen {
+            if !any_moves_searched {
+                debug_assert_eq!(value.0, i32::MIN + 12345);
+
                 let score = if any_moves_pruned {
                     // Maybe there was some legal move that we didn't even check for legality?
                     alpha
@@ -915,6 +930,8 @@ impl ThreadData {
                 return Ok((score, None));
             }
         }
+
+        debug_assert_ne!(value.0, i32::MIN + 12345);
 
         if value.is_mate_in_n().is_some() && value > DRAW {
             value -= Millipawns::ONE;
