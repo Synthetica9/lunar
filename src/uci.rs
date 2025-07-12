@@ -356,6 +356,13 @@ impl UCIState {
                 let game = self.history.game();
                 game.perft(depth, true);
             }
+            "bench" => {
+                let start_time = std::time::Instant::now();
+                let bench_res = crate::search::bench();
+                let elapsed = start_time.elapsed();
+                let nps = (bench_res * 1000) / elapsed.as_millis() as u64;
+                println!("{bench_res} nodes {nps} nps")
+            }
             _ => {
                 self.log(&format!("Unknown command: {command}"));
             }
@@ -667,6 +674,26 @@ fn spawn_reader_thread() -> crossbeam_channel::Receiver<String> {
         };
         #[cfg(feature = "readline")]
         let lines = editor.iter("[🌑] ");
+
+        let cmd_args = std::env::args().collect::<Vec<_>>();
+        if cmd_args.len() > 1 {
+            // Interpret from command line instead.
+            let mut cmd_line = cmd_args.into_iter();
+            cmd_line.next().unwrap();
+
+            for arg in cmd_line {
+                println!("info string From command line: {arg}");
+                match tx.send(arg) {
+                    Err(err) => {
+                        println!("info string Could not send command line arg on channel: {err}");
+                    }
+                    Ok(()) => {}
+                };
+            }
+
+            tx.send("quit".to_owned()).unwrap();
+            return;
+        }
 
         for line in lines {
             let line = {
