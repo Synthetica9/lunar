@@ -668,6 +668,21 @@ fn spawn_reader_thread() -> crossbeam_channel::Receiver<String> {
         #[cfg(feature = "readline")]
         let lines = editor.iter("[🌑] ");
 
+        {
+            let mut cmd_line = std::env::args().collect::<Vec<_>>().into_iter();
+            cmd_line.next().unwrap();
+
+            for arg in cmd_line {
+                println!("info string From command line: {arg}");
+                match tx.send(arg) {
+                    Err(err) => {
+                        println!("info string Could not send command line arg on channel: {err}");
+                    }
+                    Ok(()) => {}
+                };
+            }
+        }
+
         for line in lines {
             let line = {
                 #[cfg(feature = "readline")]
