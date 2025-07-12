@@ -21,7 +21,7 @@ then
 fi
 
 
-timeout 600 ./scripts/c_chess_cli.py \
+timeout 600 python3 ./scripts/c_chess_cli.py \
   -engine cmd=target/release/"$BIN"_pgo_instrumented tc=1+.1 name="$BIN no pgo" \
   -engine cmd=target/release/"$BIN"_pgo_instrumented tc=1+.1 name="$BIN no pgo" \
   -draw number=40 count=8 score=10 \
