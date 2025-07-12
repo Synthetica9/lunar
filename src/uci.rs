@@ -356,6 +356,13 @@ impl UCIState {
                 let game = self.history.game();
                 game.perft(depth, true);
             }
+            "bench" => {
+                let start_time = std::time::Instant::now();
+                let bench_res = crate::search::bench();
+                let elapsed = start_time.elapsed();
+                let nps = (bench_res * 1000) / elapsed.as_millis() as u64;
+                println!("{bench_res} nodes {nps} nps")
+            }
             _ => {
                 self.log(&format!("Unknown command: {command}"));
             }
