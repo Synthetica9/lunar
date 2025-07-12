@@ -332,7 +332,7 @@ impl UCIState {
                 self.search_thread_pool.stop();
             }
             "quit" => {
-                self.info("kthxbye ☀️");
+                // self.info("kthxbye ☀️");
                 std::process::exit(0);
             }
             "wait" => {
