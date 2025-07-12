@@ -769,18 +769,7 @@ impl ThreadData {
                 let real_reduction = if depth <= 3 { Depth::ONE } else { reduction };
                 let is_reduced = real_reduction > Depth::ONE;
                 let next_depth = depth - real_reduction;
-                let virtual_depth = depth - reduction;
                 let full_depth = next_depth.max(depth - Depth::ONE);
-
-                // Late move pruning
-                if pruning_allowed
-                    && lmr
-                    && virtual_depth < Depth::from_num(-2)
-                    && is_quiet
-                    && !is_check
-                {
-                    continue;
-                }
 
                 self.history.push(ply);
 
