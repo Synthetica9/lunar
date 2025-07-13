@@ -574,6 +574,7 @@ impl ThreadData {
                 && depth >= r
                 && !is_in_check
                 && !self.history.last_is_null()
+                && eval.is_some_and(|x| x >= beta)
             {
                 self.history.push(Ply::NULL);
                 let null_res = self.alpha_beta_search::<CutNode>(
