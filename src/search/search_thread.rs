@@ -522,6 +522,8 @@ impl ThreadData {
         let tt_is_capture =
             from_tt.is_some_and(|x| x.best_move().is_some_and(|ply| enemy_pieces.get(ply.dst())));
 
+        let improving_rate = self.history.improving_rate();
+
         // Reverse futility pruning (also known as static null move pruning)
         if let Some(eval) = eval {
             // https://www.chessprogramming.org/Reverse_Futility_Pruning
@@ -537,7 +539,7 @@ impl ThreadData {
                 || tt_is_capture;
 
             let depth_slope = Depth::from_num(1500);
-            let improving_fac = (Depth::ONE - self.history.improving_rate() / 2).min(Depth::ONE);
+            let improving_fac = (Depth::ONE - improving_rate / 2).min(Depth::ONE);
             let base_margin = depth.max(Depth::ONE).saturating_mul(depth_slope);
             let margin = Millipawns((base_margin * improving_fac).to_num());
 
@@ -618,8 +620,8 @@ impl ThreadData {
             let see_pruning_quiet_cutoff =
                 depth_clamp_zero.saturating_mul(see_pruning_quiet_scaling_factor);
 
-            // XXX: currently bugged! depth * depth starts increasing again with negative arguments.
-            let lmp_cutoff: i32 = 5 + 2 * (depth * depth).to_num::<i32>();
+            let lmp_cutoff: i32 =
+                5 + 2 * (depth_squared * (Depth::ONE - improving_rate / 2)).to_num::<i32>();
 
             while let Some(Generated { ply, guarantee }) = generator.next(self) {
                 // May be skipped
@@ -644,7 +646,6 @@ impl ThreadData {
                 let is_check = self.game().is_check(ply);
 
                 // Do the actual futility prune
-                // TODO: also do LMP here.
                 if !N::is_pv()
                     && pruning_allowed
                     && is_quiet
@@ -743,7 +744,6 @@ impl ThreadData {
                             )
                         };
 
-                        let improving_rate = self.history.improving_rate();
                         r += (a * x + b) * (Depth::ONE - improving_rate / 4).max(Depth::ONE);
                     }
 
