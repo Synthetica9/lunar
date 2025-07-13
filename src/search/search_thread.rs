@@ -821,8 +821,7 @@ impl ThreadData {
                     }
                 };
 
-                // XXX: investigate x < beta condition.
-                if N::is_pv() && (is_first_move || (x > alpha && x < beta)) {
+                if N::is_pv() && (is_first_move || x > alpha) {
                     debug_assert!(beta - alpha > Millipawns(1), "{beta:?} {alpha:?}");
                     x = -self
                         .alpha_beta_search::<PVNode>(-beta, -alpha, full_depth, root_dist + 1)?
