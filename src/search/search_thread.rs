@@ -916,10 +916,10 @@ impl ThreadData {
                     } else if let Some(captured) = undo.info.captured_piece {
                         self.capture_history
                             .gravity_history((undo.info.our_piece, ply.dst(), captured), bonus);
+                    }
 
-                        for bad in bad_captures {
-                            self.capture_history.gravity_history(bad, -bonus);
-                        }
+                    for bad in bad_captures {
+                        self.capture_history.gravity_history(bad, -bonus);
                     }
                     break;
                 }
