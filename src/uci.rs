@@ -141,6 +141,7 @@ impl UCIState {
             "ucinewgame" => {
                 self.history = History::new(Game::new());
                 self.search_thread_pool.base_instability = self.base_instability;
+                self.search_thread_pool.newgame();
                 // TODO: should we explicitly wait for clear?
                 self.transposition_table.clear();
             }

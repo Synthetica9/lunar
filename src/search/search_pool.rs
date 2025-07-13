@@ -154,6 +154,10 @@ impl SearchThreadPool {
         }
     }
 
+    pub fn newgame(&mut self) {
+        self.broadcast(&ThreadCommand::NewGame).unwrap();
+    }
+
     pub fn start_search(&mut self, history: &History, time_policy: TimePolicy, is_pondering: bool) {
         let now = Instant::now();
         let clock_start_time = (!is_pondering).then_some(now);
