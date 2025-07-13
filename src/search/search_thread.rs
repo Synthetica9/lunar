@@ -38,6 +38,7 @@ use std::convert::Infallible as Never;
 #[derive(Clone, Debug)]
 pub enum ThreadCommand {
     Quit,
+    NewGame,
     StopSearch,
     SearchThis(Arc<History>, Arc<LinearMap<Ply, AtomicUsize>>),
 }
@@ -243,12 +244,15 @@ impl ThreadData {
                     let cmd = self.send_status_update();
 
                     self.searching = false;
+                    cmd
+                }
+                Some(C::NewGame) => {
                     self.history_table = ZeroInit::zero_box();
                     self.countermove = ZeroInit::zero_box();
                     self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
                     self.threat_history = ZeroInit::zero_box();
 
-                    cmd
+                    None
                 }
                 Some(C::SearchThis(new_history, root_moves)) => {
                     self.history = new_history.as_ref().clone();
