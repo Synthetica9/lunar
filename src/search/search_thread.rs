@@ -767,8 +767,7 @@ impl ThreadData {
                 };
 
                 let real_reduction = if depth <= 3 { Depth::ONE } else { reduction };
-                let is_reduced = real_reduction > Depth::ONE;
-                let next_depth = depth - real_reduction;
+                let next_depth = (depth - real_reduction).min(depth - Depth::ONE);
                 let virtual_depth = depth - reduction;
                 let full_depth = next_depth.max(depth - Depth::ONE);
 
@@ -809,7 +808,7 @@ impl ThreadData {
                         )?
                         .0;
 
-                    if is_reduced && x > alpha {
+                    if next_depth < full_depth && x > alpha {
                         x = -self
                             .alpha_beta_search::<N::OtherSuccessors>(
                                 -alpha - Millipawns::ONE,
