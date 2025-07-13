@@ -526,6 +526,8 @@ impl ThreadData {
         let tt_is_capture =
             from_tt.is_some_and(|x| x.best_move().is_some_and(|ply| enemy_pieces.get(ply.dst())));
 
+        let improving_rate = self.history.improving_rate();
+
         // Reverse futility pruning (also known as static null move pruning)
         if let Some(eval) = eval {
             // https://www.chessprogramming.org/Reverse_Futility_Pruning
@@ -541,7 +543,7 @@ impl ThreadData {
                 || tt_is_capture;
 
             let depth_slope = Depth::from_num(1500);
-            let improving_fac = (Depth::ONE - self.history.improving_rate() / 2).min(Depth::ONE);
+            let improving_fac = (Depth::ONE - improving_rate / 2).min(Depth::ONE);
             let base_margin = depth.max(Depth::ONE).saturating_mul(depth_slope);
             let margin = Millipawns((base_margin * improving_fac).to_num());
 
@@ -747,7 +749,6 @@ impl ThreadData {
                             )
                         };
 
-                        let improving_rate = self.history.improving_rate();
                         r += (a * x + b) * (Depth::ONE - improving_rate / 4).max(Depth::ONE);
                     }
 
@@ -776,10 +777,11 @@ impl ThreadData {
                 let virtual_depth = depth - reduction;
                 let full_depth = next_depth.max(depth - Depth::ONE);
 
-                // Late move pruning
+                // "We have LMP at home" pruning
                 if pruning_allowed
                     && lmr
-                    && virtual_depth < Depth::from_num(-2)
+                    // When improving; prune less, just like normal LMP
+                    && virtual_depth < Depth::from_num(-2) - improving_rate / 2
                     && is_quiet
                     && !is_check
                 {
