@@ -543,7 +543,7 @@ impl SearchThreadPool {
 
                     let elapsed_then = expected_next_depth.duration_since(*start_time);
 
-                    let moves_to_go = movestogo.unwrap_or(20).clamp(2, 20) as u32;
+                    let moves_to_go = movestogo.unwrap_or(10).clamp(2, 10) as u32;
 
                     let time_per_move = (time + inc * (moves_to_go - 1)) / moves_to_go;
                     let per_move_millis = time_per_move.as_millis() as f64;
