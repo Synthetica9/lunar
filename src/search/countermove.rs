@@ -5,7 +5,7 @@ use crate::{
     small_finite_enum::SmallFiniteEnum, square::Square, zero_init::ZeroInit,
 };
 
-const MAX_HISTORY: i32 = 512;
+pub const MAX_HISTORY: i32 = 512;
 
 pub struct Stats<Index, Val>([Cell<Val>; Index::SIZE])
 where
