@@ -19,7 +19,7 @@ use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::Ply;
-use crate::search::countermove::Stats;
+use crate::search::countermove::{Stats, MAX_HISTORY};
 use crate::search::parameters::search_parameters;
 use crate::square::Square;
 use crate::transposition_table::TranspositionTable;
@@ -621,8 +621,11 @@ impl ThreadData {
             let depth_clamp_zero = depth.max(Depth::ZERO);
             let depth_squared = depth_clamp_zero * depth_clamp_zero;
             let see_pruning_noisy_scaling_factor = Depth::from_num(-500);
-            let see_pruning_noisy_cutoff =
-                depth_squared.saturating_mul(see_pruning_noisy_scaling_factor);
+            let see_pruning_noisy_cutoff_upper = Millipawns(
+                depth_squared
+                    .saturating_mul(see_pruning_noisy_scaling_factor)
+                    .to_num(),
+            ) + Millipawns(MAX_HISTORY);
 
             let see_pruning_quiet_scaling_factor = Depth::from_num(-800);
             let see_pruning_quiet_cutoff =
@@ -721,9 +724,23 @@ impl ThreadData {
                 let see = crate::search::static_exchange_evaluation(self.game(), ply);
 
                 // SEE Pruning
-                if !N::is_pv() && !is_quiet && !is_check && see.0 < see_pruning_noisy_cutoff {
-                    any_moves_pruned = true;
-                    continue;
+                if !N::is_pv() && !is_quiet && !is_check && see < see_pruning_noisy_cutoff_upper {
+                    let mut cutoff = see_pruning_noisy_cutoff_upper - Millipawns(MAX_HISTORY);
+                    if let Some(victim) = ply.captured_piece(self.game()) {
+                        let idx = (ply.moved_piece(self.game()), ply.dst(), victim);
+                        let history = self.capture_history.get(idx);
+                        cutoff -= history
+                    }
+
+                    // TODO: seems a bit strange to cut off nodes with 0 SEE when we don't ever do that in QS...
+                    // But using caphist in QS doesn't seem terrible either so this could be removed if that ever
+                    // passes.
+                    cutoff = cutoff.min(Millipawns(0));
+
+                    if see < cutoff {
+                        any_moves_pruned = true;
+                        continue;
+                    }
                 }
 
                 if !N::is_pv() && is_quiet && !is_check && see.0 < see_pruning_quiet_cutoff {
