@@ -622,17 +622,22 @@ impl ThreadData {
             let is_singular = !N::IS_ROOT
                 && !N::IS_SE
                 && !N::is_all()
-                && depth >= 7
-                && from_tt.is_some_and(|x| x.best_move().is_some())
+                && depth >= 8
+                && from_tt.is_some_and(|x| {
+                    x.best_move().is_some()
+                        && x.depth >= depth - Depth::from_num(3)
+                        && x.value_type() != UpperBound
+                })
                 && {
-                    let singular_margin = alpha - Millipawns(500);
+                    let tt_score = from_tt.unwrap().value;
+                    let singular_margin = tt_score - Millipawns((20 * depth).to_num());
 
                     // TODO: we get a interresting second move from this, if it fails high...
                     let singular_value = self
                         .alpha_beta_search::<SENode>(
                             singular_margin,
                             singular_margin + Millipawns(1),
-                            depth - Depth::from_num(5),
+                            (depth - Depth::ONE) / 2,
                             root_dist,
                         )?
                         .0;
