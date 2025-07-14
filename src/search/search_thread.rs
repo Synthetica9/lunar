@@ -649,7 +649,8 @@ impl ThreadData {
                 };
 
                 // Pruning may make us see shorter mates that don't exist...
-                let pruning_allowed = !is_first_move && value.is_mate_in_n().is_none();
+                let pruning_allowed =
+                    !is_first_move && (value.is_mate_in_n().is_none() || !N::is_pv());
                 let total_nodes_before = self.total_nodes_searched;
 
                 let is_quiet = ply.promotion_piece().is_none_or(|x| x != Piece::Queen)
