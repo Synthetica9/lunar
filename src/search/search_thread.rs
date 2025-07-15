@@ -14,6 +14,7 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
 use super::history_heuristic::HistoryTable;
+use crate::basic_enums::Color;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -180,6 +181,7 @@ pub struct ThreadData {
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
     capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
+    cont_two_move: Box<Stats<(Color, (Piece, Square), (Piece, Square)), Ply>>,
 }
 
 impl ThreadData {
@@ -227,6 +229,7 @@ impl ThreadData {
             continuation_histories,
             threat_history: ZeroInit::zero_box(),
             capture_history: ZeroInit::zero_box(),
+            cont_two_move: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -265,6 +268,7 @@ impl ThreadData {
                     self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
                     self.threat_history = ZeroInit::zero_box();
                     self.capture_history = ZeroInit::zero_box();
+                    self.cont_two_move = ZeroInit::zero_box();
 
                     None
                 }
@@ -951,6 +955,27 @@ impl ThreadData {
                             let index = (to_move, oppt_info.piece_dst(), ply_idx);
                             self.continuation_histories[idx].gravity_history(index, delta);
                         };
+
+                        'cont_two_move: {
+                            let Some(one) = self.history.peek_n(1) else {
+                                break 'cont_two_move;
+                            };
+
+                            if one.ply.is_null() {
+                                break 'cont_two_move;
+                            }
+
+                            let Some(two) = self.history.peek_n(2) else {
+                                break 'cont_two_move;
+                            };
+
+                            if two.ply.is_null() {
+                                break 'cont_two_move;
+                            }
+
+                            let index = (to_move, one.piece_dst(), two.piece_dst());
+                            self.cont_two_move.set(index, ply);
+                        }
 
                         self.history_table
                             .update(to_move, our_piece, ply.dst(), bonus);

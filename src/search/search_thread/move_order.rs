@@ -355,6 +355,36 @@ impl MoveGenerator for StandardMoveGenerator {
 
                 let move_total = thread.game().half_move_total() as usize;
 
+                'cont_two_move: {
+                    let Some(one) = thread.history.peek_n(1) else {
+                        break 'cont_two_move;
+                    };
+
+                    if one.ply.is_null() {
+                        break 'cont_two_move;
+                    }
+
+                    let Some(two) = thread.history.peek_n(2) else {
+                        break 'cont_two_move;
+                    };
+
+                    if two.ply.is_null() {
+                        break 'cont_two_move;
+                    }
+
+                    let to_move = thread.game().to_move();
+                    let index: (Color, (Piece, Square), (Piece, Square)) =
+                        (to_move, one.piece_dst(), two.piece_dst());
+
+                    let ply = thread.cont_two_move.get(index);
+
+                    let Some(ply) = ply.wrap_null() else {
+                        break 'cont_two_move;
+                    };
+
+                    self.queue.push(KillerMove { ply });
+                }
+
                 let killers = thread
                     .killer_moves
                     .get(move_total)
