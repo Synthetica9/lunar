@@ -22,7 +22,7 @@ use crate::ply::Ply;
 use crate::search::countermove::{Stats, MAX_HISTORY};
 use crate::search::parameters::search_parameters;
 use crate::square::Square;
-use crate::transposition_table::TranspositionTable;
+use crate::transposition_table::{TranspositionEntryType, TranspositionTable};
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
 use crate::{eval, search};
@@ -1003,6 +1003,7 @@ impl ThreadData {
 
     fn quiescence_search(&mut self, mut alpha: Millipawns, beta: Millipawns) -> Millipawns {
         self.quiescence_nodes_searched += 1;
+        let alpha_orig = alpha;
 
         let stand_pat = crate::eval::evaluation(self.game());
 
@@ -1012,6 +1013,18 @@ impl ThreadData {
 
         if alpha <= stand_pat {
             alpha = stand_pat;
+        }
+
+        let from_tt = self.transposition_table.get(self.game().hash());
+
+        if let Some(tte) = from_tt {
+            use TranspositionEntryType as ET;
+            match tte.value_type() {
+                ET::Exact => return tte.value,
+                ET::LowerBound if tte.value >= beta => return tte.value,
+                ET::UpperBound if tte.value <= alpha => return tte.value,
+                _ => {}
+            }
         }
 
         let candidates = {
@@ -1029,7 +1042,7 @@ impl ThreadData {
 
         let legality_checker = crate::legality::LegalityChecker::new(self.game());
 
-        let mut best_score = stand_pat;
+        let mut value = stand_pat;
         for (ply, _millipawns) in candidates {
             if !legality_checker.is_legal(ply, self.game()) {
                 continue;
@@ -1043,20 +1056,41 @@ impl ThreadData {
             let score = -self.quiescence_search(-beta, -alpha);
             self.history.pop();
 
-            if score >= beta {
-                return score;
+            if score > value {
+                value = score;
             }
 
             if score > alpha {
                 alpha = score;
             }
 
-            if score > best_score {
-                best_score = score;
+            if score >= beta {
+                break;
             }
         }
 
-        best_score
+        {
+            use crate::transposition_table::*;
+            use TranspositionEntryType::*;
+
+            let value_type = if value <= alpha_orig {
+                UpperBound
+            } else if value >= beta {
+                LowerBound
+            } else {
+                Exact
+            };
+
+            let tte =
+                TranspositionEntry::new(0, None, value, value_type, self.transposition_table.age());
+
+            match self.transposition_table.put(self.game().hash(), tte) {
+                PutResult::ValueAdded => self.tt_puts += 1,
+                PutResult::ValueReplaced | PutResult::Noop => {}
+            }
+        }
+
+        value
     }
 
     fn insert_killer_move(&mut self, ply: Ply, half_move_total: usize) {
