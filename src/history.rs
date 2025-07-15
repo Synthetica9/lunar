@@ -86,6 +86,7 @@ impl History {
             }
 
             prev = Some(sp);
+            break;
         }
 
         let improving_rate = if let (Some(prev), Some(eval)) = (prev, eval) {
