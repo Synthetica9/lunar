@@ -552,8 +552,7 @@ impl SearchThreadPool {
                     let time_per_move = (time + inc * (moves_to_go - 1)) / moves_to_go;
                     let per_move_millis = time_per_move.as_millis() as f64;
                     let first_subtree_fac = self.first_subtree_ratio_ratio_factor().max(0.1);
-                    let mut adjusted_millis =
-                        1.3 * first_subtree_fac * per_move_millis * pv_instability.clamp(0.1, 5.0);
+                    let mut adjusted_millis = 1.3 * first_subtree_fac * per_move_millis;
                     if *is_ponderhit {
                         // We spent some time on this already, and we're not in an unexpected
                         // scenario. Let's just say it's okay.
