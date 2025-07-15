@@ -1005,16 +1005,6 @@ impl ThreadData {
         self.quiescence_nodes_searched += 1;
         let alpha_orig = alpha;
 
-        let stand_pat = crate::eval::evaluation(self.game());
-
-        if stand_pat >= beta {
-            return stand_pat;
-        }
-
-        if alpha <= stand_pat {
-            alpha = stand_pat;
-        }
-
         let from_tt = self.transposition_table.get(self.game().hash());
 
         if let Some(tte) = from_tt {
@@ -1025,6 +1015,16 @@ impl ThreadData {
                 ET::UpperBound if tte.value <= alpha => return tte.value,
                 _ => {}
             }
+        }
+
+        let stand_pat = crate::eval::evaluation(self.game());
+
+        if stand_pat >= beta {
+            return stand_pat;
+        }
+
+        if alpha <= stand_pat {
+            alpha = stand_pat;
         }
 
         let candidates = {
