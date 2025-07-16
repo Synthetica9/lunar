@@ -76,7 +76,7 @@ impl History {
 
         let mut prev = None;
 
-        for i in [1, 3] {
+        for i in [1, 3, 5] {
             let Some(sp) = self.full_peek_n(i) else {
                 continue;
             };
