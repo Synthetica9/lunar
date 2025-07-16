@@ -11,7 +11,7 @@ use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
 use crate::search::parameters::search_parameters;
-use crate::search::search_thread::Depth;
+use crate::search::search_thread::{Depth, CONTINUATION_HISTORIES};
 use crate::square::Square;
 
 use super::{ThreadData, N_CONTINUATION_HISTORIES};
@@ -484,8 +484,8 @@ pub fn quiet_move_order(
         val += threat_history_bonus;
     }
 
-    for i in 0..N_CONTINUATION_HISTORIES {
-        let Some(cont_hist) = thread.history.peek_n(i) else {
+    for (i, w) in CONTINUATION_HISTORIES.into_iter().enumerate() {
+        let Some(cont_hist) = thread.history.peek_n(w) else {
             break;
         };
 

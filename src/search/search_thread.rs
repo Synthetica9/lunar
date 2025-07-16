@@ -29,7 +29,10 @@ use crate::zobrist_hash::ZobristHash;
 use crate::{eval, search};
 
 const N_KILLER_MOVES: usize = 2;
-pub const N_CONTINUATION_HISTORIES: usize = 2;
+
+pub const N_CONTINUATION_HISTORIES: usize = 3;
+pub const CONTINUATION_HISTORIES: [usize; N_CONTINUATION_HISTORIES] = [0, 1, 3];
+
 const COMMS_INTERVAL: usize = 1 << 13;
 
 mod move_order;
@@ -968,7 +971,7 @@ impl ThreadData {
                             }
                         }
 
-                        for i in 0..N_CONTINUATION_HISTORIES {
+                        for i in CONTINUATION_HISTORIES {
                             continuation_history(i, ply_idx, bonus);
                         }
 
@@ -978,7 +981,7 @@ impl ThreadData {
 
                         for bad in bad_quiet_moves {
                             self.history_table.update(to_move, bad.0, bad.1, -bonus);
-                            for i in 0..N_CONTINUATION_HISTORIES {
+                            for i in CONTINUATION_HISTORIES {
                                 continuation_history(i, bad, -bonus);
                             }
                         }
