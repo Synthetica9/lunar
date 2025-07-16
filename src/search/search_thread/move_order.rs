@@ -460,7 +460,6 @@ pub fn quiet_move_order(
 
     let cont_weights = continuation_weights();
 
-    let mut threat_history_bonus = 0;
     if let Some((threat, threat_severity, threat_piece)) = threatened {
         let threat_sq = threat.dst();
         if src == threat_sq {
@@ -479,9 +478,17 @@ pub fn quiet_move_order(
                 .0,
         );
 
-        threat_history_bonus = base.saturating_mul(severity_scaling * 50).to_num();
-
+        let threat_history_bonus: i32 = base.saturating_mul(severity_scaling * 50).to_num();
         val += threat_history_bonus;
+
+        // Also check in conthist:
+        let cont = thread
+            .conthist
+            .get(((color.other(), threat_piece, threat_sq), ply_idx_3));
+
+        val += Depth::from_num(cont.0)
+            .saturating_mul(severity_scaling * 30)
+            .to_num::<i32>();
     }
 
     for i in 0..N_CONTINUATION_HISTORIES {
