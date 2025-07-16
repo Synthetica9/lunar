@@ -1055,6 +1055,18 @@ impl ThreadData {
     fn quiescence_search(&mut self, mut alpha: Millipawns, beta: Millipawns) -> Millipawns {
         self.quiescence_nodes_searched += 1;
 
+        let from_tt = self.transposition_table.get(self.game().hash());
+
+        if let Some(tte) = from_tt {
+            use crate::transposition_table::TranspositionEntryType as ET;
+            match tte.value_type() {
+                ET::Exact => return tte.value,
+                ET::LowerBound if tte.value >= beta => return tte.value,
+                ET::UpperBound if tte.value <= alpha => return tte.value,
+                _ => {}
+            }
+        }
+
         let stand_pat = crate::eval::evaluation(self.game());
 
         if stand_pat >= beta {
