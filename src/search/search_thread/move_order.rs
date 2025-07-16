@@ -448,6 +448,7 @@ pub fn quiet_move_order(
     let piece = game.board().occupant_piece(ply.src()).unwrap();
 
     let ply_idx = (piece, dst);
+    let ply_idx_3 = (color, piece, dst);
 
     let from_history = thread.history_table.score(color, piece, dst)
         * search_parameters().mo_direct_history_weight;
@@ -492,8 +493,9 @@ pub fn quiet_move_order(
             continue; // TODO: Or break? Since the moves after this will be a bit dubious
         }
 
-        let cont = thread.continuation_histories[i]
-            .get((color, cont_hist.piece_dst(), ply_idx))
+        let cont = thread
+            .conthist
+            .get((cont_hist.color_piece_dst(), ply_idx_3))
             .0
             * cont_weights[i];
         val += cont;

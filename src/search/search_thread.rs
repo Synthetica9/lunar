@@ -14,6 +14,7 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
 use super::history_heuristic::HistoryTable;
+use crate::basic_enums::Color;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -177,7 +178,7 @@ pub struct ThreadData {
     killer_moves: Vec<[Option<Ply>; N_KILLER_MOVES]>,
     history_table: Box<HistoryTable>,
     countermove: Box<CounterMove>,
-    continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
+    conthist: Box<Stats<((Color, Piece, Square), (Color, Piece, Square)), Millipawns>>,
     threat_history: Box<L2History>,
     capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
 }
@@ -196,8 +197,6 @@ impl ThreadData {
             }
             map
         });
-
-        let continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
 
         let mut res = Self {
             thread_id,
@@ -224,7 +223,7 @@ impl ThreadData {
 
             history_table: ZeroInit::zero_box(),
             countermove: ZeroInit::zero_box(),
-            continuation_histories,
+            conthist: ZeroInit::zero_box(),
             threat_history: ZeroInit::zero_box(),
             capture_history: ZeroInit::zero_box(),
         };
@@ -262,7 +261,7 @@ impl ThreadData {
                 Some(C::NewGame) => {
                     self.history_table = ZeroInit::zero_box();
                     self.countermove = ZeroInit::zero_box();
-                    self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
+                    self.conthist = ZeroInit::zero_box();
                     self.threat_history = ZeroInit::zero_box();
                     self.capture_history = ZeroInit::zero_box();
 
@@ -947,9 +946,11 @@ impl ThreadData {
                             if oppt_info.ply.is_null() {
                                 return;
                             }
+                            let (c, d) = ply_idx;
+                            let ply_idx = (to_move, c, d);
 
-                            let index = (to_move, oppt_info.piece_dst(), ply_idx);
-                            self.continuation_histories[idx].gravity_history(index, delta);
+                            let index = (oppt_info.color_piece_dst(), ply_idx);
+                            self.conthist.gravity_history(index, delta);
                         };
 
                         self.history_table
