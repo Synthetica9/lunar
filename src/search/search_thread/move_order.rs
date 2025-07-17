@@ -312,9 +312,13 @@ impl MoveGenerator for StandardMoveGenerator {
                     break 'nmp;
                 };
 
-                let Some((ply, _, _)) = peek.threat() else {
+                let Some((ply, sevr, _)) = peek.threat() else {
                     break 'nmp;
                 };
+
+                if sevr <= Millipawns(100) {
+                    break 'nmp;
+                }
 
                 return Some(Generated {
                     ply: GeneratedMove::Ply(ply),
