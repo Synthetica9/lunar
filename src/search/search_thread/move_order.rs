@@ -131,6 +131,7 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
 enum GeneratorPhase {
     GetHashMove,
     LastMovedLVA,
+    NMPThreat,
     GenQuiescenceMoves,
     YieldWinningOrEqualCaptures,
     GenKillerMoves,
@@ -290,7 +291,7 @@ impl MoveGenerator for StandardMoveGenerator {
                 });
             }
             LastMovedLVA => 'lva: {
-                self.phase = GenQuiescenceMoves;
+                self.phase = NMPThreat;
                 let Some(last_undo) = thread.history.peek_n(0) else {
                     break 'lva;
                 };
@@ -302,6 +303,21 @@ impl MoveGenerator for StandardMoveGenerator {
                 };
                 return Some(Generated {
                     ply: GeneratedMove::Ply(Ply::simple(lva, dst)),
+                    guarantee: GuaranteeLevel::HashLike,
+                });
+            }
+            NMPThreat => 'nmp: {
+                self.phase = GenQuiescenceMoves;
+                let Some(peek) = thread.history.full_peek_n(1) else {
+                    break 'nmp;
+                };
+
+                let Some((ply, _, _)) = peek.threat() else {
+                    break 'nmp;
+                };
+
+                return Some(Generated {
+                    ply: GeneratedMove::Ply(ply),
                     guarantee: GuaranteeLevel::HashLike,
                 });
             }

@@ -17,6 +17,12 @@ pub struct StackElement {
     threat: Option<(Ply, Millipawns, Piece)>,
 }
 
+impl StackElement {
+    pub fn threat(&self) -> Option<(Ply, Millipawns, Piece)> {
+        self.threat
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct History {
     // TODO: stack or heap allocation?
@@ -211,7 +217,7 @@ impl History {
         }
     }
 
-    fn full_peek_n(&self, n: usize) -> Option<&StackElement> {
+    pub fn full_peek_n(&self, n: usize) -> Option<&StackElement> {
         let len = self.len();
 
         if len > n {
