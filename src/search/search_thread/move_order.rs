@@ -301,6 +301,8 @@ impl MoveGenerator for StandardMoveGenerator {
                 let Some(lva) = game.board().least_valuable_attacker(dst, game.to_move()) else {
                     break 'lva;
                 };
+
+                self.phase = GenQuiescenceMoves;
                 return Some(Generated {
                     ply: GeneratedMove::Ply(Ply::simple(lva, dst)),
                     guarantee: GuaranteeLevel::HashLike,
