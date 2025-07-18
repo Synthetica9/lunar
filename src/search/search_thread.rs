@@ -673,6 +673,7 @@ impl ThreadData {
             let lmp_cutoff: i32 = 5 + 2 * (depth * depth).to_num::<i32>();
 
             if N::IS_SE {
+                any_moves_pruned = true;
                 moveno += 1;
                 hash_moves_played[0] = from_tt.and_then(|x| x.best_move()).unwrap_or(Ply::NULL);
             }
