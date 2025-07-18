@@ -838,18 +838,26 @@ impl ThreadData {
                         r -= Depth::ONE / 2;
                     }
 
-                    if is_singular && is_first_move {
-                        r -= Depth::ONE;
-                    }
-
                     r.max(Depth::ZERO)
                 };
 
+                let extension = {
+                    let mut e = Depth::ZERO;
+
+                    if is_singular && is_first_move {
+                        e += Depth::ONE;
+                    }
+
+                    e
+                };
+
                 let real_reduction = if depth <= 3 { Depth::ONE } else { reduction };
-                let is_reduced = real_reduction > Depth::ONE;
-                let next_depth = depth - real_reduction;
-                let virtual_depth = depth - reduction;
-                let full_depth = next_depth.max(depth - Depth::ONE);
+                let virtual_depth = depth + extension - reduction;
+                let next_depth = (depth + extension - real_reduction).min(depth - Depth::ONE);
+                let full_depth = (depth + extension - real_reduction).max(depth - Depth::ONE);
+
+                let is_reduced = next_depth < full_depth;
+                debug_assert!(next_depth <= full_depth);
 
                 // Late move pruning
                 if pruning_allowed
