@@ -560,7 +560,7 @@ impl ThreadData {
             let base_margin = depth.max(Depth::ONE).saturating_mul(depth_slope);
             let margin = Millipawns((base_margin * improving_fac).to_num());
 
-            if !skip_rfp && eval - margin >= beta && depth <= 4 {
+            if !skip_rfp && eval - margin >= beta && depth <= 6 {
                 return Ok((eval, best_move));
             }
         }
