@@ -853,8 +853,8 @@ impl ThreadData {
 
                 let real_reduction = if depth <= 3 { Depth::ONE } else { reduction };
                 let virtual_depth = depth + extension - reduction;
-                let next_depth = (depth + extension - real_reduction).min(depth - Depth::ONE);
-                let full_depth = (depth + extension - real_reduction).max(depth - Depth::ONE);
+                let next_depth = depth + extension - (real_reduction.max(Depth::ONE));
+                let full_depth = depth + extension - (real_reduction.min(Depth::ONE));
 
                 let is_reduced = next_depth < full_depth;
                 debug_assert!(next_depth <= full_depth);
