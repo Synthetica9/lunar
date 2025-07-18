@@ -328,6 +328,7 @@ impl MoveGenerator for StandardMoveGenerator {
             GenQuiescenceMoves => {
                 self.phase = YieldWinningOrEqualCaptures;
 
+                let to_move = thread.game().to_move();
                 thread.game().for_each_pseudo_legal_move::<true>(|ply| {
                     let mut value = Millipawns(0);
                     if ply.is_promotion() {
@@ -338,7 +339,9 @@ impl MoveGenerator for StandardMoveGenerator {
                     let src = ply.src();
                     let moved_piece = thread.game().board().occupant_piece(src).unwrap();
                     if let Some(victim) = thread.game().board().occupant_piece(dst) {
-                        value += thread.capture_history.get((moved_piece, src, victim));
+                        value += thread
+                            .capture_history
+                            .get((to_move, moved_piece, src, victim));
                         value += victim.base_value();
                     }
 

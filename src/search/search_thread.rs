@@ -14,6 +14,7 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
 use super::history_heuristic::HistoryTable;
+use crate::basic_enums::Color;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -179,7 +180,7 @@ pub struct ThreadData {
     countermove: Box<CounterMove>,
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
-    capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
+    capture_history: Box<Stats<(Color, Piece, Square, Piece), Millipawns>>,
 }
 
 impl ThreadData {
@@ -769,12 +770,13 @@ impl ThreadData {
                 moveno += 1;
 
                 let see = crate::search::static_exchange_evaluation(self.game(), ply);
+                let to_move = self.game().to_move();
 
                 // SEE Pruning
                 if !N::is_pv() && !is_quiet && !is_check && see < see_pruning_noisy_cutoff_upper {
                     let mut cutoff = see_pruning_noisy_cutoff_upper - Millipawns(MAX_HISTORY);
                     if let Some(victim) = ply.captured_piece(self.game()) {
-                        let idx = (ply.moved_piece(self.game()), ply.dst(), victim);
+                        let idx = (to_move, ply.moved_piece(self.game()), ply.dst(), victim);
                         let history = self.capture_history.get(idx);
                         cutoff -= history
                     }
@@ -935,8 +937,6 @@ impl ThreadData {
 
                         let our_piece = undo.info.our_piece;
 
-                        let to_move = self.game().to_move();
-
                         let ply_idx = (our_piece, ply.dst());
 
                         let continuation_history = |idx: usize, ply_idx, delta| {
@@ -982,12 +982,15 @@ impl ThreadData {
                             }
                         }
                     } else if let Some(captured) = undo.info.captured_piece {
-                        self.capture_history
-                            .gravity_history((undo.info.our_piece, ply.dst(), captured), bonus);
+                        self.capture_history.gravity_history(
+                            (to_move, undo.info.our_piece, ply.dst(), captured),
+                            bonus,
+                        );
                     }
 
-                    for bad in bad_captures {
-                        self.capture_history.gravity_history(bad, -bonus);
+                    for (p, s, v) in bad_captures {
+                        self.capture_history
+                            .gravity_history((to_move, p, s, v), -bonus);
                     }
                     break;
                 }
