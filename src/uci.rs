@@ -105,7 +105,7 @@ impl UCIState {
             let search_result = self.search_thread_pool.maybe_end_search(false);
 
             if force_print
-                || self.last_info_string.elapsed() >= Duration::from_millis(100)
+                || self.last_info_string.elapsed() >= Duration::from_millis(500)
                 || search_result.is_some()
             {
                 self.search_thread_pool.update_pv(search_result.is_none());
