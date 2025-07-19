@@ -842,7 +842,7 @@ impl ThreadData {
                         r -= Depth::ONE;
                     }
 
-                    r.max(Depth::ZERO)
+                    r
                 };
 
                 let real_reduction = if depth <= 3 { Depth::ONE } else { reduction };
