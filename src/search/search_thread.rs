@@ -642,7 +642,7 @@ impl ThreadData {
                         )?
                         .0;
 
-                    singular_value <= singular_margin
+                    singular_value < singular_margin
                 };
 
             let mut hash_moves_played = [Ply::NULL; 8];
