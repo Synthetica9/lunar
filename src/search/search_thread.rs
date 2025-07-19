@@ -838,7 +838,7 @@ impl ThreadData {
                         r -= Depth::ONE / 2;
                     }
 
-                    r.max(Depth::ZERO)
+                    r
                 };
 
                 let extension = {
