@@ -619,7 +619,8 @@ impl ThreadData {
             };
 
             // Singular extension check
-            let is_singular = !N::IS_ROOT
+            let mut singular_diff = None;
+            if !N::IS_ROOT
                 && !N::IS_SE
                 && !N::is_all()
                 && depth >= 8
@@ -628,22 +629,26 @@ impl ThreadData {
                         && x.depth >= depth - Depth::from_num(3)
                         && x.value_type() != UpperBound
                 })
-                && {
-                    let tt_score = from_tt.unwrap().value;
-                    let singular_margin = tt_score - Millipawns((20 * depth).to_num());
+            {
+                let tt_score = from_tt.unwrap().value;
+                let singular_margin = tt_score - Millipawns((20 * depth).to_num());
 
-                    // TODO: we get a interresting second move from this, if it fails high...
-                    let singular_value = self
-                        .alpha_beta_search::<SENode>(
-                            singular_margin,
-                            singular_margin + Millipawns(1),
-                            (depth - Depth::ONE) / 2,
-                            root_dist,
-                        )?
-                        .0;
+                // TODO: we get a interresting second move from this, if it fails high...
+                let singular_value = self
+                    .alpha_beta_search::<SENode>(
+                        singular_margin,
+                        singular_margin + Millipawns(1),
+                        (depth - Depth::ONE) / 2,
+                        root_dist,
+                    )?
+                    .0;
 
-                    singular_value <= singular_margin
-                };
+                if singular_value <= singular_margin {
+                    singular_diff = Some(singular_margin - singular_value)
+                }
+            };
+
+            debug_assert!(singular_diff.is_none_or(|x| x.0 > 0));
 
             let mut hash_moves_played = [Ply::NULL; 8];
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
@@ -801,6 +806,7 @@ impl ThreadData {
                 let hash_before = self.game().hash();
 
                 let lmr = !is_in_check && !is_first_move;
+                let is_singular = singular_diff.is_some();
                 let reduction = {
                     let mut r = Depth::ONE;
 
@@ -845,11 +851,30 @@ impl ThreadData {
                     r.max(Depth::ZERO)
                 };
 
+                let extension = {
+                    let mut e = Depth::ZERO;
+
+                    let singular_diff_min_inc = 500;
+                    let singular_diff_depth_scaling = 500;
+                    let max_multi_ext = Depth::ONE;
+
+                    e += singular_diff
+                        .map_or(Depth::ZERO, |x| {
+                            Depth::saturating_from_num(x.0 - singular_diff_min_inc)
+                                / singular_diff_depth_scaling
+                        })
+                        .min(max_multi_ext);
+
+                    e
+                };
+
                 let real_reduction = if depth <= 3 { Depth::ONE } else { reduction };
-                let is_reduced = real_reduction > Depth::ONE;
-                let next_depth = depth - real_reduction;
-                let virtual_depth = depth - reduction;
+                let next_depth = depth + extension - real_reduction;
+                let virtual_depth = depth + extension - reduction;
                 let full_depth = next_depth.max(depth - Depth::ONE);
+
+                let is_reduced = next_depth != full_depth;
+                debug_assert!(next_depth <= full_depth);
 
                 // Late move pruning
                 if pruning_allowed
