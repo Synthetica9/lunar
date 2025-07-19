@@ -27,7 +27,6 @@ use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
 use crate::{eval, search};
 
-const N_KILLER_MOVES: usize = 2;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 13;
 
@@ -174,7 +173,6 @@ pub struct ThreadData {
 
     transposition_table: Arc<TranspositionTable>,
 
-    killer_moves: Vec<[Option<Ply>; N_KILLER_MOVES]>,
     history_table: Box<HistoryTable>,
     countermove: Box<CounterMove>,
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
@@ -219,8 +217,6 @@ impl ThreadData {
             curr_ply_root_move_counts: LinearMap::new(),
             root_hash: game.hash(),
             best_move: None,
-
-            killer_moves: Vec::new(),
 
             history_table: ZeroInit::zero_box(),
             countermove: ZeroInit::zero_box(),
@@ -932,8 +928,6 @@ impl ThreadData {
                 if alpha >= beta {
                     let bonus = (depth.saturating_mul(depth)).to_num();
                     if is_quiet {
-                        self.insert_killer_move(ply, self.game().half_move_total() as usize);
-
                         let our_piece = undo.info.our_piece;
 
                         let to_move = self.game().to_move();
@@ -1109,21 +1103,6 @@ impl ThreadData {
         }
 
         best_score
-    }
-
-    fn insert_killer_move(&mut self, ply: Ply, half_move_total: usize) {
-        while self.killer_moves.len() <= half_move_total {
-            self.killer_moves.push([None; N_KILLER_MOVES]);
-        }
-
-        let this = &mut self.killer_moves[half_move_total];
-
-        // TODO: static_assert
-        debug_assert!(this.len() == 2);
-        if this[0].map_or(0, |x| x.as_u16()) != ply.as_u16() {
-            this[1] = this[0];
-            this[0] = Some(ply);
-        }
     }
 
     fn game(&self) -> &'_ Game {

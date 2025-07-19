@@ -373,19 +373,6 @@ impl MoveGenerator for StandardMoveGenerator {
             GenKillerMoves => {
                 self.phase = GenQuietMoves;
 
-                let move_total = thread.game().half_move_total() as usize;
-
-                let killers = thread
-                    .killer_moves
-                    .get(move_total)
-                    .into_iter()
-                    .flatten()
-                    .flatten()
-                    .copied()
-                    .map(|ply| KillerMove { ply });
-
-                self.queue.extend(killers);
-
                 if let Some(ply) = thread.countermove_cell().and_then(|x| x.get().wrap_null()) {
                     self.queue.push(KillerMove { ply });
                 }
