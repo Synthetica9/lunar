@@ -648,7 +648,7 @@ impl ThreadData {
                 }
             };
 
-            debug_assert!(singular_diff.is_none_or(|x| x.0 > 0));
+            debug_assert!(singular_diff.is_none_or(|x| x.0 >= 0));
 
             let mut hash_moves_played = [Ply::NULL; 8];
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
@@ -860,13 +860,15 @@ impl ThreadData {
 
                     e += singular_diff
                         .map_or(Depth::ZERO, |x| {
-                            Depth::saturating_from_num(x.0 - singular_diff_min_inc)
+                            Depth::saturating_from_num((x.0 - singular_diff_min_inc).max(0))
                                 / singular_diff_depth_scaling
                         })
                         .min(max_multi_ext);
 
                     e
                 };
+
+                debug_assert!(extension >= Depth::ZERO);
 
                 let real_reduction = if depth <= 3 { Depth::ONE } else { reduction };
                 let next_depth = depth + extension - real_reduction;
