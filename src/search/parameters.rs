@@ -13,8 +13,10 @@ pub struct SearchParameters {
     pub nmr_piece_slope: Depth,
     pub nmr_depth_slope: Depth,
 
-    pub iir_reduction: Depth,
     pub iir_min_depth: Depth,
+    pub iir_slope: Depth,
+    pub iir_min_diff: Depth,
+    pub iir_max_reduction: Depth,
 
     pub lmr_quiescent_slope: Depth,
     pub lmr_quiescent_offset: Depth,
@@ -55,8 +57,10 @@ pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
     nmr_piece_slope: const_depth("0.1"),
     nmr_depth_slope: const_depth("7").recip(),
 
-    iir_reduction: const_depth("2"),
+    iir_max_reduction: const_depth("2"),
     iir_min_depth: const_depth("6"),
+    iir_min_diff: const_depth("2"),
+    iir_slope: const_depth("1.5"),
 
     lmr_quiescent_slope: const_depth("0.12"),
     lmr_quiescent_offset: const_depth("1.41"),
