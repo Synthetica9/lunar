@@ -566,13 +566,20 @@ impl ThreadData {
         if depth <= 0 && !is_in_check {
             value = self.quiescence_search(alpha, beta);
         } else {
-            if from_tt.is_none_or(|x| x.depth < depth - Depth::from_num(3))
+            if from_tt.is_none_or(|x| x.depth < depth - search_parameters().iir_min_diff)
                 && N::is_pv()
                 && depth >= search_parameters().iir_min_depth
             {
                 // Internal iterative reduction
                 // https://www.chessprogramming.org/Internal_Iterative_Reductions
-                depth -= search_parameters().iir_reduction;
+
+                let tt_depth = from_tt.map_or(0, |x| x.depth);
+                let iir_scale =
+                    (depth - Depth::from_num(tt_depth) - search_parameters().iir_min_diff)
+                        * search_parameters().iir_slope;
+                debug_assert!(iir_scale >= 0);
+                let iir_scale = iir_scale.clamp(Depth::ZERO, search_parameters().iir_max_reduction);
+                depth -= iir_scale;
             };
 
             // Null move pruning
