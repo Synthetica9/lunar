@@ -6,7 +6,7 @@ use std::i32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use fixed::traits::Fixed;
+use fixed::traits::{Fixed, ToFixed};
 use linear_map::LinearMap;
 use smallvec::SmallVec;
 
@@ -671,13 +671,24 @@ impl ThreadData {
             // XXX: currently bugged! depth * depth starts increasing again with negative arguments.
             let lmp_cutoff: i32 = 5 + 2 * (depth * depth).to_num::<i32>();
 
+            let history_pruning_margin =
+                Millipawns((depth_clamp_zero.to_fixed::<fixed::types::I32F32>() * -4000).to_num())
+                    + Millipawns(-500);
+
+            debug_assert!(history_pruning_margin.0 < 0);
+
             if N::IS_SE {
                 any_moves_pruned = true;
                 moveno += 1;
                 hash_moves_played[0] = from_tt.and_then(|x| x.best_move()).unwrap_or(Ply::NULL);
             }
 
-            while let Some(Generated { ply, guarantee }) = generator.next(self) {
+            while let Some(Generated {
+                ply,
+                guarantee,
+                score: history_score,
+            }) = generator.next(self)
+            {
                 if N::IS_SE && matches!(ply, GeneratedMove::HashMove) {
                     continue;
                 }
@@ -717,6 +728,11 @@ impl ThreadData {
                 }
 
                 if !N::is_pv() && pruning_allowed && is_quiet && !is_check && moveno > lmp_cutoff {
+                    any_moves_pruned = true;
+                    continue;
+                }
+
+                if pruning_allowed && is_quiet && history_score < history_pruning_margin {
                     any_moves_pruned = true;
                     continue;
                 }
