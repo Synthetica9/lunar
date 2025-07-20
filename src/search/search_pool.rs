@@ -467,6 +467,7 @@ impl SearchThreadPool {
             last_depth_increase,
             depth_increase_nodes,
             nodes_searched,
+            score,
             ..
         } = &self.state
         {
@@ -551,7 +552,11 @@ impl SearchThreadPool {
 
                     let time_per_move = (time + inc * (moves_to_go - 1)) / moves_to_go;
                     let per_move_millis = time_per_move.as_millis() as f64;
-                    let first_subtree_fac = self.first_subtree_ratio_ratio_factor().max(0.1);
+                    let first_subtree_fac = if score.is_mate_in_n().is_none_or(|x| x < 0) {
+                        self.first_subtree_ratio_ratio_factor().max(0.1)
+                    } else {
+                        1.0
+                    };
                     let mut adjusted_millis =
                         1.3 * first_subtree_fac * per_move_millis * pv_instability.clamp(0.1, 5.0);
                     if *is_ponderhit {
