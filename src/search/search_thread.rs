@@ -857,10 +857,9 @@ impl ThreadData {
                         r -= Depth::ONE;
                     }
 
-                    if !is_first_move {
+                    if !is_first_move && is_quiet {
                         let mut score = fixed::types::I32F32::from_num(history_score.0);
-                        score /= 4000;
-                        // println!("{score}");
+                        score /= 8000;
                         r -= Depth::from_num(score).min(Depth::ZERO);
                     }
 
