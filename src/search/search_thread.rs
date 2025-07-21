@@ -629,25 +629,26 @@ impl ThreadData {
                 })
                 && {
                     let tt_score = from_tt.unwrap().value;
-                    let singular_margin = tt_score - Millipawns((20 * depth).to_num());
+                    let singular_beta = tt_score - Millipawns((20 * depth).to_num());
 
                     // TODO: we get a interresting second move from this, if it fails high...
                     let singular_value = self
                         .alpha_beta_search::<SENode>(
-                            singular_margin,
-                            singular_margin + Millipawns(1),
+                            singular_beta,
+                            singular_beta + Millipawns(1),
                             (depth - Depth::ONE) / 2,
                             root_dist,
                         )?
                         .0;
 
-                    let multi_cut_margin = Millipawns((40 * depth).to_num());
-                    if singular_value >= beta + multi_cut_margin {
+                    if singular_value <= singular_beta {
+                        true
+                    } else if singular_beta >= beta {
                         // Multi-cut
                         return Ok((singular_value, from_tt.and_then(|x| x.best_move())));
+                    } else {
+                        false
                     }
-
-                    singular_value <= singular_margin
                 };
 
             let mut hash_moves_played = [Ply::NULL; 8];
