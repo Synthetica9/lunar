@@ -7,6 +7,8 @@ pub const WIN: Millipawns = Millipawns(100_000_256);
 pub const DRAW: Millipawns = Millipawns(0);
 pub const LOSS: Millipawns = Millipawns(-WIN.0);
 pub const INF: Millipawns = Millipawns(WIN.0 * 2 + 100);
+pub const MAX_EVAL: Millipawns = Millipawns(99_999_999);
+pub const MIN_EVAL: Millipawns = Millipawns(-MAX_EVAL.0);
 
 impl Millipawns {
     pub const ONE: Self = Self(1);
@@ -18,6 +20,10 @@ impl Millipawns {
         } else {
             None
         }
+    }
+
+    pub fn clamp_eval(self) -> Self {
+        self.clamp(MIN_EVAL, MAX_EVAL)
     }
 }
 

@@ -645,7 +645,10 @@ impl ThreadData {
                         true
                     } else if singular_beta >= beta {
                         // Multi-cut
-                        return Ok((singular_value, from_tt.and_then(|x| x.best_move())));
+                        return Ok((
+                            singular_beta.clamp_eval(),
+                            from_tt.and_then(|x| x.best_move()),
+                        ));
                     } else {
                         false
                     }
