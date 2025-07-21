@@ -641,6 +641,12 @@ impl ThreadData {
                         )?
                         .0;
 
+                    let multi_cut_margin = Millipawns((40 * depth).to_num());
+                    if singular_value >= beta + multi_cut_margin {
+                        // Multi-cut
+                        return Ok((singular_value, from_tt.and_then(|x| x.best_move())));
+                    }
+
                     singular_value <= singular_margin
                 };
 
