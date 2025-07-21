@@ -177,6 +177,16 @@ impl QueuedPly {
         Generated {
             ply: GeneratedMove::Ply(self.ply()),
             guarantee: self.guarantee(),
+            score: self.score(),
+        }
+    }
+
+    fn score(self) -> Millipawns {
+        match self {
+            QueuedPly::LosingCapture { value, .. }
+            | QueuedPly::QuietMove { value, .. }
+            | QueuedPly::MVVLVACapture { value, .. } => value,
+            QueuedPly::KillerMove { .. } => Millipawns(0),
         }
     }
 
@@ -202,6 +212,7 @@ pub enum GeneratedMove {
 pub struct Generated {
     pub ply: GeneratedMove,
     pub guarantee: GuaranteeLevel,
+    pub score: Millipawns,
 }
 
 #[derive(Debug)]
@@ -250,6 +261,7 @@ impl MoveGenerator for RootMoveGenerator {
         self.plies.pop().map(|ply| Generated {
             ply: GeneratedMove::Ply(ply),
             guarantee: GuaranteeLevel::Legal,
+            score: Millipawns(0),
         })
     }
 }
@@ -288,6 +300,7 @@ impl MoveGenerator for StandardMoveGenerator {
                 return Some(Generated {
                     ply: GeneratedMove::HashMove,
                     guarantee: HashLike,
+                    score: Millipawns(0),
                 });
             }
             LastMovedLVA => 'lva: {
@@ -304,6 +317,7 @@ impl MoveGenerator for StandardMoveGenerator {
                 return Some(Generated {
                     ply: GeneratedMove::Ply(Ply::simple(lva, dst)),
                     guarantee: GuaranteeLevel::HashLike,
+                    score: Millipawns(0),
                 });
             }
             NMPThreat => 'nmp: {
@@ -323,6 +337,7 @@ impl MoveGenerator for StandardMoveGenerator {
                 return Some(Generated {
                     ply: GeneratedMove::Ply(ply),
                     guarantee: GuaranteeLevel::HashLike,
+                    score: sevr, // dubious?
                 });
             }
             GenQuiescenceMoves => {
@@ -349,7 +364,7 @@ impl MoveGenerator for StandardMoveGenerator {
                 self.queue.sort_unstable();
             }
             YieldWinningOrEqualCaptures => match self.queue.pop() {
-                Some(MVVLVACapture { ply, .. }) => {
+                Some(MVVLVACapture { ply, value, .. }) => {
                     let game = thread.game();
                     let see = static_exchange_evaluation(game, ply);
                     if see.0 < 0 {
@@ -358,6 +373,7 @@ impl MoveGenerator for StandardMoveGenerator {
                         return Some(Generated {
                             ply: GeneratedMove::Ply(ply),
                             guarantee: PseudoLegal,
+                            score: value + see,
                         });
                     }
                 }
