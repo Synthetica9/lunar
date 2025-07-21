@@ -857,6 +857,10 @@ impl ThreadData {
                         r -= Depth::ONE;
                     }
 
+                    if !N::is_pv() {
+                        r += Depth::ONE / 4;
+                    }
+
                     r.max(Depth::ZERO)
                 };
 
