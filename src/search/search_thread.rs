@@ -716,6 +716,10 @@ impl ThreadData {
                     }
                 };
 
+                if hash_moves_played.contains(&ply) {
+                    continue;
+                }
+
                 // Pruning may make us see shorter mates that don't exist...
                 let pruning_allowed = !is_first_move && value.is_mate_in_n().is_none_or(|x| x < 0);
                 let total_nodes_before = self.total_nodes_searched;
@@ -771,8 +775,7 @@ impl ThreadData {
                         std::intrinsics::assume(matches!(guarantee, Legal) || !N::IS_ROOT);
                     };
 
-                    if hash_moves_played.contains(&ply)
-                        || !(pseudo_legal || game.is_pseudo_legal(ply))
+                    if !(pseudo_legal || game.is_pseudo_legal(ply))
                         || !(legal || legality_checker.is_legal(ply, game))
                     {
                         continue;
