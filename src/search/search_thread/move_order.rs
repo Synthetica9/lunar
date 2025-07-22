@@ -522,6 +522,9 @@ pub fn quiet_move_order(
         val += cont;
     }
 
+    val += thread.dynamic_history.get((color, piece, ply.dst())).0 * 2;
+    val -= thread.dynamic_history.get((color, piece, ply.src())).0 * 2;
+
     Millipawns(val)
 }
 

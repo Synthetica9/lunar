@@ -14,6 +14,7 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
 use super::history_heuristic::HistoryTable;
+use crate::basic_enums::Color;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -178,6 +179,7 @@ pub struct ThreadData {
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
     capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
+    dynamic_history: Box<Stats<(Color, Piece, Square), Millipawns>>,
 }
 
 impl ThreadData {
@@ -223,6 +225,7 @@ impl ThreadData {
             continuation_histories,
             threat_history: ZeroInit::zero_box(),
             capture_history: ZeroInit::zero_box(),
+            dynamic_history: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -261,6 +264,7 @@ impl ThreadData {
                     self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
                     self.threat_history = ZeroInit::zero_box();
                     self.capture_history = ZeroInit::zero_box();
+                    self.dynamic_history = ZeroInit::zero_box();
 
                     None
                 }
@@ -986,9 +990,9 @@ impl ThreadData {
                             self.threat_history
                                 .gravity_history((to_move, threat_idx, ply_idx), bonus);
 
-                            for bad in bad_quiet_moves.iter() {
+                            for (piece, _src, dst) in bad_quiet_moves.iter() {
                                 self.threat_history
-                                    .gravity_history((to_move, threat_idx, *bad), -bonus);
+                                    .gravity_history((to_move, threat_idx, (*piece, *dst)), -bonus);
                             }
                         }
 
@@ -1000,10 +1004,21 @@ impl ThreadData {
                             c.set(ply);
                         }
 
-                        for bad in bad_quiet_moves {
-                            self.history_table.update(to_move, bad.0, bad.1, -bonus);
+                        self.dynamic_history
+                            .gravity_history((to_move, our_piece, ply.dst()), bonus);
+
+                        self.dynamic_history
+                            .gravity_history((to_move, our_piece, ply.src()), -bonus);
+
+                        for (piece, src, dst) in bad_quiet_moves {
+                            self.dynamic_history
+                                .gravity_history((to_move, our_piece, src), bonus);
+                            self.dynamic_history
+                                .gravity_history((to_move, our_piece, dst), -bonus);
+
+                            self.history_table.update(to_move, piece, dst, -bonus);
                             for i in 0..N_CONTINUATION_HISTORIES {
-                                continuation_history(i, bad, -bonus);
+                                continuation_history(i, (piece, dst), -bonus);
                             }
                         }
                     } else if let Some(captured) = undo.info.captured_piece {
@@ -1018,7 +1033,7 @@ impl ThreadData {
                 }
 
                 if is_quiet {
-                    bad_quiet_moves.push((undo.info.our_piece, undo.ply.dst()));
+                    bad_quiet_moves.push((undo.info.our_piece, undo.ply.src(), undo.ply.dst()));
                 } else if let Some(captured) = undo.info.captured_piece {
                     bad_captures.push((undo.info.our_piece, undo.ply.dst(), captured))
                 }
