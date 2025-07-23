@@ -791,8 +791,11 @@ impl ThreadData {
 
                 let hash_before = self.game().hash();
 
+                let mut reduction = Depth::ONE;
+                let mut extension = Depth::ZERO;
+
                 // Singular extension check
-                let is_singular = !N::IS_ROOT
+                if !N::IS_ROOT
                     && !N::IS_SE
                     && !N::is_all()
                     && is_first_move
@@ -802,83 +805,77 @@ impl ThreadData {
                             && x.depth >= depth - Depth::from_num(3)
                             && x.value_type() != UpperBound
                     })
-                    && {
-                        let tt_score = from_tt.unwrap().value;
-                        let singular_beta = tt_score - Millipawns((20 * depth).to_num());
+                {
+                    let tt_score = from_tt.unwrap().value;
+                    let singular_beta = tt_score - Millipawns((20 * depth).to_num());
 
-                        // TODO: we get a interresting second move from this, if it fails high...
-                        let singular_value = self
-                            .alpha_beta_search::<SENode>(
-                                singular_beta,
-                                singular_beta + Millipawns(1),
-                                (depth - Depth::ONE) / 2,
-                                root_dist,
-                            )?
-                            .0;
+                    // TODO: we get a interresting second move from this, if it fails high...
+                    let singular_value = self
+                        .alpha_beta_search::<SENode>(
+                            singular_beta,
+                            singular_beta + Millipawns(1),
+                            (depth - Depth::ONE) / 2,
+                            root_dist,
+                        )?
+                        .0;
 
-                        if singular_value <= singular_beta {
-                            true
-                        } else if singular_beta >= beta {
-                            // Multi-cut
-                            return Ok((
-                                singular_beta.clamp_eval(),
-                                from_tt.and_then(|x| x.best_move()),
-                            ));
-                        } else {
-                            false
-                        }
+                    if singular_value <= singular_beta {
+                        extension += Depth::ONE;
+                    } else if singular_beta >= beta {
+                        // Multi-cut
+                        return Ok((
+                            singular_beta.clamp_eval(),
+                            from_tt.and_then(|x| x.best_move()),
+                        ));
                     };
-
-                let lmr = !is_in_check && !is_first_move;
-                let reduction = {
-                    let mut r = Depth::ONE;
-
-                    if lmr {
-                        let x = depth.int_log2() * Depth::from_num(moveno).int_log2();
-                        let (a, b) = if !is_quiet {
-                            (
-                                search_parameters().lmr_quiescent_slope,
-                                search_parameters().lmr_quiescent_offset,
-                            )
-                        } else {
-                            (
-                                search_parameters().lmr_quiet_slope,
-                                search_parameters().lmr_quiet_offset,
-                            )
-                        };
-
-                        let improving_rate = self.history.improving_rate();
-                        r += (a * x + b) * (Depth::ONE - improving_rate / 4).max(Depth::ONE);
-                    }
-
-                    if !is_first_move && is_quiet && tt_is_capture {
-                        r += search_parameters().tt_capture_reduction;
-                    }
-
-                    if is_check && see.0 >= 0 {
-                        r -= Depth::ONE;
-                    }
-
-                    if lmr && see.0 < 0 && !is_check {
-                        r += Depth::ONE / 2;
-                    }
-
-                    if is_mate_threat {
-                        r -= Depth::ONE / 2;
-                    }
-
-                    if is_singular {
-                        r -= Depth::ONE;
-                    }
-
-                    r.max(Depth::ZERO)
                 };
 
-                let real_reduction = if depth <= 3 { Depth::ONE } else { reduction };
-                let is_reduced = real_reduction > Depth::ONE;
-                let next_depth = depth - real_reduction;
-                let virtual_depth = depth - reduction;
+                let lmr = !is_in_check && !is_first_move;
+
+                if lmr {
+                    let x = depth.int_log2() * Depth::from_num(moveno).int_log2();
+                    let (a, b) = if !is_quiet {
+                        (
+                            search_parameters().lmr_quiescent_slope,
+                            search_parameters().lmr_quiescent_offset,
+                        )
+                    } else {
+                        (
+                            search_parameters().lmr_quiet_slope,
+                            search_parameters().lmr_quiet_offset,
+                        )
+                    };
+
+                    let improving_rate = self.history.improving_rate();
+                    reduction += (a * x + b) * (Depth::ONE - improving_rate / 4).max(Depth::ONE);
+                }
+
+                if !is_first_move && is_quiet && tt_is_capture {
+                    reduction += search_parameters().tt_capture_reduction;
+                }
+
+                if is_check && see.0 >= 0 {
+                    extension += Depth::ONE;
+                }
+
+                if lmr && see.0 < 0 && !is_check {
+                    reduction += Depth::ONE / 2;
+                }
+
+                if is_mate_threat {
+                    extension += Depth::ONE / 2;
+                }
+
+                let virtual_depth = (depth - reduction + extension).min(depth);
+                let next_depth = if depth <= 3 {
+                    depth - Depth::ONE
+                } else {
+                    virtual_depth
+                };
                 let full_depth = next_depth.max(depth - Depth::ONE);
+
+                let is_reduced = next_depth != full_depth;
+                debug_assert_eq!(is_reduced, next_depth < full_depth);
 
                 // Late move pruning
                 if pruning_allowed
