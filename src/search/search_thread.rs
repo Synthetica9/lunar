@@ -855,7 +855,7 @@ impl ThreadData {
                 }
 
                 if is_check && see.0 >= 0 {
-                    extension += Depth::ONE;
+                    extension += Depth::ONE / 2;
                 }
 
                 if lmr && see.0 < 0 && !is_check {
