@@ -854,10 +854,6 @@ impl ThreadData {
                     reduction += search_parameters().tt_capture_reduction;
                 }
 
-                if is_check && see.0 >= 0 {
-                    extension += Depth::ONE;
-                }
-
                 if lmr && see.0 < 0 && !is_check {
                     reduction += Depth::ONE / 2;
                 }
