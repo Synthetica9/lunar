@@ -617,43 +617,6 @@ impl ThreadData {
                 is_mate_threat = null_value.is_mate_in_n().is_some();
             };
 
-            // Singular extension check
-            let is_singular = !N::IS_ROOT
-                && !N::IS_SE
-                && !N::is_all()
-                && depth >= 8
-                && from_tt.is_some_and(|x| {
-                    x.best_move().is_some()
-                        && x.depth >= depth - Depth::from_num(3)
-                        && x.value_type() != UpperBound
-                })
-                && {
-                    let tt_score = from_tt.unwrap().value;
-                    let singular_beta = tt_score - Millipawns((20 * depth).to_num());
-
-                    // TODO: we get a interresting second move from this, if it fails high...
-                    let singular_value = self
-                        .alpha_beta_search::<SENode>(
-                            singular_beta,
-                            singular_beta + Millipawns(1),
-                            (depth - Depth::ONE) / 2,
-                            root_dist,
-                        )?
-                        .0;
-
-                    if singular_value <= singular_beta {
-                        true
-                    } else if singular_beta >= beta {
-                        // Multi-cut
-                        return Ok((
-                            singular_beta.clamp_eval(),
-                            from_tt.and_then(|x| x.best_move()),
-                        ));
-                    } else {
-                        false
-                    }
-                };
-
             let mut hash_moves_played = [Ply::NULL; 8];
             let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
 
@@ -828,6 +791,44 @@ impl ThreadData {
 
                 let hash_before = self.game().hash();
 
+                // Singular extension check
+                let is_singular = !N::IS_ROOT
+                    && !N::IS_SE
+                    && !N::is_all()
+                    && is_first_move
+                    && depth >= 8
+                    && from_tt.is_some_and(|x| {
+                        x.best_move().is_some()
+                            && x.depth >= depth - Depth::from_num(3)
+                            && x.value_type() != UpperBound
+                    })
+                    && {
+                        let tt_score = from_tt.unwrap().value;
+                        let singular_beta = tt_score - Millipawns((20 * depth).to_num());
+
+                        // TODO: we get a interresting second move from this, if it fails high...
+                        let singular_value = self
+                            .alpha_beta_search::<SENode>(
+                                singular_beta,
+                                singular_beta + Millipawns(1),
+                                (depth - Depth::ONE) / 2,
+                                root_dist,
+                            )?
+                            .0;
+
+                        if singular_value <= singular_beta {
+                            true
+                        } else if singular_beta >= beta {
+                            // Multi-cut
+                            return Ok((
+                                singular_beta.clamp_eval(),
+                                from_tt.and_then(|x| x.best_move()),
+                            ));
+                        } else {
+                            false
+                        }
+                    };
+
                 let lmr = !is_in_check && !is_first_move;
                 let reduction = {
                     let mut r = Depth::ONE;
@@ -866,7 +867,7 @@ impl ThreadData {
                         r -= Depth::ONE / 2;
                     }
 
-                    if is_singular && is_first_move {
+                    if is_singular {
                         r -= Depth::ONE;
                     }
 

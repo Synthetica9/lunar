@@ -15,6 +15,7 @@ pub struct StackElement {
     hash: ZobristHash,
     improving_rate: ImprovingRate,
     threat: Option<(Ply, Millipawns, Piece)>,
+    skip_move: Ply,
 }
 
 impl StackElement {
@@ -48,6 +49,7 @@ impl History {
             hash,
             improving_rate: ImprovingRate::ZERO,
             threat: None,
+            skip_move: Ply::NULL,
         };
 
         let mut res = Self {
@@ -110,6 +112,7 @@ impl History {
             hash,
             improving_rate,
             threat: None,
+            skip_move: Ply::NULL,
         });
     }
 
@@ -138,6 +141,10 @@ impl History {
             .last()
             .and_then(|top| top.undo)
             .is_some_and(|x| x.ply.is_null())
+    }
+
+    pub fn skip(&mut self, skip: Ply) {
+        self.stack.last_mut().unwrap().skip_move = skip;
     }
 
     fn hash_index(&self, hash: ZobristHash) -> usize {
