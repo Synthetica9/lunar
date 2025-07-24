@@ -819,7 +819,9 @@ impl ThreadData {
                         )?
                         .0;
 
-                    if singular_value <= singular_beta {
+                    if singular_value + Millipawns(250) <= singular_beta {
+                        extension += 2 * Depth::ONE;
+                    } else if singular_value <= singular_beta {
                         extension += Depth::ONE;
                     } else if singular_beta >= beta {
                         // Multi-cut
