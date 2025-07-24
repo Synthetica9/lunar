@@ -866,7 +866,7 @@ impl ThreadData {
                     extension += Depth::ONE / 2;
                 }
 
-                let virtual_depth = (depth - reduction + extension).min(depth);
+                let virtual_depth = depth - reduction + extension;
                 let next_depth = if depth <= 3 {
                     depth - Depth::ONE
                 } else {
