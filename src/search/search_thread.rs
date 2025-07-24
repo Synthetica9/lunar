@@ -14,6 +14,7 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
 use super::history_heuristic::HistoryTable;
+use crate::basic_enums::Color;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -178,6 +179,8 @@ pub struct ThreadData {
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
     capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
+
+    pawn_corrhist: Box<Stats<(Color, u16), Millipawns>>,
 }
 
 impl ThreadData {
@@ -223,6 +226,8 @@ impl ThreadData {
             continuation_histories,
             threat_history: ZeroInit::zero_box(),
             capture_history: ZeroInit::zero_box(),
+
+            pawn_corrhist: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -261,6 +266,8 @@ impl ThreadData {
                     self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
                     self.threat_history = ZeroInit::zero_box();
                     self.capture_history = ZeroInit::zero_box();
+
+                    self.pawn_corrhist = ZeroInit::zero_box();
 
                     None
                 }
@@ -491,7 +498,11 @@ impl ThreadData {
         let mut alpha = alpha;
         let mut beta = beta;
 
-        let eval = self.history.eval();
+        let eval = self.history.eval().map(|x| {
+            x + self
+                .pawn_corrhist
+                .get((self.game().to_move(), self.game().pawn_hash().0 as u16))
+        });
         let is_in_check = self.game().is_in_check();
 
         let futility_pruning = if let Some(eval) = eval {
@@ -1071,6 +1082,32 @@ impl ThreadData {
             match self.transposition_table.put(self.game().hash(), tte) {
                 PutResult::ValueAdded => self.tt_puts += 1,
                 PutResult::ValueReplaced | PutResult::Noop => {}
+            }
+
+            // SE Corr history
+            if let Some(eval) = eval {
+                if best_move.is_none_or(|x| !x.is_capture(self.game()))
+                    && !is_in_check
+                    && !(value >= beta && value <= eval)
+                    && !(value <= alpha_orig && value >= eval)
+                {
+                    // Formula "inspired" by stockfish via
+                    // https://www.chessprogramming.org/Static_Evaluation_Correction_History
+
+                    let to_move = self.game().to_move();
+                    let max_corrhist = Millipawns(8192);
+
+                    let bonus = (depth.max(Depth::ZERO) / 8)
+                        .saturating_mul(Depth::saturating_from_num(value.0 - eval.0))
+                        .to_num::<i32>()
+                        .clamp(-max_corrhist.0 / 4, max_corrhist.0 / 4);
+
+                    // TODO: Gravity formula but limit is different
+                    self.pawn_corrhist
+                        .update((to_move, self.game().pawn_hash().0 as u16), |x| {
+                            Millipawns(bonus - x.0 * bonus.abs() / max_corrhist.0)
+                        });
+                }
             }
         }
 

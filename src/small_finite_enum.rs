@@ -84,3 +84,11 @@ where
         T5::SIZE * (t1, t2, t3, t4).to_usize() + t5.to_usize()
     }
 }
+
+impl SmallFiniteEnum for u16 {
+    const SIZE: usize = (u16::MAX as usize) + 1;
+
+    fn to_usize(self) -> usize {
+        self as usize
+    }
+}
