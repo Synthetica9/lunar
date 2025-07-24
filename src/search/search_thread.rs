@@ -498,11 +498,14 @@ impl ThreadData {
         let mut alpha = alpha;
         let mut beta = beta;
 
-        let eval = self.history.eval().map(|x| {
+        let static_eval = self.history.static_eval();
+
+        let eval = static_eval.map(|x| {
             x + self
                 .pawn_corrhist
                 .get((self.game().to_move(), self.game().pawn_hash().0 as u16))
         });
+
         let is_in_check = self.game().is_in_check();
 
         let futility_pruning = if let Some(eval) = eval {
@@ -1085,11 +1088,11 @@ impl ThreadData {
             }
 
             // SE Corr history
-            if let Some(eval) = eval {
+            if let Some(static_eval) = static_eval {
                 if best_move.is_none_or(|x| !x.is_capture(self.game()))
                     && !is_in_check
-                    && !(value >= beta && value <= eval)
-                    && !(value <= alpha_orig && value >= eval)
+                    && !(value >= beta && value <= static_eval)
+                    && !(value <= alpha_orig && value >= static_eval)
                 {
                     // Formula "inspired" by stockfish via
                     // https://www.chessprogramming.org/Static_Evaluation_Correction_History
@@ -1098,7 +1101,7 @@ impl ThreadData {
                     let max_corrhist = Millipawns(8192);
 
                     let bonus = (depth.max(Depth::ZERO) / 8)
-                        .saturating_mul(Depth::saturating_from_num(value.0 - eval.0))
+                        .saturating_mul(Depth::saturating_from_num(value.0 - static_eval.0))
                         .to_num::<i32>()
                         .clamp(-max_corrhist.0 / 4, max_corrhist.0 / 4);
 

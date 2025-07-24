@@ -65,7 +65,7 @@ impl History {
         &self.game
     }
 
-    pub fn eval(&self) -> Option<Millipawns> {
+    pub fn static_eval(&self) -> Option<Millipawns> {
         self.stack.last().unwrap().eval
     }
 
