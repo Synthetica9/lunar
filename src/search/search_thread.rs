@@ -820,7 +820,18 @@ impl ThreadData {
                         .0;
 
                     if singular_value <= singular_beta {
-                        extension += Depth::ONE;
+                        let max_extension_for = Millipawns(300);
+                        let max_extension = Depth::ONE;
+
+                        let fail_over = max_extension_for.min(singular_beta - singular_value);
+
+                        let multi_ext = Depth::from_num(fail_over.0)
+                            / (max_extension * Depth::from_num(max_extension_for.0));
+
+                        debug_assert!(multi_ext <= max_extension);
+                        debug_assert!(0 <= multi_ext);
+
+                        extension += Depth::ONE + multi_ext;
                     } else if singular_beta >= beta {
                         // Multi-cut
                         return Ok((
