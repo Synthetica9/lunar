@@ -504,6 +504,7 @@ impl ThreadData {
             x + self
                 .pawn_corrhist
                 .get((self.game().to_move(), self.game().pawn_hash().0 as u16))
+                / 64
         });
 
         let is_in_check = self.game().is_in_check();
@@ -1098,7 +1099,7 @@ impl ThreadData {
                     // https://www.chessprogramming.org/Static_Evaluation_Correction_History
 
                     let to_move = self.game().to_move();
-                    let max_corrhist = Millipawns(8192);
+                    let max_corrhist = Millipawns(16384);
 
                     let bonus = (depth.max(Depth::ZERO) / 8)
                         .saturating_mul(Depth::saturating_from_num(value.0 - static_eval.0))
