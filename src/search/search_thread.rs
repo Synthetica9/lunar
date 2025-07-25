@@ -6,7 +6,7 @@ use std::i32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use fixed::traits::{Fixed, ToFixed};
+use fixed::traits::{Fixed, FromFixed, ToFixed};
 use linear_map::LinearMap;
 use smallvec::SmallVec;
 
@@ -656,6 +656,15 @@ impl ThreadData {
                 hash_moves_played[0] = from_tt.and_then(|x| x.best_move()).unwrap_or(Ply::NULL);
             }
 
+            let (subtree_total, max_subtree) = if N::IS_ROOT {
+                (
+                    self.prev_ply_root_move_counts.values().sum(),
+                    *self.prev_ply_root_move_counts.values().max().unwrap(),
+                )
+            } else {
+                (0, 0)
+            };
+
             while let Some(Generated {
                 ply,
                 guarantee,
@@ -864,6 +873,16 @@ impl ThreadData {
 
                 if is_mate_threat {
                     extension += Depth::ONE / 2;
+                }
+
+                if N::IS_ROOT && lmr && max_subtree != 0 {
+                    // Root subtree ratio LMR
+
+                    use fixed::types::I48F16 as T;
+                    let max_red = Depth::ONE;
+                    let count = self.prev_ply_root_move_counts[&ply];
+                    let fac = T::from_num(max_subtree - count) / T::from_num(max_subtree);
+                    reduction += max_red * Depth::from_fixed(fac);
                 }
 
                 let virtual_depth = depth - reduction + extension;
