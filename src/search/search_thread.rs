@@ -504,7 +504,7 @@ impl ThreadData {
             x + self
                 .pawn_corrhist
                 .get((self.game().to_move(), self.game().pawn_hash().0 as u16))
-                / 64
+                / 8
         });
 
         let is_in_check = self.game().is_in_check();
