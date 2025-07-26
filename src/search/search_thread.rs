@@ -875,14 +875,17 @@ impl ThreadData {
                     extension += Depth::ONE / 2;
                 }
 
-                if N::IS_ROOT && lmr && max_subtree != 0 {
+                if N::IS_ROOT && lmr && max_subtree >= 1000 {
                     // Root subtree ratio LMR
 
                     use fixed::types::I48F16 as T;
                     let max_red = Depth::ONE;
                     let count = self.prev_ply_root_move_counts[&ply];
-                    let fac = T::from_num(max_subtree - count) / T::from_num(max_subtree);
-                    reduction += max_red * Depth::from_fixed(fac);
+                    let fac: T = T::from_num(max_subtree) / T::from_num(count.max(1) * 30);
+                    debug_assert!(fac >= 0);
+                    let fac = Depth::from_num(fac).min(max_red);
+
+                    reduction += fac;
                 }
 
                 let virtual_depth = depth - reduction + extension;
