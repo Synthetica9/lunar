@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use crate::game::Game;
 use crate::history::History;
 use crate::polyglot::PolyglotBook;
-use crate::search::parameters::search_parameters;
+use crate::search::parameters::params;
 use crate::transposition_table::TranspositionTable;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -131,7 +131,12 @@ impl UCIState {
                 self.send(&format!("id name {NAME} {VERSION}"));
                 self.send(&format!("id author {AUTHOR}"));
                 AVAILABLE_OPTIONS.print_uci_options(self);
+                #[cfg(feature = "tunable")]
+                crate::search::parameters::TunableParams::print_uci_options();
                 self.send("uciok");
+            }
+            "listspsa" => {
+                crate::search::parameters::TunableParams::list_spsa();
             }
             "isready" => {
                 // Only main thread needs to be ready, and when we're executing this
@@ -372,7 +377,17 @@ impl UCIState {
     }
 
     pub fn set_option(&mut self, name: &str, value: &str) -> Result<(), String> {
-        AVAILABLE_OPTIONS.set_option(self, name, value)
+        if let Ok(opt) = AVAILABLE_OPTIONS.get(name) {
+            (opt.setter)(value, self)?
+        }
+
+        #[cfg(feature = "tunable")]
+        return crate::search::parameters::PARAMS
+            .write()
+            .unwrap()
+            .set(name, value);
+
+        Err(format!("info string Unknown option {name}"))
     }
 }
 
@@ -463,23 +478,6 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         Ok(())
     }
 
-    macro_rules! tunable (
-        ($name:ident, $tpe:ty) => {
-            UCIOption {
-                name: stringify!($name),
-                typ: &Str {
-                    // ew
-                    default: "<>",
-                },
-                setter: |value, _state| {
-                    crate::search::parameters::SEARCH_PARAMETERS.write().unwrap().$name =
-                        <$tpe>::from_str(value).map_err(|x| format!("Could not parse: {x}"))?;
-                    Ok(())
-                },
-            }
-        }
-    );
-
     &[
         UCIOption {
             name: "Hash",
@@ -540,48 +538,6 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
             typ: &Str { default: "" },
             setter: opening_book_setter,
         },
-        #[cfg(feature = "tunable")]
-        tunable!(nmr_offset, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(nmr_piece_slope, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(nmr_depth_slope, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(iir_reduction, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(iir_min_depth, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(lmr_quiescent_slope, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(lmr_quiescent_offset, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(lmr_quiet_slope, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(lmr_quiet_offset, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(futprun_max_depth, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(futprun_mp_per_ply, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(futprun_min_mp, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(mo_continuation_start_weight, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(mo_continuation_factor, fixed::types::I16F16),
-        #[cfg(feature = "tunable")]
-        tunable!(mo_direct_history_weight, i32),
-        #[cfg(feature = "tunable")]
-        tunable!(mo_move_threatened_piece_bonus, i32),
-        #[cfg(feature = "tunable")]
-        tunable!(aw_min_depth, i32),
-        #[cfg(feature = "tunable")]
-        tunable!(aw_base_window, f32),
-        #[cfg(feature = "tunable")]
-        tunable!(aw_widening_base, f32),
-        #[cfg(feature = "tunable")]
-        tunable!(aw_fail_open_after, i32),
-        #[cfg(feature = "tunable")]
-        tunable!(aw_consistency_base, f32),
     ]
 });
 

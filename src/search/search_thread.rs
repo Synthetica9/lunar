@@ -20,7 +20,7 @@ use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::Ply;
 use crate::search::countermove::{Stats, MAX_HISTORY};
-use crate::search::parameters::search_parameters;
+use crate::search::parameters::params;
 use crate::square::Square;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
@@ -324,16 +324,16 @@ impl ThreadData {
             let mut fail_lows = 0;
 
             consistent = consistent.max(0);
-            let consistency_fac = search_parameters().aw_consistency_base.powi(consistent);
+            let consistency_fac = params().aw_consistency_base().powi(consistent);
 
             let count_to_window = |count| {
-                if count > search_parameters().aw_fail_open_after {
+                if count > params().aw_fail_open_after() {
                     INF
                 } else {
                     Millipawns(
-                        (search_parameters().aw_base_window
+                        (params().aw_base_window()
                             * consistency_fac
-                            * (1.0 + search_parameters().aw_widening_base).powi(count))
+                            * (1.0 + params().aw_widening_base()).powi(count))
                             as i32,
                     )
                 }
@@ -341,7 +341,7 @@ impl ThreadData {
 
             let base_window = count_to_window(0);
 
-            let (mut alpha, mut beta) = if depth < search_parameters().aw_min_depth {
+            let (mut alpha, mut beta) = if depth < params().aw_min_depth() {
                 (LOSS, WIN)
             } else {
                 (value - base_window, value + base_window)
@@ -496,11 +496,11 @@ impl ThreadData {
 
         let futility_pruning = if let Some(eval) = eval {
             let fut_margin = Millipawns(
-                (depth.saturating_mul(search_parameters().futprun_mp_per_ply))
-                    .max(search_parameters().futprun_min_mp)
-                    .to_num(),
+                (depth.saturating_mul(params().futprun_mp_per_ply()))
+                    .to_num::<i32>()
+                    .max(params().futprun_min_mp()),
             );
-            depth <= search_parameters().futprun_max_depth
+            depth <= params().futprun_max_depth()
                 && eval + fut_margin < alpha
                 && !N::is_pv()
                 && !is_in_check
@@ -568,11 +568,11 @@ impl ThreadData {
         } else {
             if from_tt.is_none_or(|x| x.depth < depth - Depth::from_num(3))
                 && N::is_pv()
-                && depth >= search_parameters().iir_min_depth
+                && depth >= params().iir_min_depth()
             {
                 // Internal iterative reduction
                 // https://www.chessprogramming.org/Internal_Iterative_Reductions
-                depth -= search_parameters().iir_reduction;
+                depth -= params().iir_reduction();
             };
 
             // Null move pruning
@@ -580,10 +580,10 @@ impl ThreadData {
             // TODO: increase reduction on deeper depths?
             // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
 
-            let mut r: Depth = search_parameters().nmr_offset + Depth::ONE;
+            let mut r: Depth = params().nmr_offset() + Depth::ONE;
 
-            r += eval::game_phase(board) * search_parameters().nmr_piece_slope;
-            r += depth * search_parameters().nmr_depth_slope;
+            r += eval::game_phase(board) * params().nmr_piece_slope();
+            r += depth * params().nmr_depth_slope();
 
             let mut is_mate_threat = false;
 
@@ -836,14 +836,11 @@ impl ThreadData {
                     let x = depth.int_log2() * Depth::from_num(moveno).int_log2();
                     let (a, b) = if !is_quiet {
                         (
-                            search_parameters().lmr_quiescent_slope,
-                            search_parameters().lmr_quiescent_offset,
+                            params().lmr_quiescent_slope(),
+                            params().lmr_quiescent_offset(),
                         )
                     } else {
-                        (
-                            search_parameters().lmr_quiet_slope,
-                            search_parameters().lmr_quiet_offset,
-                        )
+                        (params().lmr_quiet_slope(), params().lmr_quiet_offset())
                     };
 
                     let improving_rate = self.history.improving_rate();
@@ -851,7 +848,7 @@ impl ThreadData {
                 }
 
                 if !is_first_move && is_quiet && tt_is_capture {
-                    reduction += search_parameters().tt_capture_reduction;
+                    reduction += params().tt_capture_reduction();
                 }
 
                 if is_check && see.0 >= 0 {

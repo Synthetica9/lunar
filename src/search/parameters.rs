@@ -1,96 +1,197 @@
-use fixed::ParseFixedError;
+// Hard yoink from Monty:
+// https://github.com/official-monty/Monty/blob/master/src/Tunable/params.rs
+
+use std::ops::Deref;
 
 #[cfg(feature = "tunable")]
 use std::sync::RwLock;
 
-use std::ops::Deref;
-
 use super::search_thread::Depth;
-use super::search_thread::N_CONTINUATION_HISTORIES;
 
-pub struct SearchParameters {
-    pub nmr_offset: Depth,
-    pub nmr_piece_slope: Depth,
-    pub nmr_depth_slope: Depth,
-
-    pub iir_reduction: Depth,
-    pub iir_min_depth: Depth,
-
-    pub lmr_quiescent_slope: Depth,
-    pub lmr_quiescent_offset: Depth,
-    pub lmr_quiet_slope: Depth,
-    pub lmr_quiet_offset: Depth,
-
-    pub tt_capture_reduction: Depth,
-
-    pub mo_continuation_start_weight: Depth,
-    pub mo_continuation_factor: Depth,
-    pub mo_direct_history_weight: i32,
-    pub mo_move_threatened_piece_bonus: i32,
-
-    pub futprun_max_depth: Depth,
-    pub futprun_mp_per_ply: Depth,
-    pub futprun_min_mp: Depth,
-
-    pub aw_min_depth: i32,
-    pub aw_base_window: f32,
-    pub aw_widening_base: f32,
-    pub aw_fail_open_after: i32,
-    pub aw_consistency_base: f32,
+#[derive(Clone, Debug)]
+struct Param<T> {
+    val: T,
+    min: T,
+    max: T,
 }
 
-const fn const_unwrap<T>(val: Result<T, ParseFixedError>) -> T {
-    match val {
-        Ok(t) => t,
-        Err(_) => panic!("Expected Ok(...)"),
+impl Param<i32> {
+    const fn new(val: i32, min: i32, max: i32) -> Self {
+        Self { val, min, max }
+    }
+
+    fn parse(val: &str) -> Result<i32, String> {
+        val.parse::<i32>().map_err(|x| x.to_string())
+    }
+
+    fn print_uci_options(&self, name: &str) {
+        println!(
+            "option name {} type spin default {:.0} min {:.0} max {:.0}",
+            name, self.val, self.min, self.max,
+        );
+    }
+
+    fn list(&self, name: &str, step: f64, r: f64) {
+        println!(
+            "{}, int, {}, {}, {}, {}, {}",
+            name, self.val, self.min, self.max, step, r,
+        );
     }
 }
 
-const fn const_depth(val: &str) -> Depth {
-    const_unwrap(Depth::from_str(val))
+impl Param<f64> {
+    const fn new(val: f64, min: f64, max: f64) -> Self {
+        Self { val, min, max }
+    }
+
+    fn parse(val: &str) -> Result<f64, String> {
+        val.parse::<f64>().map_err(|x| x.to_string())
+    }
+
+    fn print_uci_options(&self, name: &str) {
+        println!("option name {} type string default {:.0}", name, self.val);
+    }
+
+    fn list(&self, name: &str, step: f64, r: f64) {
+        println!(
+            "{}, float, {}, {}, {}, {}, {}",
+            name, self.val, self.min, self.max, step, r,
+        );
+    }
 }
 
-pub const SEARCH_PARAMETERS_BASE: SearchParameters = SearchParameters {
-    nmr_offset: const_depth("2"),
-    nmr_piece_slope: const_depth("0.1"),
-    nmr_depth_slope: const_depth("7").recip(),
+impl Param<Depth> {
+    const fn new(val: f64, min: f64, max: f64) -> Self {
+        const fn conv(x: f64) -> Depth {
+            let mult = Depth::ONE.to_bits();
+            Depth::from_bits((mult as f64 * x) as i32)
+        }
 
-    iir_reduction: const_depth("2"),
-    iir_min_depth: const_depth("6"),
+        Self {
+            val: conv(val),
+            min: conv(min),
+            max: conv(max),
+        }
+    }
 
-    lmr_quiescent_slope: const_depth("0.12"),
-    lmr_quiescent_offset: const_depth("1.41"),
-    lmr_quiet_slope: const_depth("0.36"),
-    lmr_quiet_offset: const_depth("1.50"),
+    fn parse(val: &str) -> Result<Depth, String> {
+        fixed::FixedI32::from_str(val).map_err(|x| x.to_string())
+    }
 
-    futprun_max_depth: const_depth("6.17"),
-    futprun_mp_per_ply: const_depth("384"),
-    futprun_min_mp: const_depth("0"),
+    fn print_uci_options(&self, name: &str) {
+        println!("option name {} type string default {:.0}", name, self.val);
+    }
 
-    tt_capture_reduction: const_depth("0.5"),
+    fn list(&self, name: &str, step: f64, r: f64) {
+        println!(
+            "{}, float, {}, {}, {}, {}, {}",
+            name, self.val, self.min, self.max, step, r,
+        );
+    }
+}
 
-    mo_continuation_start_weight: const_depth("40"),
-    mo_continuation_factor: const_depth("0.75"),
-    mo_direct_history_weight: 50,
-    mo_move_threatened_piece_bonus: 1000,
+macro_rules! make_tunable_params {
+    ($($name:ident: $t:ty = $val:expr, $min:expr, $max:expr, $step:expr, $r:expr;)*) => {
+        #[derive(Clone, Debug)]
+        pub struct TunableParams {
+            $($name: Param<$t>,)*
+        }
 
-    aw_min_depth: 5,
-    aw_base_window: 500.0,
-    aw_widening_base: 1.0,
-    aw_fail_open_after: 5,
-    aw_consistency_base: 0.9,
-};
+        impl Default for TunableParams {
+            fn default() -> Self {
+                Self::DEFAULT
+            }
+        }
+
+        impl TunableParams {
+            const DEFAULT: Self = Self {
+                $(
+                    $name: Param::<$t>::new(
+                        $val,
+                        $min,
+                        $max
+                    ),
+                )*
+            };
+
+        $(
+            pub const fn $name(&self) -> $t {
+                self.$name.val
+            }
+        )*
+
+            pub fn print_uci_options() {
+                $(Self::DEFAULT.$name.print_uci_options(stringify!($name));)*
+            }
+
+            pub fn set(&mut self, name: &str, val: &str) -> Result<(), String> {
+                match name {
+                    $(
+                        stringify!($name) => {
+                            let val = Param::<$t>::parse(val)?;
+
+                            let min = self.$name.min;
+                            let max = self.$name.max;
+
+                            self.$name.val = val.clamp(min, max);
+                        }
+                    ,)*
+                    _ => Err(format!("unknown option {name}"))?,
+                }
+
+                Ok(())
+            }
+
+            pub fn list_spsa() {
+                $(Self::DEFAULT.$name.list(stringify!($name), $step, $r);)*
+            }
+        }
+    };
+}
+
+make_tunable_params! {
+    // Name: type = value, min, max, C_end, R_end
+    // https://github.com/AndyGrant/OpenBench/wiki/SPSA-Tuning-Workloads
+    nmr_offset: Depth = 2., 0., 6., 0.3, 0.002;
+    nmr_piece_slope: Depth = 0.1, 0., 0.5, 0.025, 0.002;
+    nmr_depth_slope: Depth = 1. / 7., 0., 0.5, 0.025, 0.002;
+
+    iir_reduction: Depth = 2., 0., 5., 0.25, 0.002;
+    iir_min_depth: Depth = 6., 3., 12., 0.45, 0.002;
+
+    lmr_quiescent_slope: Depth = 0.12, 0., 2., 0.1, 0.002;
+    lmr_quiescent_offset: Depth = 1.41, 0., 3., 0.15, 0.002;
+    lmr_quiet_slope: Depth = 0.36, 0., 2., 0.1, 0.002;
+    lmr_quiet_offset: Depth = 1.5, 0., 3., 0.15, 0.002;
+
+    futprun_max_depth: Depth = 6.17, 3., 10., 0.35, 0.002;
+    futprun_mp_per_ply: Depth = 384., 0., 1000., 50., 0.002;
+    futprun_min_mp: i32 = 0, 0, 1000, 50., 0.002;
+
+    tt_capture_reduction: Depth = 0.5, 0., 2., 0.1, 0.002;
+
+    mo_continuation_start_weight:  Depth = 40., 0., 100., 5., 0.002;
+    mo_continuation_factor: Depth = 0.75, 0., 1., 0.05, 0.002;
+    mo_direct_history_weight: i32 = 50, 0, 100, 5., 0.002;
+    mo_move_threatened_piece_bonus: i32 = 1000, 0, 3000, 150., 0.002;
+
+    aw_min_depth: i32 = 5, 2, 10, 0.5, 0.002;
+    aw_base_window:  f64 = 500., 0., 1000., 50., 0.002;
+    aw_widening_base: f64 = 1., 0., 3., 0.15, 0.002;
+    aw_fail_open_after: i32 = 5, 0, 15, 0.75, 0.002;
+    aw_consistency_base: f64 = 0.9, 0.5, 1., 0.025, 0.002;
+}
 
 #[cfg(feature = "tunable")]
-pub static SEARCH_PARAMETERS: RwLock<SearchParameters> = RwLock::new(SEARCH_PARAMETERS_BASE);
+pub static PARAMS: RwLock<TunableParams> = RwLock::new(TunableParams::DEFAULT);
 
 #[cfg(feature = "tunable")]
-pub fn search_parameters() -> impl Deref<Target = SearchParameters> {
-    SEARCH_PARAMETERS.read().unwrap()
+pub fn params() -> impl Deref<Target = TunableParams> {
+    PARAMS.read().unwrap()
 }
 
 #[cfg(not(feature = "tunable"))]
 #[inline(always)]
-pub const fn search_parameters() -> impl Deref<Target = SearchParameters> {
-    &SEARCH_PARAMETERS_BASE
+pub const fn params() -> impl Deref<Target = TunableParams> {
+    &TunableParams::DEFAULT
 }

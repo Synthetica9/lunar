@@ -10,7 +10,7 @@ use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
-use crate::search::parameters::search_parameters;
+use crate::search::parameters::params;
 use crate::search::search_thread::Depth;
 use crate::square::Square;
 
@@ -405,10 +405,10 @@ impl MoveGenerator for StandardMoveGenerator {
 
 fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
     let mut res = [0; N_CONTINUATION_HISTORIES];
-    let mut val = search_parameters().mo_continuation_start_weight;
+    let mut val = params().mo_continuation_start_weight();
     for cell in res.iter_mut() {
         *cell = val.to_num();
-        val *= search_parameters().mo_continuation_factor;
+        val *= params().mo_continuation_factor();
     }
 
     res
@@ -454,8 +454,8 @@ pub fn quiet_move_order(
 
     let ply_idx = (piece, dst);
 
-    let from_history = thread.history_table.score(color, piece, dst)
-        * search_parameters().mo_direct_history_weight;
+    let from_history =
+        thread.history_table.score(color, piece, dst) * params().mo_direct_history_weight();
     // let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
     let see = static_exchange_evaluation(game, ply).0.min(0);
 
@@ -468,7 +468,7 @@ pub fn quiet_move_order(
     if let Some((threat, threat_severity, threat_piece)) = threatened {
         let threat_sq = threat.dst();
         if src == threat_sq {
-            val += search_parameters().mo_move_threatened_piece_bonus;
+            val += params().mo_move_threatened_piece_bonus();
         }
 
         let severity_scaling_max = Depth::from_num(2500);
