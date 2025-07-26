@@ -339,6 +339,15 @@ impl MoveGenerator for StandardMoveGenerator {
                         value += victim.base_value();
                     }
 
+                    if thread
+                        .history
+                        .peek()
+                        .is_some_and(|undo| undo.ply.dst() == ply.dst())
+                    {
+                        // Recapture last moved
+                        value += Millipawns(30)
+                    }
+
                     let command = MVVLVACapture { ply, value };
                     self.queue.push(command);
                 });
