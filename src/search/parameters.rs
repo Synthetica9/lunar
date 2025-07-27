@@ -152,17 +152,23 @@ macro_rules! make_tunable_params {
 make_tunable_params! {
     // Name: type = value, min, max, C_end, R_end
     // https://github.com/AndyGrant/OpenBench/wiki/SPSA-Tuning-Workloads
-    nmr_offset: Depth = 2., 0., 6., 0.3, 0.002;
-    nmr_piece_slope: Depth = 0.1, 0., 0.5, 0.025, 0.002;
-    nmr_depth_slope: Depth = 1. / 7., 0., 0.5, 0.025, 0.002;
+    nmp_offset: Depth = 2., 0., 6., 0.3, 0.002;
+    nmp_piece_slope: Depth = 0.1, 0., 0.5, 0.025, 0.002;
+    nmp_depth_slope: Depth = 1. / 7., 0., 0.5, 0.025, 0.002;
 
     iir_reduction: Depth = 2., 0., 5., 0.25, 0.002;
     iir_min_depth: Depth = 6., 3., 12., 0.45, 0.002;
+    iir_tt_limit: Depth = 3., 0., 6., 0.2, 0.002;
 
     lmr_quiescent_slope: Depth = 0.12, 0., 2., 0.1, 0.002;
     lmr_quiescent_offset: Depth = 1.41, 0., 3., 0.15, 0.002;
     lmr_quiet_slope: Depth = 0.36, 0., 2., 0.1, 0.002;
     lmr_quiet_offset: Depth = 1.5, 0., 3., 0.15, 0.002;
+    lmr_improving_rate: Depth = 0.25, 0., 1., 0.05, 0.002;
+
+    check_extension: Depth = 0.5, 0., 2., 0.1, 0.002;
+    neg_see_reduction: Depth = 0.5, 0., 2., 0.1, 0.002;
+    mate_threat_extension: Depth = 0.5, 0., 2., 0.1, 0.002;
 
     futprun_max_depth: Depth = 6.17, 3., 10., 0.35, 0.002;
     futprun_mp_per_ply: Depth = 384., 0., 1000., 50., 0.002;
@@ -174,12 +180,35 @@ make_tunable_params! {
     mo_continuation_factor: Depth = 0.75, 0., 1., 0.05, 0.002;
     mo_direct_history_weight: i32 = 50, 0, 100, 5., 0.002;
     mo_move_threatened_piece_bonus: i32 = 1000, 0, 3000, 150., 0.002;
+    mo_nmp_threat_min_sevr: i32 = 100, 0, 2000, 30., 0.002;
+    mo_sevr_scaling_max: i32 = 2500, 0, 10000, 200., 0.002;
+    mo_sevr_move_threat: i32 = 50, 0, 200, 5., 0.002;
 
     aw_min_depth: i32 = 5, 2, 10, 0.5, 0.002;
-    aw_base_window:  f64 = 500., 0., 1000., 50., 0.002;
+    aw_base_window: f64 = 500., 0., 1000., 50., 0.002;
     aw_widening_base: f64 = 1., 0., 3., 0.15, 0.002;
     aw_fail_open_after: i32 = 5, 0, 15, 0.75, 0.002;
     aw_consistency_base: f64 = 0.9, 0.5, 1., 0.025, 0.002;
+
+    rfp_depth_slope: Depth = 1500., 0., 4000., 200., 0.002;
+    rfp_improving_fac: Depth = 0.5, 0., 1., 0.05, 0.002;
+    rfp_min_depth: Depth = 4., 0., 12., 0.5, 0.002;
+
+    see_pruning_noisy_scaling_factor: Depth = -500., -2000., 0., 100., 0.002;
+    see_pruning_quiet_scaling_factor: Depth = -800., -2000., 0., 100., 0.002;
+
+    lmp_depth_slope: Depth = 2., 0., 5., 0.25, 0.002;
+    lmp_offset: Depth = 5., 0., 15., 1., 0.002;
+
+    histprun_depth_scale: Depth = -4000., -10000., 0., 500., 0.002;
+    histprun_offset: i32 = -500, -2000, 0, 100.0, 0.002;
+
+    se_tt_offset: Depth = 3., 0., 6., 0.25, 0.002;
+    se_min_depth: Depth = 8., 3., 12., 0.4, 0.002;
+    se_beta_scaling: Depth = 20., 0., 100., 5., 0.002;
+    se_depth_scaling: Depth = 0.5, 0., 1., 0.05, 0.002;
+
+    lmpahp_cutoff_depth: Depth = -2., -4., 0., 0.2, 0.002;
 }
 
 #[cfg(feature = "tunable")]

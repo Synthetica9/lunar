@@ -551,12 +551,15 @@ impl ThreadData {
                 || tt_is_capture
                 || N::IS_SE;
 
-            let depth_slope = Depth::from_num(1500);
-            let improving_fac = (Depth::ONE - self.history.improving_rate() / 2).min(Depth::ONE);
-            let base_margin = depth.max(Depth::ONE).saturating_mul(depth_slope);
+            let improving_fac = (Depth::ONE
+                - self.history.improving_rate() * params().rfp_improving_fac())
+            .min(Depth::ONE);
+            let base_margin = depth
+                .max(Depth::ONE)
+                .saturating_mul(params().rfp_depth_slope());
             let margin = Millipawns((base_margin * improving_fac).to_num());
 
-            if !skip_rfp && eval - margin >= beta && depth <= 4 {
+            if !skip_rfp && eval - margin >= beta && depth <= params().rfp_min_depth() {
                 return Ok((eval, best_move));
             }
         }
@@ -566,7 +569,7 @@ impl ThreadData {
         if depth <= 0 && !is_in_check {
             value = self.quiescence_search(alpha, beta);
         } else {
-            if from_tt.is_none_or(|x| x.depth < depth - Depth::from_num(3))
+            if from_tt.is_none_or(|x| x.depth < depth - params().iir_tt_limit())
                 && N::is_pv()
                 && depth >= params().iir_min_depth()
             {
@@ -580,10 +583,10 @@ impl ThreadData {
             // TODO: increase reduction on deeper depths?
             // https://www.chessprogramming.org/Null_Move_Pruning_Test_Results
 
-            let mut r: Depth = params().nmr_offset() + Depth::ONE;
+            let mut r: Depth = params().nmp_offset() + Depth::ONE;
 
-            r += eval::game_phase(board) * params().nmr_piece_slope();
-            r += depth * params().nmr_depth_slope();
+            r += eval::game_phase(board) * params().nmp_piece_slope();
+            r += depth * params().nmp_depth_slope();
 
             let mut is_mate_threat = false;
 
@@ -630,23 +633,28 @@ impl ThreadData {
 
             let depth_clamp_zero = depth.max(Depth::ZERO);
             let depth_squared = depth_clamp_zero * depth_clamp_zero;
-            let see_pruning_noisy_scaling_factor = Depth::from_num(-500);
             let see_pruning_noisy_cutoff_upper = Millipawns(
                 depth_squared
-                    .saturating_mul(see_pruning_noisy_scaling_factor)
+                    .saturating_mul(params().see_pruning_noisy_scaling_factor())
                     .to_num(),
             ) + Millipawns(MAX_HISTORY);
 
-            let see_pruning_quiet_scaling_factor = Depth::from_num(-800);
             let see_pruning_quiet_cutoff =
-                depth_clamp_zero.saturating_mul(see_pruning_quiet_scaling_factor);
+                depth_clamp_zero.saturating_mul(params().see_pruning_quiet_scaling_factor());
 
-            // XXX: currently bugged! depth * depth starts increasing again with negative arguments.
-            let lmp_cutoff: i32 = 5 + 2 * (depth * depth).to_num::<i32>();
+            let lmp_cutoff = (params().lmp_offset() + params().lmp_depth_slope() * depth_squared)
+                .to_num::<i32>();
 
-            let history_pruning_margin =
-                Millipawns((depth_clamp_zero.to_fixed::<fixed::types::I32F32>() * -4000).to_num())
-                    + Millipawns(-500);
+            let history_pruning_depth_scaling = params()
+                .histprun_depth_scale()
+                .to_fixed::<fixed::types::I32F32>();
+
+            let history_pruning_margin = Millipawns(
+                (depth_clamp_zero.to_fixed::<fixed::types::I32F32>()
+                    * history_pruning_depth_scaling)
+                    .to_num::<i32>()
+                    + params().histprun_offset(),
+            );
 
             debug_assert!(history_pruning_margin.0 < 0);
 
@@ -799,22 +807,23 @@ impl ThreadData {
                     && !N::IS_SE
                     && !N::is_all()
                     && is_first_move
-                    && depth >= 8
+                    && depth >= params().se_min_depth()
                     && from_tt.is_some_and(|x| {
                         x.best_move().is_some()
-                            && x.depth >= depth - Depth::from_num(3)
+                            && x.depth >= depth - params().se_tt_offset()
                             && x.value_type() != UpperBound
                     })
                 {
                     let tt_score = from_tt.unwrap().value;
-                    let singular_beta = tt_score - Millipawns((20 * depth).to_num());
+                    let singular_beta =
+                        tt_score - Millipawns((params().se_beta_scaling() * depth).to_num());
 
                     // TODO: we get a interresting second move from this, if it fails high...
                     let singular_value = self
                         .alpha_beta_search::<SENode>(
                             singular_beta,
                             singular_beta + Millipawns(1),
-                            (depth - Depth::ONE) / 2,
+                            (depth - Depth::ONE) * params().se_depth_scaling(),
                             root_dist,
                         )?
                         .0;
@@ -844,7 +853,9 @@ impl ThreadData {
                     };
 
                     let improving_rate = self.history.improving_rate();
-                    reduction += (a * x + b) * (Depth::ONE - improving_rate / 4).max(Depth::ONE);
+                    reduction += (a * x + b)
+                        * (Depth::ONE - improving_rate * params().lmr_improving_rate())
+                            .max(Depth::ONE);
                 }
 
                 if !is_first_move && is_quiet && tt_is_capture {
@@ -852,15 +863,15 @@ impl ThreadData {
                 }
 
                 if is_check && see.0 >= 0 {
-                    extension += Depth::ONE / 2;
+                    extension += params().check_extension();
                 }
 
                 if lmr && see.0 < 0 && !is_check {
-                    reduction += Depth::ONE / 2;
+                    reduction += params().neg_see_reduction();
                 }
 
                 if is_mate_threat {
-                    extension += Depth::ONE / 2;
+                    extension += params().mate_threat_extension();
                 }
 
                 let virtual_depth = depth - reduction + extension;
@@ -874,10 +885,10 @@ impl ThreadData {
                 let is_reduced = next_depth != full_depth;
                 debug_assert_eq!(is_reduced, next_depth < full_depth);
 
-                // Late move pruning
+                // "We have LMP at home" pruning
                 if pruning_allowed
                     && lmr
-                    && virtual_depth < Depth::from_num(-2)
+                    && virtual_depth < params().lmpahp_cutoff_depth()
                     && is_quiet
                     && !is_check
                 {
