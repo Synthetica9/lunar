@@ -830,10 +830,10 @@ impl ThreadData {
                     };
                 };
 
-                let lmr = !is_in_check && !is_first_move;
+                let lmr = !is_first_move;
 
                 if lmr {
-                    let x = depth.int_log2() * Depth::from_num(moveno).int_log2();
+                    let x = depth.max(Depth::ONE).int_log2() * Depth::from_num(moveno).int_log2();
                     let (a, b) = if !is_quiet {
                         (
                             params().lmr_quiescent_slope(),
@@ -855,7 +855,8 @@ impl ThreadData {
                     extension += Depth::ONE / 2;
                 }
 
-                if lmr && see.0 < 0 && !is_check {
+                // XXX: verify !is_in_check
+                if lmr && !is_in_check && see.0 < 0 && !is_check {
                     reduction += Depth::ONE / 2;
                 }
 
@@ -875,11 +876,13 @@ impl ThreadData {
                 debug_assert_eq!(is_reduced, next_depth < full_depth);
 
                 // Late move pruning
+                // XXX: verify !is_in_check
                 if pruning_allowed
                     && lmr
                     && virtual_depth < Depth::from_num(-2)
                     && is_quiet
                     && !is_check
+                    && !is_in_check
                 {
                     continue;
                 }
