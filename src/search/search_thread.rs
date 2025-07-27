@@ -688,7 +688,8 @@ impl ThreadData {
                 let total_nodes_before = self.total_nodes_searched;
 
                 let is_quiet = ply.promotion_piece().is_none_or(|x| x != Piece::Queen)
-                    && !enemy_pieces.get(ply.dst());
+                    && !enemy_pieces.get(ply.dst())
+                    && !ply.is_en_passant();
                 let is_check = self.game().is_check(ply);
 
                 // Do the actual futility prune
