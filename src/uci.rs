@@ -13,8 +13,6 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const NAME: &str = env!("CARGO_PKG_NAME");
 const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
 
-// TODO: https://www.chessprogramming.org/Repetitions#Dedicated_Hash_Table
-
 use crate::search::SearchThreadPool;
 
 pub struct UCIState {
