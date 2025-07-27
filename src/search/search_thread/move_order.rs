@@ -312,7 +312,7 @@ impl MoveGenerator for StandardMoveGenerator {
                     break 'nmp;
                 };
 
-                if sevr <= Millipawns(100) {
+                if sevr <= Millipawns(params().mo_nmp_threat_min_sevr()) {
                     break 'nmp;
                 }
 
@@ -440,7 +440,6 @@ pub fn quiet_move_order(
     // http://www.talkchess.com/forum3/viewtopic.php?t=66312
     // Based on Andrew Grant's idea.
     let game = thread.game();
-    let piece = ply.moved_piece(game);
     // let square_table = &crate::eval::STATIC_PARAMETERS
     //     .piece_square_table
     //     .mg
@@ -464,17 +463,15 @@ pub fn quiet_move_order(
 
     let cont_weights = continuation_weights();
 
-    let mut threat_history_bonus = 0;
     if let Some((threat, threat_severity, threat_piece)) = threatened {
         let threat_sq = threat.dst();
         if src == threat_sq {
             val += params().mo_move_threatened_piece_bonus();
         }
 
-        let severity_scaling_max = Depth::from_num(2500);
-        let severity_scaling = Depth::saturating_from_num(threat_severity.0)
-            .clamp(Depth::ZERO, severity_scaling_max)
-            / severity_scaling_max;
+        let severity_scaling = (Depth::saturating_from_num(threat_severity.0)
+            / params().mo_sevr_scaling_max())
+        .clamp(Depth::ZERO, Depth::ONE);
 
         let base = Depth::from_num(
             thread
@@ -483,7 +480,9 @@ pub fn quiet_move_order(
                 .0,
         );
 
-        threat_history_bonus = base.saturating_mul(severity_scaling * 50).to_num();
+        let threat_history_bonus = base
+            .saturating_mul(severity_scaling * Depth::from_num(params().mo_sevr_move_threat()))
+            .to_num::<i32>();
 
         val += threat_history_bonus;
     }
