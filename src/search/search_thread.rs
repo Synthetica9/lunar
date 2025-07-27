@@ -901,9 +901,6 @@ impl ThreadData {
                 let mut x = Millipawns(i32::MIN + 1234);
 
                 if is_first_move && !N::is_pv() {
-                    // XXX: Highly dubious, but gotta test removal seperately.
-                    best_move = Some(ply);
-
                     x = -self
                         .alpha_beta_search::<N::OtherSuccessors>(
                             -alpha - Millipawns::ONE,
