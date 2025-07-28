@@ -175,8 +175,8 @@ impl History {
             // No false positives possible.
             false
         } else {
-            let mut count = 0;
-            for i in 0..=hm / 2 {
+            let mut count = 1;
+            for i in 1..=hm / 2 {
                 let i = i * 2;
                 let Some(elem) = self.full_peek_n(i as usize) else {
                     break;
@@ -184,7 +184,6 @@ impl History {
 
                 count += (self.game.hash() == elem.hash) as u8;
                 debug_assert!(count <= hash_count);
-                debug_assert!(i != 0 || elem.hash == self.game().hash());
                 if count >= at_least {
                     return true;
                 }
