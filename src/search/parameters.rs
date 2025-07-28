@@ -207,7 +207,7 @@ make_tunable_params! {
     se_min_depth: Depth = 8., 3., 12., 0.4, 0.002;
     se_beta_scaling: Depth = 20., 0., 100., 5., 0.002;
     se_depth_scaling: Depth = 0.5, 0., 1., 0.05, 0.002;
-    se_double_ext_margin: i32 = 100, 0, 500, 10., 0.002;
+    se_double_ext_margin: i32 = 200, 0, 500, 10., 0.002;
 
     lmpahp_cutoff_depth: Depth = -2., -4., 0., 0.2, 0.002;
 }
