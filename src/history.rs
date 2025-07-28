@@ -164,6 +164,11 @@ impl History {
     }
 
     fn repeat_at_least(&self, at_least: u8) -> bool {
+        let hm = self.game().half_move();
+        if hm < 2 * at_least as i16 {
+            return false;
+        }
+
         let hash_count = *self.hash_count(self.game.hash());
         debug_assert!(hash_count > 0);
         if hash_count < at_least {
@@ -171,7 +176,12 @@ impl History {
             false
         } else {
             let mut count = 0;
-            for (i, elem) in self.stack.iter().rev().enumerate() {
+            for i in 0..=hm / 2 {
+                let i = i * 2;
+                let Some(elem) = self.full_peek_n(i as usize) else {
+                    break;
+                };
+
                 count += (self.game.hash() == elem.hash) as u8;
                 debug_assert!(count <= hash_count);
                 debug_assert!(i != 0 || elem.hash == self.game().hash());

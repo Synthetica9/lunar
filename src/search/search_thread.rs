@@ -150,6 +150,7 @@ impl Node for SENode {
 
 pub type Depth = fixed::types::I16F16;
 
+#[repr(align(64))]
 pub struct ThreadData {
     thread_id: usize,
 
