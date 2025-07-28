@@ -873,6 +873,20 @@ impl ThreadData {
 
                 if is_mate_threat {
                     extension += params().mate_threat_extension();
+                } else if let Some((_, sevr, _)) = self.history.threat() {
+                    let min_serious_threat = Millipawns(2000);
+                    let max_serious_threat = Millipawns(5000);
+                    let max_ext = Depth::ONE / 2;
+
+                    let fac =
+                        sevr.clamp(min_serious_threat, max_serious_threat) - min_serious_threat;
+                    let d = max_ext * Depth::from_num(fac.0)
+                        / Depth::from_num(max_serious_threat.0 - min_serious_threat.0);
+
+                    if d != 0 {
+                        println!("{} {d}", self.game().to_fen())
+                    }
+                    extension += d;
                 }
 
                 let virtual_depth = depth - reduction + extension;
