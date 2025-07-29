@@ -11,7 +11,7 @@ resolver = "3"
 members = ["trainer"]
 
 [features]
-default = ["asm", "readline", "intrinsics"]
+default = ["asm", "readline", "intrinsics", "tunable"]
 # Enables custom assembly. Can be disabled on platforms that support it
 # to test "generic" code. All ASM _should_ be feature-gated.
 asm = []
