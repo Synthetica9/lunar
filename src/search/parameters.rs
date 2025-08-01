@@ -166,7 +166,6 @@ make_tunable_params! {
     lmr_quiet_offset: Depth = 0.9780167770388664, 0., 3., 0.15, 0.002;
     lmr_improving_rate: Depth = 0.14389521778518116, 0., 1., 0.05, 0.002;
 
-    check_extension: Depth = 0.38140019929963487, 0., 2., 0.1, 0.002;
     neg_see_reduction: Depth = 0.6297848596161078, 0., 2., 0.1, 0.002;
     mate_threat_extension: Depth = 0.47986308413664136, 0., 2., 0.1, 0.002;
 
