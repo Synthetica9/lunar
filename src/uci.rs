@@ -27,6 +27,7 @@ pub struct UCIState {
     last_info_string: Instant,
     auto_ponder: bool,
     base_instability: f64, // Reapplied on ucinewgame
+    print_interval: u64,
 }
 
 impl UCIState {
@@ -43,6 +44,7 @@ impl UCIState {
             last_info_string: Instant::now(),
             auto_ponder: false,
             base_instability: 1.0,
+            print_interval: 100,
         }
     }
 
@@ -104,10 +106,10 @@ impl UCIState {
         if self.search_thread_pool.is_searching() {
             let search_result = self.search_thread_pool.maybe_end_search(false);
 
-            if force_print
-                || self.last_info_string.elapsed() >= Duration::from_millis(100)
-                || search_result.is_some()
-            {
+            let time_to_print = self.print_interval != 0
+                && self.last_info_string.elapsed() >= Duration::from_millis(self.print_interval);
+
+            if force_print || time_to_print || search_result.is_some() {
                 self.search_thread_pool.update_pv(search_result.is_none());
                 self.send(&self.search_thread_pool.info_string());
                 self.last_info_string = Instant::now();
@@ -537,6 +539,19 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
             name: "OpeningBook",
             typ: &Str { default: "" },
             setter: opening_book_setter,
+        },
+        UCIOption {
+            name: "PrintIntervalMS",
+            typ: &Spin {
+                default: 100,
+                min: 0,
+                max: 2000,
+            },
+            setter: |val, state| {
+                let val = val.parse::<u64>().map_err(|x| x.to_string())?;
+                state.print_interval = val;
+                Ok(())
+            },
         },
     ]
 });
