@@ -867,10 +867,6 @@ impl ThreadData {
                     reduction += params().tt_capture_reduction();
                 }
 
-                if is_check && see.0 >= 0 {
-                    extension += params().check_extension();
-                }
-
                 if lmr && see.0 < 0 && !is_check {
                     reduction += params().neg_see_reduction();
                 }
