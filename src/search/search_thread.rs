@@ -662,6 +662,7 @@ impl ThreadData {
             if N::IS_SE {
                 any_moves_pruned = true;
                 moveno += 1;
+                debug_assert!(from_tt.is_some_and(|x| x.best_move().is_some()));
                 hash_moves_played[0] = from_tt.and_then(|x| x.best_move()).unwrap_or(Ply::NULL);
             }
 
@@ -833,8 +834,10 @@ impl ThreadData {
                     if singular_value + Millipawns(params().se_double_ext_margin()) <= singular_beta
                     {
                         extension += params().se_ext() + params().se_double_ext();
+                        println!("Double extension!");
                     } else if singular_value <= singular_beta {
                         extension += params().se_ext();
+                        println!("Singular extension!");
                     } else if singular_beta >= beta {
                         // Multi-cut
                         return Ok((
