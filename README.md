@@ -17,6 +17,10 @@ It is named that because it was started during a (partial) solar eclipse, and th
 </thead>
 <tbody>
   <tr>
+    <td><a href="https://github.com/Synthetica9/lunar/releases/tag/0.3.0" target="_blank" rel="noopener noreferrer">0.3.0</a></td>
+    <td colspan="3">3400 (est.)</td>
+  </tr>
+  <tr>
     <td><a href="https://github.com/Synthetica9/lunar/releases/tag/0.2.1" target="_blank" rel="noopener noreferrer">0.2.*</a></td>
     <td><a href="https://computerchess.org.uk/ccrl/404/cgi/engine_details.cgi?print=Details&each_game=1&eng=Lunar%200.2.1%2064-bit#Lunar_0_2_1_64-bit" target="_blank" rel="noopener noreferrer">3235</a></td>
     <td><a href="https://computerchess.org.uk/ccrl/4040/cgi/engine_details.cgi?print=Details&each_game=0&eng=Lunar%200.2.1%2064-bit#Lunar_0_2_1_64-bit" target="_blank" rel="noopener noreferrer">3200</a></td>
