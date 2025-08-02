@@ -16,6 +16,7 @@ pub struct StackElement {
     improving_rate: ImprovingRate,
     threat: Option<(Ply, Millipawns, Piece)>,
     skip_move: Ply,
+    is_in_check: bool,
 }
 
 impl StackElement {
@@ -42,7 +43,9 @@ impl History {
             hash_table.assume_init()
         };
 
-        let eval = (!game.is_in_check()).then(|| crate::eval::evaluation(&game));
+        let is_in_check = game.is_in_check();
+
+        let eval = (!is_in_check).then(|| crate::eval::evaluation(&game));
         let stack_base = StackElement {
             undo: None,
             eval,
@@ -50,6 +53,7 @@ impl History {
             improving_rate: ImprovingRate::ZERO,
             threat: None,
             skip_move: Ply::NULL,
+            is_in_check,
         };
 
         let mut res = Self {
@@ -80,7 +84,8 @@ impl History {
         let hash = self.game.hash();
         *self.hash_count_mut(hash) += 1;
 
-        let eval = (!self.game.is_in_check()).then(|| crate::eval::evaluation(&self.game));
+        let is_in_check = self.game.is_in_check();
+        let eval = (!is_in_check).then(|| crate::eval::evaluation(&self.game));
 
         let mut prev = None;
 
@@ -113,6 +118,7 @@ impl History {
             improving_rate,
             threat: None,
             skip_move: Ply::NULL,
+            is_in_check,
         });
     }
 
@@ -274,5 +280,9 @@ impl History {
     pub fn threat(&self) -> Option<(Ply, Millipawns, Piece)> {
         let top = self.full_peek_n(0).unwrap();
         top.threat
+    }
+
+    pub fn is_in_check(&self) -> bool {
+        self.full_peek_n(0).map_or(false, |x| x.is_in_check)
     }
 }

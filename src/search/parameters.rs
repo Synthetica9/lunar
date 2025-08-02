@@ -211,6 +211,8 @@ make_tunable_params! {
     se_double_ext: Depth = 0.9365869398471875, 0., 2., 0.1, 0.002;
 
     lmpahp_cutoff_depth: Depth = -2.0846465770501754, -4., 0., 0.2, 0.002;
+
+    qs_lmp_cutoff: i32 = 2, 1, 6, 0.5, 0.002;
 }
 
 #[cfg(feature = "tunable")]

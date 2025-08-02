@@ -1112,6 +1112,8 @@ impl ThreadData {
         let legality_checker = crate::legality::LegalityChecker::new(self.game());
 
         let mut best_score = stand_pat;
+
+        let mut moveno = 0;
         for (ply, _millipawns) in candidates {
             if !legality_checker.is_legal(ply, self.game()) {
                 continue;
@@ -1119,6 +1121,12 @@ impl ThreadData {
 
             if move_order::static_exchange_evaluation(self.game(), ply) < crate::millipawns::DRAW {
                 continue;
+            }
+
+            moveno += 1;
+
+            if moveno > params().qs_lmp_cutoff() && !self.history.is_in_check() {
+                break;
             }
 
             self.history.push(ply);
