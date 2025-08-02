@@ -2,6 +2,7 @@ use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, UndoPly};
+use crate::transposition_table::{TranspositionEntry, TranspositionTable};
 use crate::zobrist_hash::ZobristHash;
 
 pub const HASH_TABLE_SIZE: usize = 1 << 14;
@@ -15,7 +16,7 @@ pub struct StackElement {
     hash: ZobristHash,
     improving_rate: ImprovingRate,
     threat: Option<(Ply, Millipawns, Piece)>,
-    skip_move: Ply,
+    tt_entry: Option<TranspositionEntry>,
 }
 
 impl StackElement {
@@ -49,7 +50,7 @@ impl History {
             hash,
             improving_rate: ImprovingRate::ZERO,
             threat: None,
-            skip_move: Ply::NULL,
+            tt_entry: None,
         };
 
         let mut res = Self {
@@ -112,7 +113,7 @@ impl History {
             hash,
             improving_rate,
             threat: None,
-            skip_move: Ply::NULL,
+            tt_entry: None,
         });
     }
 
@@ -141,10 +142,6 @@ impl History {
             .last()
             .and_then(|top| top.undo)
             .is_some_and(|x| x.ply.is_null())
-    }
-
-    pub fn skip(&mut self, skip: Ply) {
-        self.stack.last_mut().unwrap().skip_move = skip;
     }
 
     fn hash_index(&self, hash: ZobristHash) -> usize {
@@ -274,5 +271,16 @@ impl History {
     pub fn threat(&self) -> Option<(Ply, Millipawns, Piece)> {
         let top = self.full_peek_n(0).unwrap();
         top.threat
+    }
+
+    pub fn tt_entry(&mut self, tt: &TranspositionTable) -> Option<TranspositionEntry> {
+        let stack_top = self.full_peek_n_mut(0).unwrap();
+
+        if stack_top.tt_entry.is_some() {
+            return stack_top.tt_entry;
+        }
+
+        stack_top.tt_entry = tt.get(stack_top.hash);
+        stack_top.tt_entry
     }
 }

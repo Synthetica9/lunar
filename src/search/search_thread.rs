@@ -509,7 +509,7 @@ impl ThreadData {
             false
         };
 
-        let from_tt = self.transposition_table.get(self.game().hash());
+        let from_tt = self.history.tt_entry(&self.transposition_table);
 
         if let Some(tte) = from_tt {
             if !N::IS_SE && depth <= tte.depth && !self.history.may_be_repetition() {
