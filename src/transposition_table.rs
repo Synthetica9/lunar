@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::mem::MaybeUninit;
 use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
 
 use not_empty::NonEmptySlice;
@@ -154,29 +155,19 @@ impl TranspositionTable {
         let needed_entries = TranspositionTable::needed_entries(bytes);
         let needed_lines = needed_entries / ITEMS_PER_BUCKET;
 
-        let mut table = {
-            #[cfg(not(unix))]
-            let res = Vec::with_capacity(needed_lines);
-
-            #[cfg(unix)]
-            let res = Vec::with_capacity_in(needed_lines, HugePagesAlloc {});
-
-            res
-        };
-
         // TODO: should each thread do their part of this?
-        while table.len() < needed_lines {
-            let line = TranspositionLine::empty();
-            table.push(line);
-        }
+        #[cfg(unix)]
+        let boxed: Box<[MaybeUninit<TranspositionLine>], HugePagesAlloc> =
+            Box::new_uninit_slice_in(needed_lines, HugePagesAlloc);
 
-        let boxed = table.into_boxed_slice();
+        #[cfg(not(unix))]
+        let boxed: Box<[MaybeUninit<TranspositionLine>]> = Box::new_uninit_slice(needed_lines);
 
         assert!(!boxed.is_empty(), "tt was found empty!");
         assert!(boxed.len().is_power_of_two(), "must be power of two");
 
         // TODO: can this be done better?
-        // SAFETY: Box<[T], A> and Box<NonEmptySlice<T>, A> have the same memory layout
+        // SAFETY: Box<[MaybeUninit<T>], A> and Box<NonEmptySlice<T>, A> have the same memory layout
         let boxed_nonempty = unsafe { std::mem::transmute(boxed) };
 
         let mut res = Self {
