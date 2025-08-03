@@ -863,6 +863,11 @@ impl ThreadData {
                             .max(Depth::ONE);
                 }
 
+                if !is_first_move && history_score.0 <= 0 && is_quiet {
+                    reduction += Depth::saturating_from_num(-history_score.0)
+                        / params().lmr_quiet_history_factor();
+                }
+
                 if !is_first_move && is_quiet && tt_is_capture {
                     reduction += params().tt_capture_reduction();
                 }
