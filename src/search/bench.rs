@@ -122,3 +122,12 @@ pub fn bench() -> u64 {
 
     value_read.load(Ordering::SeqCst)
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn run_bench() {
+        // This should at least not crash:
+        super::bench();
+    }
+}
