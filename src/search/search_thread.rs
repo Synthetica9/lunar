@@ -591,12 +591,17 @@ impl ThreadData {
 
             let mut is_mate_threat = false;
 
+            let previous_fail_low = from_tt.is_some_and(|x| {
+                x.depth >= depth - r && x.value_type() != LowerBound && x.value >= beta
+            });
+
             if N::is_cut()
                 && !N::IS_SE
                 && !side_to_move_only_kp
                 && depth >= r
                 && !is_in_check
                 && !self.history.last_is_null()
+                && !previous_fail_low
             {
                 self.history.push(Ply::NULL);
                 let null_res = self.alpha_beta_search::<CutNode>(
