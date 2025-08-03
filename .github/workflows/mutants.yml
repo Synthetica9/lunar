@@ -1,0 +1,18 @@
+on:
+  workflow_dispatch:
+
+jobs:
+  ob:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Run mutants
+      run: |
+        cargo install cargo-mutants
+        # Run for 5h, 6h timeout on a pipeline
+        timeout 21600 cargo mutants
+    - name: Upload mutants folder
+      uses: actions/upload-artifact@v4
+      with:
+        path: 'mutants.out'
