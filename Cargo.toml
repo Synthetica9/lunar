@@ -52,6 +52,7 @@ rand = { version = "0.8", features = [
   "small_rng",
   "alloc",
 ], default-features = false }
+arrayvec = { version = "0.7" }
 
 [build-dependencies]
 rand = { version = "0.8", features = ["small_rng"], default-features = false }

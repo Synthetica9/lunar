@@ -5,8 +5,11 @@ use crate::ply::{Ply, UndoPly};
 use crate::zobrist_hash::ZobristHash;
 
 pub const HASH_TABLE_SIZE: usize = 1 << 14;
+use arrayvec::ArrayVec;
 use fixed::traits::Fixed;
 use fixed::types::I16F16 as ImprovingRate;
+
+pub const MAX_DEPTH: usize = 256;
 
 #[derive(Clone, Debug)]
 pub struct StackElement {
@@ -28,7 +31,7 @@ impl StackElement {
 pub struct History {
     // TODO: stack or heap allocation?
     game: Game,
-    stack: Vec<StackElement>,
+    stack: ArrayVec<StackElement, MAX_DEPTH>,
     hash_table: Box<[u8; HASH_TABLE_SIZE]>,
 }
 
@@ -52,9 +55,12 @@ impl History {
             skip_move: Ply::NULL,
         };
 
+        let mut stack = ArrayVec::new();
+        stack.push(stack_base);
+
         let mut res = Self {
             game,
-            stack: vec![stack_base],
+            stack,
             hash_table,
         };
         *res.hash_count_mut(hash) = 1;
