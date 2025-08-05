@@ -96,14 +96,28 @@ impl Game {
         // TODO: pawn hash
         self.hash = ZobristHash::from_game(self, false);
         self.pawn_hash = ZobristHash::from_game(self, true);
+    }
 
-        let net = &crate::eval::NNUE;
-        for (color, piece, square) in self.board().to_piece_list() {
-            let white_idx = to_feature_idx(piece, color, square);
-            self.white_accum.add_feature(white_idx, net);
-            let black_idx = to_feature_idx(piece, color.other(), square.flip_vert());
-            self.black_accum.add_feature(black_idx, net);
+    pub fn recalc_accum(&mut self, side: Color) {
+        use crate::eval::NNUE;
+
+        let mut accum = crate::eval::Accumulator::new();
+
+        for (mut color, piece, mut square) in self.board().to_piece_list() {
+            if side == Color::Black {
+                square = square.flip_vert();
+                color = color.other();
+            }
+
+            let feat_idx = to_feature_idx(piece, color, square);
+
+            accum.add_feature(feat_idx, &NNUE);
         }
+
+        *match side {
+            Color::White => &mut self.white_accum,
+            Color::Black => &mut self.black_accum,
+        } = accum;
     }
 
     pub fn check_valid(&self) -> Result<(), String> {
@@ -242,6 +256,8 @@ impl Game {
         };
 
         res.recalc_hash();
+        res.recalc_accum(Color::White);
+        res.recalc_accum(Color::Black);
 
         res.check_valid()?;
         Ok(res)
@@ -1146,6 +1162,9 @@ impl quickcheck::Arbitrary for Game {
             .chain(for_en_passant)
             .flat_map(|mut game| {
                 game.recalc_hash();
+                game.recalc_accum(Color::White);
+                game.recalc_accum(Color::Black);
+
                 game.check_valid().is_ok().then_some(game)
             });
         // TODO: drop rights that are present (en passant, castle, ...?)
