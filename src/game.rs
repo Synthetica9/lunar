@@ -34,6 +34,8 @@ pub struct Game {
 
     white_accum: Accumulator,
     black_accum: Accumulator,
+    white_king: Square,
+    black_king: Square,
 }
 
 impl std::fmt::Debug for Game {
@@ -83,6 +85,13 @@ impl Game {
 
     pub fn pawn_hash(&self) -> ZobristHash {
         self.pawn_hash
+    }
+
+    pub fn king_square(&self, side: Color) -> Square {
+        match side {
+            Color::White => self.white_king,
+            Color::Black => self.black_king,
+        }
     }
 
     pub fn accum(&self, side: Color) -> &Accumulator {
@@ -188,6 +197,16 @@ impl Game {
             }
         }
 
+        for color in Color::iter() {
+            let stored = self.king_square(color);
+            let calc = self.board().king_square(color);
+            if stored != calc {
+                return Err(format!(
+                    "King squares disagree. Stored: {stored:?}. Calculated: {calc:?}"
+                ));
+            }
+        }
+
         if let Some(square) = self.en_passant() {
             let other = self.to_move().other();
             let pawn_present = self
@@ -241,6 +260,9 @@ impl Game {
 
         let hash = ZobristHash::new();
         let pawn_hash = ZobristHash::new();
+        let white_king = board.king_square(Color::White);
+        let black_king = board.king_square(Color::Black);
+
         let mut res = Game {
             board,
             to_move,
@@ -253,6 +275,9 @@ impl Game {
 
             white_accum: Accumulator::new(),
             black_accum: Accumulator::new(),
+
+            white_king,
+            black_king,
         };
 
         res.recalc_hash();
@@ -1030,6 +1055,11 @@ impl Game {
 
     pub fn perft(&self, depth: u8, print: bool) -> u64 {
         fn inner(game: &mut Game, depth: u8, print: bool) -> u64 {
+            debug_assert!(
+                game.check_valid().is_ok(),
+                "Got {}",
+                game.check_valid().unwrap_err()
+            );
             if depth == 0 {
                 return 1;
             }
@@ -1089,6 +1119,13 @@ impl ApplyPly for Game {
         if exists_after {
             self.white_accum.add_feature(idx_white, net);
             self.black_accum.add_feature(idx_black, net);
+
+            if piece == Piece::King {
+                match color {
+                    Color::White => self.white_king = square,
+                    Color::Black => self.black_king = square,
+                }
+            }
         } else {
             self.white_accum.remove_feature(idx_white, net);
             self.black_accum.remove_feature(idx_black, net);
