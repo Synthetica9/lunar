@@ -814,8 +814,7 @@ impl Game {
 
     pub fn check_count(&self) -> u8 {
         // TODO: split out to function "is_attacked" for board
-        let king = self.board.get(self.to_move, Piece::King);
-        let king_square = king.first_occupied_or_a1();
+        let king_square = self.king_square(self.to_move);
         let attackers = self
             .board
             .squares_attacking(self.to_move.other(), king_square);
@@ -832,7 +831,7 @@ impl Game {
     }
 
     pub fn is_check(&self, ply: Ply) -> bool {
-        let enemy_king = self.board().king_square(self.to_move().other());
+        let enemy_king = self.king_square(self.to_move().other());
         let dst = ply.dst();
         let src = ply.src();
         let Some(moved_piece) = self.board().occupant_piece(src) else {

@@ -15,7 +15,7 @@ pub struct LegalityChecker {
 impl LegalityChecker {
     pub fn new(game: &Game) -> LegalityChecker {
         let board = game.board();
-        let king_square = board.king_square(game.to_move());
+        let king_square = game.king_square(game.to_move());
         let king = Bitboard::from_square(king_square);
 
         let king_attackers = board.squares_attacking(game.to_move().other(), king_square);
