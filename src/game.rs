@@ -1,3 +1,5 @@
+use std::fmt::DebugSet;
+
 use smallvec::SmallVec;
 
 use crate::basic_enums::{CastleDirection, Color};
@@ -11,7 +13,7 @@ use crate::legality::LegalityChecker;
 use crate::small_finite_enum::SmallFiniteEnum;
 
 use crate::piece::Piece;
-use crate::ply::{ApplyPly, Ply, SpecialFlag, UndoPly, _combination_moves};
+use crate::ply::{ApplyPly, GameInfoForPly, Ply, SpecialFlag, UndoPly, _combination_moves};
 use crate::plyset::PlySet;
 use crate::search::static_exchange_evaluation;
 use crate::square::Square;
@@ -112,10 +114,16 @@ impl Game {
 
         let mut accum = crate::eval::Accumulator::new();
 
+        let mirror = !self.king_square(side).is_queenside();
+
         for (mut color, piece, mut square) in self.board().to_piece_list() {
             if side == Color::Black {
                 square = square.flip_vert();
                 color = color.other();
+            }
+
+            if mirror {
+                square = square.flip_hor();
             }
 
             let feat_idx = to_feature_idx(piece, color, square);
@@ -326,6 +334,10 @@ impl Game {
 
         debug_assert!(self.board.is_valid(), "board got hecked. {ply:?}");
 
+        if info.our_piece == Piece::King && ply.dst().is_queenside() != ply.src().is_queenside() {
+            self.recalc_accum(self.to_move.other());
+        }
+
         UndoPly {
             info,
             ply,
@@ -339,6 +351,13 @@ impl Game {
         self.half_move = undo_info.half_move_clock_before;
 
         self._apply_ply_with_info(undo_info.info, undo_info.ply);
+
+        if undo_info.info.our_piece == Piece::King
+            && undo_info.ply.dst().is_queenside() != undo_info.ply.src().is_queenside()
+        {
+            self.recalc_accum(self.to_move());
+        }
+
         debug_assert!(self.board.is_not_corrupt());
     }
 
@@ -1054,6 +1073,8 @@ impl Game {
 
     pub fn perft(&self, depth: u8, print: bool) -> u64 {
         fn inner(game: &mut Game, depth: u8, print: bool) -> u64 {
+            let acc_before = game.accum(Color::Black).clone();
+
             debug_assert!(
                 game.check_valid().is_ok(),
                 "Got {}",
@@ -1076,6 +1097,11 @@ impl Game {
                 }
                 game.undo_ply(&undo);
                 count += subres;
+                let acc_after = game.accum(Color::Black).clone();
+                debug_assert_eq!(acc_after, acc_before);
+                game.recalc_accum(Color::Black);
+                let acc_after_recalc = game.accum(Color::Black).clone();
+                debug_assert_eq!(acc_after_recalc, acc_before);
             }
             if print {
                 println!("{count} nodes at depth {depth}");
@@ -1112,8 +1138,25 @@ impl ApplyPly for Game {
         }
 
         let exists_after = self.board.get_color(color).get(square);
-        let idx_white = to_feature_idx(piece, color, square);
-        let idx_black = to_feature_idx(piece, color.other(), square.flip_vert());
+        let idx_white = to_feature_idx(
+            piece,
+            color,
+            if !self.white_king.is_queenside() {
+                square.flip_hor()
+            } else {
+                square
+            },
+        );
+        let idx_black = to_feature_idx(
+            piece,
+            color.other(),
+            if !self.black_king.is_queenside() {
+                square.flip_hor()
+            } else {
+                square
+            }
+            .flip_vert(),
+        );
         let net = &crate::eval::NNUE;
         if exists_after {
             self.white_accum.add_feature(idx_white, net);

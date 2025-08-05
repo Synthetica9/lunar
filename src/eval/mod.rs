@@ -141,7 +141,7 @@ impl Network {
 
 /// A column of the feature-weights matrix.
 /// Note the `align(64)`.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(C, align(64))]
 pub struct Accumulator {
     vals: [i16; HIDDEN_SIZE],

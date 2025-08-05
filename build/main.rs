@@ -13,7 +13,7 @@ pub fn main() -> std::io::Result<()> {
 
     let evalfile = match std::env::var("EVALFILE") {
         Ok(name) => name,
-        Err(_) => "./nets/screlu512.nnue".to_owned(),
+        Err(_) => "./nets/screlu512_hm.nnue".to_owned(),
     };
 
     let evalfile = std::path::PathBuf::from(evalfile);
