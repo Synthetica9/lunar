@@ -206,9 +206,11 @@ make_tunable_params! {
     se_min_depth: Depth = 6.539047903924174, 3., 12., 0.4, 0.002;
     se_beta_scaling: Depth = 21.20828202312381, 0., 100., 5., 0.002;
     se_depth_scaling: Depth = 0.4974783172493165, 0., 1., 0.05, 0.002;
-    se_double_ext_margin: i32 = 202, 0, 500, 10., 0.002;
     se_ext: Depth = 0.9289110668077334, 0., 2., 0.1, 0.002;
+    se_double_ext_margin: i32 = 202, 0, 500, 10., 0.002;
     se_double_ext: Depth = 0.9365869398471875, 0., 2., 0.1, 0.002;
+    se_triple_ext_margin: i32 = 1000, 200, 2000, 100., 0.002;
+    se_triple_ext: Depth = 1., 0., 2., 0.1, 0.002;
 
     lmpahp_cutoff_depth: Depth = -2.0846465770501754, -4., 0., 0.2, 0.002;
 }

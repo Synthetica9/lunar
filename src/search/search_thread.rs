@@ -835,6 +835,11 @@ impl ThreadData {
                         extension += params().se_double_ext();
                     }
 
+                    if singular_value + Millipawns(params().se_triple_ext_margin()) <= singular_beta
+                    {
+                        extension += params().se_triple_ext();
+                    }
+
                     if singular_value <= singular_beta {
                         extension += params().se_ext();
                     } else if singular_beta >= beta {
