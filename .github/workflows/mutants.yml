@@ -7,6 +7,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+      with:
+          lfs: true
     - name: Run mutants
       run: |
         cargo install cargo-mutants
