@@ -832,8 +832,10 @@ impl ThreadData {
 
                     if singular_value + Millipawns(params().se_double_ext_margin()) <= singular_beta
                     {
-                        extension += params().se_ext() + params().se_double_ext();
-                    } else if singular_value <= singular_beta {
+                        extension += params().se_double_ext();
+                    }
+
+                    if singular_value <= singular_beta {
                         extension += params().se_ext();
                     } else if singular_beta >= beta {
                         // Multi-cut
