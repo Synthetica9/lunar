@@ -199,6 +199,7 @@ make_tunable_params! {
 
     lmp_depth_slope: Depth = 1.72957188515299, 0., 5., 0.25, 0.002;
     lmp_offset: Depth = 3.339359102199104, 0., 15., 1., 0.002;
+    lmp_improving_rate: Depth = 0.125, 0., 0.5, 0.025, 0.002;
 
     histprun_depth_scale: Depth = -3456.2560120496832, -10000., 0., 500., 0.002;
     histprun_offset: i32 = -356, -2000, 0, 100.0, 0.002;

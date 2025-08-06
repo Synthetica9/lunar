@@ -648,7 +648,18 @@ impl ThreadData {
             let see_pruning_quiet_cutoff =
                 depth_clamp_zero.saturating_mul(params().see_pruning_quiet_scaling_factor());
 
-            let lmp_cutoff = (params().lmp_offset() + params().lmp_depth_slope() * depth_squared)
+            let improving_rate = self.history.improving_rate();
+
+            // Prune more late quiet moves when not improving
+            let lmp_cutoff_improving_fac =
+                Depth::ONE + improving_rate.min(Depth::ZERO) * params().lmp_improving_rate();
+
+            debug_assert!(lmp_cutoff_improving_fac <= 1);
+            debug_assert!(lmp_cutoff_improving_fac >= Depth::ONE - params().lmp_improving_rate());
+            debug_assert!(improving_rate < 0 || lmp_cutoff_improving_fac == 1);
+
+            let lmp_cutoff = (params().lmp_offset()
+                + params().lmp_depth_slope() * depth_squared * lmp_cutoff_improving_fac)
                 .to_num::<i32>();
 
             let history_pruning_depth_scaling = params()
@@ -869,7 +880,6 @@ impl ThreadData {
                         (params().lmr_quiet_slope(), params().lmr_quiet_offset())
                     };
 
-                    let improving_rate = self.history.improving_rate();
                     reduction += (a * x + b)
                         * (Depth::ONE - improving_rate * params().lmr_improving_rate())
                             .max(Depth::ONE);
