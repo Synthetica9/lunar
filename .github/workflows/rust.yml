@@ -16,6 +16,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          lfs: true
       - name: Setup Hugepages
         run: |
           cat /sys/kernel/mm/transparent_hugepage/enabled
@@ -55,6 +57,8 @@ jobs:
     runs-on: '${{matrix.os.platform}}'
     steps:
       - uses: actions/checkout@v3
+        with:
+          lfs: true
       - name: Build (PGO) executable
         run: |
           cargo install cargo-pgo

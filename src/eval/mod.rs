@@ -16,12 +16,7 @@ const SCALE: i32 = 4000;
 const QA: i16 = 255;
 const QB: i16 = 64;
 
-/*
-This is how you would load the network in rust.
-Commented out because it will error if it can't find the file.
-*/
-pub static NNUE: Network =
-    unsafe { std::mem::transmute(*include_bytes!("../../nets/screlu512.nnue")) };
+pub static NNUE: Network = unsafe { std::mem::transmute(*include_bytes!(env!("NETWORK"))) };
 
 pub fn evaluation(game: &Game) -> Millipawns {
     let (us, them) = match game.to_move() {
@@ -146,7 +141,7 @@ impl Network {
 
 /// A column of the feature-weights matrix.
 /// Note the `align(64)`.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(C, align(64))]
 pub struct Accumulator {
     vals: [i16; HIDDEN_SIZE],

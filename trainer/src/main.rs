@@ -1,5 +1,5 @@
 use bullet_lib::{
-    game::inputs::Chess768,
+    game::inputs::ChessBucketsMirrored,
     nn::optimiser::AdamW,
     trainer::{
         save::SavedFormat,
@@ -22,10 +22,12 @@ fn main() {
 
     let scale = 400;
 
+    let buckets = ChessBucketsMirrored::new([0; 32]);
+
     let mut trainer = ValueTrainerBuilder::default()
         .dual_perspective()
         .optimiser(AdamW)
-        .inputs(Chess768)
+        .inputs(buckets)
         .save_format(&[
             SavedFormat::id("l0w").quantise::<i16>(qa),
             SavedFormat::id("l0b").quantise::<i16>(qa),
@@ -46,7 +48,7 @@ fn main() {
         });
 
     let schedule = TrainingSchedule {
-        net_id: "screlu512".to_string(),
+        net_id: "screlu512_hm".to_string(),
         eval_scale: scale as f32,
         steps: TrainingSteps {
             batch_size: 16_384,

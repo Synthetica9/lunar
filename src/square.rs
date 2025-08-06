@@ -207,6 +207,16 @@ impl Square {
     pub const fn flip_vert(&self) -> Square {
         Square::from_u8(self.as_u8() ^ 56)
     }
+
+    #[must_use]
+    pub const fn flip_hor(&self) -> Square {
+        Square::from_u8(self.as_u8() ^ 7)
+    }
+
+    #[must_use]
+    pub fn is_queenside(self) -> bool {
+        crate::bitboard::QUEENSIDE.get(self)
+    }
 }
 
 #[test]

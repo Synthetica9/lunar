@@ -1,3 +1,5 @@
+use std::fmt::DebugSet;
+
 use smallvec::SmallVec;
 
 use crate::basic_enums::{CastleDirection, Color};
@@ -11,7 +13,7 @@ use crate::legality::LegalityChecker;
 use crate::small_finite_enum::SmallFiniteEnum;
 
 use crate::piece::Piece;
-use crate::ply::{ApplyPly, Ply, SpecialFlag, UndoPly, _combination_moves};
+use crate::ply::{ApplyPly, GameInfoForPly, Ply, SpecialFlag, UndoPly, _combination_moves};
 use crate::plyset::PlySet;
 use crate::search::static_exchange_evaluation;
 use crate::square::Square;
@@ -34,6 +36,8 @@ pub struct Game {
 
     white_accum: Accumulator,
     black_accum: Accumulator,
+    white_king: Square,
+    black_king: Square,
 }
 
 impl std::fmt::Debug for Game {
@@ -85,6 +89,13 @@ impl Game {
         self.pawn_hash
     }
 
+    pub fn king_square(&self, side: Color) -> Square {
+        match side {
+            Color::White => self.white_king,
+            Color::Black => self.black_king,
+        }
+    }
+
     pub fn accum(&self, side: Color) -> &Accumulator {
         match side {
             Color::White => &self.white_accum,
@@ -96,14 +107,34 @@ impl Game {
         // TODO: pawn hash
         self.hash = ZobristHash::from_game(self, false);
         self.pawn_hash = ZobristHash::from_game(self, true);
+    }
 
-        let net = &crate::eval::NNUE;
-        for (color, piece, square) in self.board().to_piece_list() {
-            let white_idx = to_feature_idx(piece, color, square);
-            self.white_accum.add_feature(white_idx, net);
-            let black_idx = to_feature_idx(piece, color.other(), square.flip_vert());
-            self.black_accum.add_feature(black_idx, net);
+    pub fn recalc_accum(&mut self, side: Color) {
+        use crate::eval::NNUE;
+
+        let mut accum = crate::eval::Accumulator::new();
+
+        let mirror = !self.king_square(side).is_queenside();
+
+        for (mut color, piece, mut square) in self.board().to_piece_list() {
+            if side == Color::Black {
+                square = square.flip_vert();
+                color = color.other();
+            }
+
+            if mirror {
+                square = square.flip_hor();
+            }
+
+            let feat_idx = to_feature_idx(piece, color, square);
+
+            accum.add_feature(feat_idx, &NNUE);
         }
+
+        *match side {
+            Color::White => &mut self.white_accum,
+            Color::Black => &mut self.black_accum,
+        } = accum;
     }
 
     pub fn check_valid(&self) -> Result<(), String> {
@@ -174,6 +205,16 @@ impl Game {
             }
         }
 
+        for color in Color::iter() {
+            let stored = self.king_square(color);
+            let calc = self.board().king_square(color);
+            if stored != calc {
+                return Err(format!(
+                    "King squares disagree. Stored: {stored:?}. Calculated: {calc:?}"
+                ));
+            }
+        }
+
         if let Some(square) = self.en_passant() {
             let other = self.to_move().other();
             let pawn_present = self
@@ -227,6 +268,9 @@ impl Game {
 
         let hash = ZobristHash::new();
         let pawn_hash = ZobristHash::new();
+        let white_king = board.king_square(Color::White);
+        let black_king = board.king_square(Color::Black);
+
         let mut res = Game {
             board,
             to_move,
@@ -239,9 +283,14 @@ impl Game {
 
             white_accum: Accumulator::new(),
             black_accum: Accumulator::new(),
+
+            white_king,
+            black_king,
         };
 
         res.recalc_hash();
+        res.recalc_accum(Color::White);
+        res.recalc_accum(Color::Black);
 
         res.check_valid()?;
         Ok(res)
@@ -285,6 +334,10 @@ impl Game {
 
         debug_assert!(self.board.is_valid(), "board got hecked. {ply:?}");
 
+        if info.our_piece == Piece::King && ply.dst().is_queenside() != ply.src().is_queenside() {
+            self.recalc_accum(self.to_move.other());
+        }
+
         UndoPly {
             info,
             ply,
@@ -298,6 +351,13 @@ impl Game {
         self.half_move = undo_info.half_move_clock_before;
 
         self._apply_ply_with_info(undo_info.info, undo_info.ply);
+
+        if undo_info.info.our_piece == Piece::King
+            && undo_info.ply.dst().is_queenside() != undo_info.ply.src().is_queenside()
+        {
+            self.recalc_accum(self.to_move());
+        }
+
         debug_assert!(self.board.is_not_corrupt());
     }
 
@@ -773,8 +833,7 @@ impl Game {
 
     pub fn check_count(&self) -> u8 {
         // TODO: split out to function "is_attacked" for board
-        let king = self.board.get(self.to_move, Piece::King);
-        let king_square = king.first_occupied_or_a1();
+        let king_square = self.king_square(self.to_move);
         let attackers = self
             .board
             .squares_attacking(self.to_move.other(), king_square);
@@ -791,7 +850,7 @@ impl Game {
     }
 
     pub fn is_check(&self, ply: Ply) -> bool {
-        let enemy_king = self.board().king_square(self.to_move().other());
+        let enemy_king = self.king_square(self.to_move().other());
         let dst = ply.dst();
         let src = ply.src();
         let Some(moved_piece) = self.board().occupant_piece(src) else {
@@ -1014,6 +1073,13 @@ impl Game {
 
     pub fn perft(&self, depth: u8, print: bool) -> u64 {
         fn inner(game: &mut Game, depth: u8, print: bool) -> u64 {
+            let acc_before = game.accum(Color::Black).clone();
+
+            debug_assert!(
+                game.check_valid().is_ok(),
+                "Got {}",
+                game.check_valid().unwrap_err()
+            );
             if depth == 0 {
                 return 1;
             }
@@ -1031,6 +1097,11 @@ impl Game {
                 }
                 game.undo_ply(&undo);
                 count += subres;
+                let acc_after = game.accum(Color::Black).clone();
+                debug_assert_eq!(acc_after, acc_before);
+                game.recalc_accum(Color::Black);
+                let acc_after_recalc = game.accum(Color::Black).clone();
+                debug_assert_eq!(acc_after_recalc, acc_before);
             }
             if print {
                 println!("{count} nodes at depth {depth}");
@@ -1067,12 +1138,36 @@ impl ApplyPly for Game {
         }
 
         let exists_after = self.board.get_color(color).get(square);
-        let idx_white = to_feature_idx(piece, color, square);
-        let idx_black = to_feature_idx(piece, color.other(), square.flip_vert());
+        let idx_white = to_feature_idx(
+            piece,
+            color,
+            if !self.white_king.is_queenside() {
+                square.flip_hor()
+            } else {
+                square
+            },
+        );
+        let idx_black = to_feature_idx(
+            piece,
+            color.other(),
+            if !self.black_king.is_queenside() {
+                square.flip_hor()
+            } else {
+                square
+            }
+            .flip_vert(),
+        );
         let net = &crate::eval::NNUE;
         if exists_after {
             self.white_accum.add_feature(idx_white, net);
             self.black_accum.add_feature(idx_black, net);
+
+            if piece == Piece::King {
+                match color {
+                    Color::White => self.white_king = square,
+                    Color::Black => self.black_king = square,
+                }
+            }
         } else {
             self.white_accum.remove_feature(idx_white, net);
             self.black_accum.remove_feature(idx_black, net);
@@ -1146,6 +1241,9 @@ impl quickcheck::Arbitrary for Game {
             .chain(for_en_passant)
             .flat_map(|mut game| {
                 game.recalc_hash();
+                game.recalc_accum(Color::White);
+                game.recalc_accum(Color::Black);
+
                 game.check_valid().is_ok().then_some(game)
             });
         // TODO: drop rights that are present (en passant, castle, ...?)
