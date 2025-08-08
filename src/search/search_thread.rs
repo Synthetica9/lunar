@@ -849,7 +849,7 @@ impl ThreadData {
                 let lmr = !is_in_check && !is_first_move;
 
                 if lmr {
-                    let x = depth.int_log2() * Depth::from_num(moveno).int_log2();
+                    let x = depth.max(Depth::ONE).int_log2() * Depth::from_num(moveno).int_log2();
                     let (a, b) = if !is_quiet {
                         (
                             params().lmr_quiescent_slope(),
@@ -877,13 +877,15 @@ impl ThreadData {
                     extension += params().mate_threat_extension();
                 }
 
+                debug_assert!(reduction >= 1, "{reduction} < 1");
+                debug_assert!(extension >= 0, "{extension} < 0");
                 let virtual_depth = depth - reduction + extension;
                 let next_depth = if depth <= 3 {
                     depth - Depth::ONE
                 } else {
                     virtual_depth
                 };
-                let full_depth = next_depth.max(depth - Depth::ONE);
+                let full_depth = depth - Depth::ONE + extension;
 
                 let is_reduced = next_depth != full_depth;
                 debug_assert_eq!(is_reduced, next_depth < full_depth);
