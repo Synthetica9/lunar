@@ -567,6 +567,9 @@ impl ThreadData {
 
         let mut value = Millipawns(i32::MIN + 12345);
 
+        #[cfg(debug_assertions)]
+        let mut moves_generated = Vec::new();
+
         if depth <= 0 && !is_in_check {
             value = self.quiescence_search(alpha, beta);
         } else {
@@ -757,6 +760,16 @@ impl ThreadData {
                     // At this point the moves need to be okay:
                     debug_assert!(game.is_pseudo_legal(ply));
                     debug_assert!(legality_checker.is_legal(ply, game));
+
+                    #[cfg(debug_assertions)]
+                    {
+                        debug_assert!(
+                            !moves_generated.contains(&ply),
+                            "{ply:?} was already played (previously: {moves_generated:?}) {}",
+                            self.game().to_fen(),
+                        );
+                        moves_generated.push(ply);
+                    }
 
                     if hash_like {
                         if let Some(x) = hash_moves_played.iter_mut().find(|x| x.is_null()) {
@@ -1048,6 +1061,20 @@ impl ThreadData {
                     DRAW
                 };
                 return Ok((score, None));
+            }
+
+            #[cfg(debug_assertions)]
+            if !any_moves_pruned && value < beta {
+                let mut legal_moves = self.game().legal_moves();
+                legal_moves.sort();
+                moves_generated.sort();
+
+                debug_assert_eq!(
+                    legal_moves,
+                    moves_generated,
+                    "Set of legal moves generated is off... {}",
+                    self.game().to_fen(),
+                )
             }
         }
 

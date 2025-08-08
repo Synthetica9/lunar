@@ -371,8 +371,15 @@ impl MoveGenerator for StandardMoveGenerator {
             GenKillerMoves => {
                 self.phase = GenQuietMoves;
 
+                let opponents = thread
+                    .game()
+                    .board()
+                    .get_color(thread.game().to_move().other());
+
                 if let Some(ply) = thread.countermove_cell().and_then(|x| x.get().wrap_null()) {
-                    self.queue.push(KillerMove { ply });
+                    if !opponents.get(ply.dst()) {
+                        self.queue.push(KillerMove { ply });
+                    }
                 }
                 // No need to sort.
             }
