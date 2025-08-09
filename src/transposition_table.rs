@@ -80,7 +80,7 @@ pub enum TranspositionEntryType {
     UpperBound,
 }
 
-const AGE_BITS: usize = 6;
+const AGE_BITS: usize = 5;
 const MAX_AGE: u8 = (1 << AGE_BITS) - 1;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -131,11 +131,16 @@ impl TranspositionEntry {
         self.flags >> (8 - AGE_BITS)
     }
 
+    pub fn singular(&self) -> bool {
+        (self.flags & 0b100) != 0
+    }
+
     pub fn new(
         depth: u8,
         best_move: Option<Ply>,
         value: Millipawns,
         value_type: TranspositionEntryType,
+        singular: bool,
         age: u8,
     ) -> TranspositionEntry {
         debug_assert!(age <= MAX_AGE);
@@ -143,7 +148,7 @@ impl TranspositionEntry {
             depth,
             value,
             best_move: Ply::unwrap_null(best_move),
-            flags: age << (8 - AGE_BITS) | value_type as u8,
+            flags: age << (8 - AGE_BITS) | (singular as u8) << 2 | value_type as u8,
         }
     }
 }
@@ -331,7 +336,7 @@ impl TranspositionTable {
 
         // h000 0000 0000 0000
         // 0aaa aaa0 0000 0000
-        // 0000 000d dddd ddd0
+        // 0000 0000 dddd ddd0
         // 0000 0000 0000 000t
         // ------------------- |
         // haaa aaad dddd dddt
@@ -339,7 +344,7 @@ impl TranspositionTable {
         #[allow(clippy::identity_op)]
         {
             (((hash != new_hash) as u16) << 15) // 1 bit
-                | (((MAX_AGE - self.effective_age(value)) as u16) << 9) // 6 bits
+                | (((MAX_AGE - self.effective_age(value)) as u16) << 9) // 5 bits
                 | ((value.depth as u16) << 1) // 8 bits
                 | (((value.value_type() == TranspositionEntryType::Exact) as u16) << 0) // 1 bit
                 | 0
@@ -470,8 +475,13 @@ mod tests {
             None,
             Millipawns(456),
             TranspositionEntryType::Exact,
-            tt.age(),
+            true,
+            12,
         );
+
+        assert_eq!(entry.age(), 12);
+        assert!(entry.singular());
+        assert_eq!(entry.value_type(), TranspositionEntryType::Exact);
 
         tt.put(game.hash(), entry);
         let entry2 = tt.get(game.hash());

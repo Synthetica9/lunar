@@ -1073,6 +1073,7 @@ impl ThreadData {
                 best_move,
                 value,
                 value_type,
+                false,
                 self.transposition_table.age(),
             );
 
