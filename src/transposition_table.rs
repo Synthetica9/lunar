@@ -90,7 +90,7 @@ pub struct TranspositionEntry {
     best_move: Ply,
     // LSB 0, 1: value_type
     // LSB 2-7: age
-    age_value_type: u8,
+    flags: u8,
 }
 
 pub enum PutResult {
@@ -114,7 +114,7 @@ impl TranspositionEntry {
 
     pub fn value_type(&self) -> TranspositionEntryType {
         use TranspositionEntryType::*;
-        let value_type_u8 = self.age_value_type % 4;
+        let value_type_u8 = self.flags % 4;
         match value_type_u8 {
             0 | 3 => Exact,
             1 => LowerBound,
@@ -128,7 +128,7 @@ impl TranspositionEntry {
     }
 
     pub fn age(&self) -> u8 {
-        self.age_value_type / 4
+        self.flags >> (8 - AGE_BITS)
     }
 
     pub fn new(
@@ -143,7 +143,7 @@ impl TranspositionEntry {
             depth,
             value,
             best_move: Ply::unwrap_null(best_move),
-            age_value_type: age << (8 - AGE_BITS) | value_type as u8,
+            flags: age << (8 - AGE_BITS) | value_type as u8,
         }
     }
 }
