@@ -155,6 +155,7 @@ make_tunable_params! {
     nmp_offset: Depth = 2.157943528009613, 0., 6., 0.3, 0.002;
     nmp_piece_slope: Depth = 0.08651773875486138, 0., 0.5, 0.025, 0.002;
     nmp_depth_slope: Depth = 0.16347959223127906, 0., 0.5, 0.025, 0.002;
+    nmp_beta_margin: i32 = 1000, -2000, 2000, 200., 0.002;
 
     iir_reduction: Depth = 1.9406457478286816, 0., 5., 0.25, 0.002;
     iir_min_depth: Depth = 6.513250830427466, 3., 12., 0.45, 0.002;
