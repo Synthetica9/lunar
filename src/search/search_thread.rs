@@ -527,6 +527,7 @@ impl ThreadData {
         }
 
         let mut best_move = from_tt.and_then(|x| x.best_move());
+        let mut is_singular = from_tt.is_some_and(|x| x.singular());
 
         let game = self.game();
         let board = game.board();
@@ -809,41 +810,48 @@ impl ThreadData {
                     && !N::IS_SE
                     && !N::is_all()
                     && is_first_move
-                    && depth >= params().se_min_depth()
-                    && from_tt.is_some_and(|x| {
-                        x.best_move().is_some()
-                            && x.depth >= depth - params().se_tt_offset()
-                            && x.value_type() != UpperBound
-                    })
+                    && from_tt.is_some_and(|x| x.best_move().is_some())
                 {
-                    let tt_score = from_tt.unwrap().value;
-                    let singular_beta =
-                        tt_score - Millipawns((params().se_beta_scaling() * depth).to_num());
-
-                    // TODO: we get a interresting second move from this, if it fails high...
-                    let singular_value = self
-                        .alpha_beta_search::<SENode>(
-                            singular_beta,
-                            singular_beta + Millipawns(1),
-                            (depth - Depth::ONE) * params().se_depth_scaling(),
-                            root_dist,
-                        )?
-                        .0;
-
-                    if singular_value + Millipawns(params().se_double_ext_margin()) <= singular_beta
+                    if depth >= params().se_min_depth()
+                        && from_tt.is_some_and(|x| {
+                            x.depth >= depth - params().se_tt_offset()
+                                && x.value_type() != UpperBound
+                        })
                     {
-                        extension += params().se_double_ext();
-                    }
+                        let tt_score = from_tt.unwrap().value;
+                        let singular_beta =
+                            tt_score - Millipawns((params().se_beta_scaling() * depth).to_num());
 
-                    if singular_value <= singular_beta {
-                        extension += params().se_ext();
-                    } else if singular_beta >= beta {
-                        // Multi-cut
-                        return Ok((
-                            singular_beta.clamp_eval(),
-                            from_tt.and_then(|x| x.best_move()),
-                        ));
-                    };
+                        // TODO: we get a interresting second move from this, if it fails high...
+                        let singular_value = self
+                            .alpha_beta_search::<SENode>(
+                                singular_beta,
+                                singular_beta + Millipawns(1),
+                                (depth - Depth::ONE) * params().se_depth_scaling(),
+                                root_dist,
+                            )?
+                            .0;
+
+                        if singular_value + Millipawns(params().se_double_ext_margin())
+                            <= singular_beta
+                        {
+                            extension += params().se_double_ext();
+                        }
+
+                        is_singular = singular_value <= singular_beta;
+                        if is_singular {
+                            extension += params().se_ext();
+                        } else if singular_beta >= beta {
+                            // Multi-cut
+                            return Ok((
+                                singular_beta.clamp_eval(),
+                                from_tt.and_then(|x| x.best_move()),
+                            ));
+                        };
+                    } else if is_singular {
+                        // Stored singular
+                        extension += params().se_stored_ext();
+                    }
                 };
 
                 let lmr = !is_in_check && !is_first_move;
@@ -1073,7 +1081,7 @@ impl ThreadData {
                 best_move,
                 value,
                 value_type,
-                false,
+                is_singular,
                 self.transposition_table.age(),
             );
 
