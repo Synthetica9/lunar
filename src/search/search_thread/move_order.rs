@@ -133,8 +133,6 @@ enum GeneratorPhase {
     NMPThreat,
     GenQuiescenceMoves,
     YieldWinningOrEqualCaptures,
-    GenKillerMoves,
-    YieldKillerMoves,
     GenQuietMoves,
     YieldOtherMoves,
     Finished,
@@ -145,7 +143,6 @@ pub enum QueuedPly {
     // Should be searched _last_
     LosingCapture { value: Millipawns, ply: Ply },
     QuietMove { value: Millipawns, ply: Ply },
-    KillerMove { ply: Ply },
     MVVLVACapture { value: Millipawns, ply: Ply },
     // Should be searched _first_
 }
@@ -155,10 +152,7 @@ impl QueuedPly {
     pub fn ply(self) -> Ply {
         use QueuedPly::*;
         match self {
-            LosingCapture { ply, .. }
-            | QuietMove { ply, .. }
-            | MVVLVACapture { ply, .. }
-            | KillerMove { ply, .. } => ply,
+            LosingCapture { ply, .. } | QuietMove { ply, .. } | MVVLVACapture { ply, .. } => ply,
         }
     }
 
@@ -168,7 +162,6 @@ impl QueuedPly {
             LosingCapture { .. } | MVVLVACapture { .. } | QuietMove { .. } => {
                 GuaranteeLevel::PseudoLegal
             }
-            KillerMove { .. } => GuaranteeLevel::HashLike,
         }
     }
 
@@ -185,7 +178,6 @@ impl QueuedPly {
             QueuedPly::LosingCapture { value, .. }
             | QueuedPly::QuietMove { value, .. }
             | QueuedPly::MVVLVACapture { value, .. } => value,
-            QueuedPly::KillerMove { .. } => Millipawns(0),
         }
     }
 
@@ -195,8 +187,7 @@ impl QueuedPly {
 
         match self {
             LosingCapture { .. } | QuietMove { .. } => YieldOtherMoves,
-            KillerMove { .. } => YieldKillerMoves,
-            MVVLVACapture { .. } => GenKillerMoves,
+            MVVLVACapture { .. } => GenQuietMoves,
         }
     }
 }
@@ -365,24 +356,9 @@ impl MoveGenerator for StandardMoveGenerator {
 
                     self.bad_captures.sort_unstable();
                     self.queue.append(&mut self.bad_captures);
-                    self.phase = GenKillerMoves;
+                    self.phase = GenQuietMoves;
                 }
             },
-            GenKillerMoves => {
-                self.phase = GenQuietMoves;
-
-                let opponents = thread
-                    .game()
-                    .board()
-                    .get_color(thread.game().to_move().other());
-
-                if let Some(ply) = thread.countermove_cell().and_then(|x| x.get().wrap_null()) {
-                    if !opponents.get(ply.dst()) {
-                        self.queue.push(KillerMove { ply });
-                    }
-                }
-                // No need to sort.
-            }
             GenQuietMoves => {
                 self.phase = YieldOtherMoves;
                 let game = thread.game();
