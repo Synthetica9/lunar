@@ -337,6 +337,17 @@ impl MoveGenerator for StandardMoveGenerator {
                     if let Some(victim) = thread.game().board().occupant_piece(dst) {
                         value += thread.capture_history.get((moved_piece, src, victim));
                         value += victim.base_value();
+
+                        if let Some(oppt_info) = thread.history.peek_n(0) {
+                            if !oppt_info.ply.is_null() {
+                                let oppt_idx = oppt_info.piece_dst();
+                                value += thread.capture_countermove_history.get((
+                                    thread.game().to_move(),
+                                    oppt_idx,
+                                    (moved_piece, dst, victim),
+                                ));
+                            }
+                        }
                     }
 
                     let command = MVVLVACapture { ply, value };

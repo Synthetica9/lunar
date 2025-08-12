@@ -14,6 +14,7 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
 use super::history_heuristic::HistoryTable;
+use crate::basic_enums::Color;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -179,6 +180,8 @@ pub struct ThreadData {
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
     capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
+    capture_countermove_history:
+        Box<Stats<(Color, (Piece, Square), (Piece, Square, Piece)), Millipawns>>,
 }
 
 impl ThreadData {
@@ -224,6 +227,7 @@ impl ThreadData {
             continuation_histories,
             threat_history: ZeroInit::zero_box(),
             capture_history: ZeroInit::zero_box(),
+            capture_countermove_history: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -262,6 +266,7 @@ impl ThreadData {
                     self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
                     self.threat_history = ZeroInit::zero_box();
                     self.capture_history = ZeroInit::zero_box();
+                    self.capture_countermove_history = ZeroInit::zero_box();
 
                     None
                 }
@@ -972,10 +977,9 @@ impl ThreadData {
 
                 if alpha >= beta {
                     let bonus = (depth.saturating_mul(depth)).to_num();
+                    let to_move = self.game().to_move();
                     if is_quiet {
                         let our_piece = undo.info.our_piece;
-
-                        let to_move = self.game().to_move();
 
                         let ply_idx = (our_piece, ply.dst());
 
@@ -1026,9 +1030,31 @@ impl ThreadData {
                             .gravity_history((undo.info.our_piece, ply.dst(), captured), bonus);
                     }
 
-                    for bad in bad_captures {
-                        self.capture_history.gravity_history(bad, -bonus);
+                    for bad in bad_captures.iter() {
+                        self.capture_history.gravity_history(*bad, -bonus);
                     }
+
+                    if let Some(oppt_info) = self.history.peek_n(0) {
+                        if !oppt_info.ply.is_null() {
+                            debug_assert_eq!(oppt_info.info.to_move, to_move.other());
+                            let oppt_idx = oppt_info.piece_dst();
+                            if let Some(captured) = undo.info.captured_piece {
+                                self.capture_countermove_history.gravity_history(
+                                    (
+                                        to_move,
+                                        oppt_idx,
+                                        (undo.info.our_piece, ply.dst(), captured),
+                                    ),
+                                    bonus,
+                                );
+                            }
+                            for bad in bad_captures.iter() {
+                                self.capture_countermove_history
+                                    .gravity_history((to_move, oppt_idx, *bad), -bonus);
+                            }
+                        }
+                    }
+
                     break;
                 }
 
