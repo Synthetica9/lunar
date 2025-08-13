@@ -550,7 +550,8 @@ impl ThreadData {
                 // || from_tt.is_none_or(|x| x.value_type() == TranspositionEntryType::Exact)
                 // > - TT move does not exist or is capture.
                 || tt_is_capture
-                || N::IS_SE;
+                || N::IS_SE
+                || self.history.last_is_null();
 
             let improving_fac = (Depth::ONE
                 - self.history.improving_rate() * params().rfp_improving_fac())
