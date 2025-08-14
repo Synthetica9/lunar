@@ -18,6 +18,7 @@ use crate::history::History;
 use crate::millipawns::Millipawns;
 use crate::ply::Ply;
 use crate::polyglot::PolyglotBook;
+use crate::search::parameters::params;
 use crate::transposition_table::TranspositionTable;
 use crate::uci::TimePolicy;
 use crate::zobrist_hash::ZobristHash;
@@ -557,8 +558,33 @@ impl SearchThreadPool {
                     } else {
                         1.0
                     };
-                    let mut adjusted_millis =
-                        1.3 * first_subtree_fac * per_move_millis * pv_instability.clamp(0.1, 5.0);
+
+                    // Complexity TM from Bob (Tarnished):
+                    // https://discord.com/channels/435943710472011776/882956631514689597/1405244613031366689
+                    let complexity_fac = {
+                        let complexity = if let Some(eval) = history.eval() {
+                            if score.is_mate_in_n().is_none() {
+                                params().tm_complexity_scale() / 10.0
+                                    * (eval - *score).0.abs() as f64
+                                    * (*best_depth as f64).ln()
+                            } else {
+                                0.0
+                            }
+                        } else {
+                            200.0
+                        };
+
+                        (params().tm_complexity_base()
+                            + complexity.clamp(0.0, 200.0) / params().tm_complexity_divisor())
+                        .max(1.0)
+                    };
+
+                    let mut adjusted_millis = 1.3
+                        * first_subtree_fac
+                        * per_move_millis
+                        * pv_instability.clamp(0.1, 5.0)
+                        * complexity_fac;
+
                     if *is_ponderhit {
                         // We spent some time on this already, and we're not in an unexpected
                         // scenario. Let's just say it's okay.
