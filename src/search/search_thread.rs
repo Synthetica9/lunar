@@ -1095,14 +1095,14 @@ impl ThreadData {
     fn quiescence_search(&mut self, mut alpha: Millipawns, beta: Millipawns) -> Millipawns {
         self.quiescence_nodes_searched += 1;
 
-        let stand_pat = crate::eval::evaluation(self.game());
+        if let Some(stand_pat) = self.history.eval() {
+            if stand_pat >= beta {
+                return stand_pat;
+            }
 
-        if stand_pat >= beta {
-            return stand_pat;
-        }
-
-        if alpha <= stand_pat {
-            alpha = stand_pat;
+            if alpha <= stand_pat {
+                alpha = stand_pat;
+            }
         }
 
         let candidates = {
@@ -1120,7 +1120,7 @@ impl ThreadData {
 
         let legality_checker = crate::legality::LegalityChecker::new(self.game());
 
-        let mut best_score = stand_pat;
+        let mut best_score = alpha;
         for (ply, _millipawns) in candidates {
             if !legality_checker.is_legal(ply, self.game()) {
                 continue;
