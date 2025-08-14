@@ -1095,7 +1095,10 @@ impl ThreadData {
     fn quiescence_search(&mut self, mut alpha: Millipawns, beta: Millipawns) -> Millipawns {
         self.quiescence_nodes_searched += 1;
 
-        let stand_pat = crate::eval::evaluation(self.game());
+        let stand_pat = match self.history.eval() {
+            Some(e) => e,
+            None => crate::eval::evaluation(self.game()),
+        };
 
         if stand_pat >= beta {
             return stand_pat;
