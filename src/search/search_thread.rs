@@ -865,9 +865,8 @@ impl ThreadData {
                     };
 
                     let improving_rate = self.history.improving_rate();
-                    reduction += (a * x + b)
-                        * (Depth::ONE - improving_rate * params().lmr_improving_rate())
-                            .max(Depth::ONE);
+                    reduction +=
+                        (a * x + b) * (Depth::ONE - improving_rate * params().lmr_improving_rate());
                 }
 
                 if !is_first_move && is_quiet && tt_is_capture {
