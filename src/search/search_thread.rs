@@ -804,6 +804,28 @@ impl ThreadData {
                 let mut reduction = Depth::ONE;
                 let mut extension = Depth::ZERO;
 
+                // Experiment: Complextensions
+                if is_first_move
+                    && !N::is_all()
+                    && from_tt.is_some_and(|x| x.best_move().is_some() && x.depth >= 3)
+                {
+                    if let Some(eval) = eval {
+                        if let Some(tte) = from_tt {
+                            let complexity = (eval - tte.value).0.abs() as f64
+                                * 0.082
+                                * Depth::from_num(tte.depth).max(Depth::ONE).int_log2() as f64;
+
+                            let complexity_ext = (0.76 - 1.0 + complexity / 1000.).clamp(0.0, 0.5);
+
+                            // if complexity_ext != 0.0 {
+                            //     println!("{complexity_ext} {complexity} {}", tte.depth);
+                            // }
+
+                            extension += Depth::from_num(complexity_ext);
+                        }
+                    }
+                }
+
                 // Singular extension check
                 if !N::IS_ROOT
                     && !N::IS_SE
