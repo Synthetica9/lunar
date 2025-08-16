@@ -465,13 +465,14 @@ pub fn quiet_move_order(
 
     if let Some((threat, threat_severity, threat_piece)) = threatened {
         let threat_sq = threat.dst();
-        if src == threat_sq {
-            val += params().mo_move_threatened_piece_bonus();
-        }
 
         let severity_scaling = (Depth::saturating_from_num(threat_severity.0)
             / params().mo_sevr_scaling_max())
         .clamp(Depth::ZERO, Depth::ONE);
+
+        if src == threat_sq {
+            val += (params().mo_move_threatened_piece_bonus() * severity_scaling).to_num::<i32>();
+        }
 
         let base = Depth::from_num(
             thread
