@@ -81,6 +81,11 @@ impl ZobristHash {
         self.flip_side();
         self
     }
+
+    #[must_use]
+    pub fn upper_16(self) -> u16 {
+        (self.0 >> 48) as u16
+    }
 }
 
 impl Default for ZobristHash {

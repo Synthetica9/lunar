@@ -1,5 +1,6 @@
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
+use std::simd::cmp::SimdPartialEq;
 use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
 
 use not_empty::NonEmptySlice;
@@ -16,10 +17,10 @@ use crate::hugepages_mmap_alloc::HugePagesAlloc;
 
 pub struct TranspositionTable {
     #[cfg(not(unix))]
-    table: Box<NonEmptySlice<TranspositionLine>>,
+    table: Box<NonEmptySlice<UnsafeCell<TranspositionLine>>>,
 
     #[cfg(unix)]
-    table: Box<NonEmptySlice<TranspositionLine>, HugePagesAlloc>,
+    table: Box<NonEmptySlice<UnsafeCell<TranspositionLine>>, HugePagesAlloc>,
 
     occupancy: AtomicIsize,
     age: AtomicU8,
@@ -28,47 +29,21 @@ pub struct TranspositionTable {
 unsafe impl Sync for TranspositionTable {}
 
 const CACHE_LINE_SIZE: usize = 64;
-const ENTRY_SIZE: usize = std::mem::size_of::<TranspositionPair>();
-const ITEMS_PER_BUCKET: usize = CACHE_LINE_SIZE / ENTRY_SIZE;
+const ITEMS_PER_BUCKET: usize = 6;
+type HashBucket = std::simd::u16x8;
 
+const_assert!(ITEMS_PER_BUCKET <= HashBucket::LEN);
 assert_eq_size!(TranspositionEntry, u64);
 const_assert!(std::mem::size_of::<TranspositionLine>() <= CACHE_LINE_SIZE);
 
 // TODO: depth + always replace strategy.
 
 #[repr(align(64))]
-struct TranspositionLine([UnsafeCell<TranspositionPair>; ITEMS_PER_BUCKET]);
+struct TranspositionLine(HashBucket, [TranspositionEntry; ITEMS_PER_BUCKET]);
 
 impl TranspositionLine {
     fn empty() -> Self {
         unsafe { std::mem::zeroed() }
-    }
-}
-
-#[derive(Copy, Clone)]
-struct TranspositionPair {
-    key: u64,
-    value: u64,
-}
-
-impl TranspositionPair {
-    fn hash(&self) -> ZobristHash {
-        ZobristHash(self.key ^ self.value)
-    }
-
-    pub fn new(hash: ZobristHash, value: TranspositionEntry) -> Self {
-        Self {
-            key: hash.as_u64() ^ value.as_u64(),
-            value: value.as_u64(),
-        }
-    }
-
-    pub fn value(self) -> TranspositionEntry {
-        TranspositionEntry::from_u64(self.value)
-    }
-
-    pub fn none() -> Self {
-        Self { key: 0, value: 0 }
     }
 }
 
@@ -152,8 +127,7 @@ impl TranspositionTable {
     pub fn new(bytes: usize) -> TranspositionTable {
         assert!(bytes > 0, "empty tt not supported");
 
-        let needed_entries = TranspositionTable::needed_entries(bytes);
-        let needed_lines = needed_entries / ITEMS_PER_BUCKET;
+        let needed_lines = bytes / std::mem::size_of::<TranspositionLine>();
 
         // TODO: should each thread do their part of this?
         #[cfg(unix)]
@@ -229,14 +203,8 @@ impl TranspositionTable {
 
     pub fn clear(&self) {
         for item in self.table.iter() {
-            for val in item.0.iter() {
-                unsafe { val.get().write(TranspositionPair::none()) };
-            }
+            unsafe { item.get().write(TranspositionLine::empty()) };
         }
-    }
-
-    pub const fn needed_entries(bytes: usize) -> usize {
-        bytes / ENTRY_SIZE
     }
 
     pub fn num_buckets(&self) -> usize {
@@ -248,10 +216,10 @@ impl TranspositionTable {
     }
 
     pub fn num_bytes(&self) -> usize {
-        self.num_entries() * std::mem::size_of::<TranspositionPair>()
+        self.num_buckets() * std::mem::size_of::<TranspositionLine>()
     }
 
-    fn bucket(&self, hash: ZobristHash) -> &TranspositionLine {
+    fn bucket(&self, hash: ZobristHash) -> &UnsafeCell<TranspositionLine> {
         &self.table[self.bucket_idx(hash)]
     }
 
@@ -272,17 +240,23 @@ impl TranspositionTable {
     }
 
     pub fn get(&self, hash: ZobristHash) -> Option<TranspositionEntry> {
-        self.bucket(hash)
+        let bucket_p = self.bucket(hash).get();
+        let bucket = { unsafe { bucket_p.read() } };
+
+        let hash_upper_16 = hash.upper_16();
+        let hash_splat = HashBucket::splat(hash_upper_16);
+        let idx = bucket
             .0
-            .iter()
-            .map(|p| unsafe { p.get().read() })
-            .find(|x| x.hash() == hash)
-            .map(TranspositionPair::value)
+            .simd_eq(hash_splat)
+            .first_set()
+            .filter(|x| *x < ITEMS_PER_BUCKET)?;
+
+        Some(bucket.1[idx])
     }
 
     #[allow(unreachable_code, clippy::needless_return)]
     pub fn prefetch_read(&self, hash: ZobristHash) {
-        let ptr = self.bucket(hash).0[0].get();
+        let ptr = self.bucket(hash).get();
 
         #[cfg(target_arch = "x86_64")]
         {
@@ -301,7 +275,7 @@ impl TranspositionTable {
 
     #[allow(unreachable_code, clippy::needless_return)]
     pub fn prefetch_write(&self, hash: ZobristHash) {
-        let ptr = self.bucket(hash).0[0].get();
+        let ptr = self.bucket(hash).get();
 
         #[cfg(target_arch = "x86_64")]
         {
@@ -318,10 +292,12 @@ impl TranspositionTable {
         }
     }
 
-    fn replacement_order_key(&self, entry: &TranspositionPair, new_hash: ZobristHash) -> impl Ord {
-        let value = entry.value();
-        let hash = entry.hash();
-
+    fn replacement_order_key(
+        &self,
+        entry: TranspositionEntry,
+        old_hash: u16,
+        new_hash: u16,
+    ) -> impl Ord {
         // Effective age is actually a multi-purpose filter:
         // - Age is initialized to MAX_AGE / 2, which makes 0 age for unoccpied entries
         //   a pretty high age at the start.
@@ -338,10 +314,10 @@ impl TranspositionTable {
 
         #[allow(clippy::identity_op)]
         {
-            (((hash != new_hash) as u16) << 15) // 1 bit
-                | (((MAX_AGE - self.effective_age(value)) as u16) << 9) // 6 bits
-                | ((value.depth as u16) << 1) // 8 bits
-                | (((value.value_type() == TranspositionEntryType::Exact) as u16) << 0) // 1 bit
+            (((old_hash != new_hash) as u16) << 15) // 1 bit
+                | (((MAX_AGE - self.effective_age(entry)) as u16) << 9) // 6 bits
+                | ((entry.depth as u16) << 1) // 8 bits
+                | (((entry.value_type() == TranspositionEntryType::Exact) as u16) << 0) // 1 bit
                 | 0
             // TOTAL: 16 bits.
         }
@@ -350,32 +326,37 @@ impl TranspositionTable {
     pub fn put(&self, hash: ZobristHash, value: TranspositionEntry) -> PutResult {
         self.prefetch_write(hash);
 
-        let bucket = self.bucket(hash);
+        let bucket_p = self.bucket(hash).get();
+        let mut bucket = unsafe { bucket_p.read() };
 
-        let to_replace = bucket
-            .0
-            .iter()
-            .min_by_key(|entry| self.replacement_order_key(&unsafe { entry.get().read() }, hash));
+        let new_hash = hash.upper_16();
+        let kv_pairs = bucket.0.to_array().into_iter().zip(bucket.1.iter());
 
-        debug_assert!(to_replace.is_some());
+        let idx = kv_pairs
+            .enumerate()
+            .min_by_key(|(_, (old_hash, entry))| {
+                self.replacement_order_key(**entry, *old_hash, new_hash)
+            })
+            .map(|x| x.0);
+
+        debug_assert!(idx.is_some());
 
         // SAFETY: We're iterating over a set-length slice, so there will always be _some_ entry.
         // See also the above debug.
-        let to_replace = unsafe { to_replace.unwrap_unchecked() };
-        let replaced = unsafe { to_replace.get().read() };
-
-        let entry = TranspositionPair::new(hash, value);
+        let idx = unsafe { idx.unwrap_unchecked() };
 
         // What we're plugging in would be actively worse.
-        if hash == replaced.hash() && value.depth < replaced.value().depth {
+        if new_hash == bucket.0[idx] && value.depth < bucket.1[idx].depth {
             return PutResult::Noop;
         }
 
-        unsafe {
-            to_replace.get().write(entry);
-        }
+        let replaced_age = bucket.1[idx].age();
+        bucket.0[idx] = new_hash;
+        bucket.1[idx] = value;
 
-        if replaced.value().age() == value.age() {
+        unsafe { bucket_p.write(bucket) }
+
+        if replaced_age == value.age() {
             PutResult::ValueReplaced
         } else {
             PutResult::ValueAdded
@@ -391,18 +372,17 @@ impl TranspositionTable {
         let mut ages = [0_i64; MAX_AGE as usize];
         let mut depths = std::collections::BTreeMap::new();
         for bucket in self.table.as_ref() {
-            for (i, slot) in bucket.0.iter().enumerate() {
-                let slot = unsafe { slot.get().read() };
-                if !slot.value().is_some() {
+            let bucket = unsafe { bucket.get().read() };
+            for (i, slot) in bucket.1.iter().enumerate() {
+                if !slot.is_some() {
                     empty += 1;
                 } else {
                     use TranspositionEntryType::*;
-                    let value = slot.value();
-                    *depths.entry(value.depth).or_insert(0) += 1;
+                    *depths.entry(slot.depth).or_insert(0) += 1;
                     slots[i] += 1;
-                    ages[self.effective_age(value) as usize] += 1;
+                    ages[self.effective_age(*slot) as usize] += 1;
 
-                    match value.value_type() {
+                    match slot.value_type() {
                         Exact => exact += 1,
                         LowerBound => lower += 1,
                         UpperBound => upper += 1,

@@ -509,7 +509,17 @@ impl ThreadData {
             false
         };
 
-        let from_tt = self.transposition_table.get(self.game().hash());
+        let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
+
+        let from_tt = self
+            .transposition_table
+            .get(self.game().hash())
+            .filter(|x| {
+                x.best_move().is_none_or(|ply| {
+                    let game = self.game();
+                    game.is_pseudo_legal(ply) && legality_checker.is_legal(ply, game)
+                })
+            });
 
         if let Some(tte) = from_tt {
             if !N::IS_SE && depth <= tte.depth && !self.history.may_be_repetition() {
@@ -622,7 +632,6 @@ impl ThreadData {
             };
 
             let mut hash_moves_played = [Ply::NULL; 8];
-            let legality_checker = { crate::legality::LegalityChecker::new(self.game()) };
 
             let mut generator = N::Gen::init(self);
             let mut moveno = 0;

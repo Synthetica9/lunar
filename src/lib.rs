@@ -1,10 +1,10 @@
-#![cfg_attr(feature = "simd", feature(portable_simd))]
 #![cfg_attr(unix, feature(allocator_api, slice_ptr_get))]
 #![cfg_attr(feature = "intrinsics", feature(core_intrinsics))]
 #![feature(generic_const_exprs)]
 #![feature(new_zeroed_alloc)]
 #![feature(thread_local)]
 #![feature(const_precise_live_drops)]
+#![feature(portable_simd)]
 
 pub mod basic_enums;
 pub mod bitboard;
