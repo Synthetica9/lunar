@@ -28,17 +28,14 @@ pub struct TranspositionTable {
 
 unsafe impl Sync for TranspositionTable {}
 
-const CACHE_LINE_SIZE: usize = 64;
-const ITEMS_PER_BUCKET: usize = 6;
-type HashBucket = std::simd::u16x8;
+const ITEMS_PER_BUCKET: usize = 3;
+type HashBucket = std::simd::u16x4;
 
 const_assert!(ITEMS_PER_BUCKET <= HashBucket::LEN);
 assert_eq_size!(TranspositionEntry, u64);
-const_assert!(std::mem::size_of::<TranspositionLine>() <= CACHE_LINE_SIZE);
+const_assert!(std::mem::size_of::<TranspositionLine>() <= 32);
 
-// TODO: depth + always replace strategy.
-
-#[repr(align(64))]
+#[repr(align(32))]
 struct TranspositionLine(HashBucket, [TranspositionEntry; ITEMS_PER_BUCKET]);
 
 impl TranspositionLine {
