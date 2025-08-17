@@ -1008,7 +1008,7 @@ impl ThreadData {
                                 our_piece,
                                 ply.dst(),
                             ),
-                            -bonus,
+                            bonus,
                         );
 
                         if let Some((threat_ply, _, piece)) = self.history.threat() {
