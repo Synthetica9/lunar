@@ -145,7 +145,6 @@ pub enum QueuedPly {
     // Should be searched _last_
     LosingCapture { value: Millipawns, ply: Ply },
     QuietMove { value: Millipawns, ply: Ply },
-    KillerMove { ply: Ply },
     MVVLVACapture { value: Millipawns, ply: Ply },
     // Should be searched _first_
 }
@@ -155,27 +154,14 @@ impl QueuedPly {
     pub fn ply(self) -> Ply {
         use QueuedPly::*;
         match self {
-            LosingCapture { ply, .. }
-            | QuietMove { ply, .. }
-            | MVVLVACapture { ply, .. }
-            | KillerMove { ply, .. } => ply,
-        }
-    }
-
-    fn guarantee(self) -> GuaranteeLevel {
-        use QueuedPly::*;
-        match self {
-            LosingCapture { .. } | MVVLVACapture { .. } | QuietMove { .. } => {
-                GuaranteeLevel::PseudoLegal
-            }
-            KillerMove { .. } => GuaranteeLevel::HashLike,
+            LosingCapture { ply, .. } | QuietMove { ply, .. } | MVVLVACapture { ply, .. } => ply,
         }
     }
 
     fn to_generated(self) -> Generated {
         Generated {
             ply: GeneratedMove::Ply(self.ply()),
-            guarantee: self.guarantee(),
+            guarantee: GuaranteeLevel::PseudoLegal,
             score: self.score(),
         }
     }
@@ -185,7 +171,6 @@ impl QueuedPly {
             QueuedPly::LosingCapture { value, .. }
             | QueuedPly::QuietMove { value, .. }
             | QueuedPly::MVVLVACapture { value, .. } => value,
-            QueuedPly::KillerMove { .. } => Millipawns(0),
         }
     }
 
@@ -195,7 +180,6 @@ impl QueuedPly {
 
         match self {
             LosingCapture { .. } | QuietMove { .. } => YieldOtherMoves,
-            KillerMove { .. } => YieldKillerMoves,
             MVVLVACapture { .. } => GenKillerMoves,
         }
     }
@@ -372,9 +356,12 @@ impl MoveGenerator for StandardMoveGenerator {
                 self.phase = GenQuietMoves;
 
                 if let Some(ply) = thread.countermove_cell().and_then(|x| x.get().wrap_null()) {
-                    self.queue.push(KillerMove { ply });
+                    return Some(Generated {
+                        ply: GeneratedMove::Ply(ply),
+                        guarantee: GuaranteeLevel::HashLike,
+                        score: Millipawns(0),
+                    });
                 }
-                // No need to sort.
             }
             GenQuietMoves => {
                 self.phase = YieldOtherMoves;
