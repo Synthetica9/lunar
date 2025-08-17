@@ -182,7 +182,7 @@ pub struct ThreadData {
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
     capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
-    pawn_history: Box<Stats<(Color, NBits<10>, Piece, Square), Millipawns>>,
+    pawn_history: Box<Stats<(Color, NBits<11>, Piece, Square), Millipawns>>,
 }
 
 impl ThreadData {
