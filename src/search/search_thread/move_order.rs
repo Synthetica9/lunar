@@ -503,6 +503,12 @@ pub fn quiet_move_order(
         val += cont;
     }
 
+    val += 30
+        * thread
+            .pawn_history
+            .get((color, game.pawn_hash().to_nbits(), piece, ply.dst()))
+            .0;
+
     Millipawns(val)
 }
 
