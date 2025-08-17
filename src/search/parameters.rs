@@ -182,6 +182,7 @@ make_tunable_params! {
     mo_nmp_threat_min_sevr: i32 = 143, 0, 2000, 30., 0.002;
     mo_sevr_scaling_max: i32 = 2591, 0, 10000, 200., 0.002;
     mo_sevr_move_threat: i32 = 41, 0, 200, 5., 0.002;
+    mo_pawn_history_weight: i32 = 30, 0, 200, 5., 0.002;
 
     aw_min_depth: i32 = 5, 2, 10, 0.5, 0.002;
     aw_base_window: f64 = 340.29425793210805, 0., 1000., 50., 0.002;

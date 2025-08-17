@@ -84,3 +84,13 @@ where
         T5::SIZE * (t1, t2, t3, t4).to_usize() + t5.to_usize()
     }
 }
+
+pub struct NBits<const N: usize>(pub usize);
+
+impl<const N: usize> SmallFiniteEnum for NBits<N> {
+    const SIZE: usize = 1 << N;
+
+    fn to_usize(self) -> usize {
+        self.0 % Self::SIZE
+    }
+}

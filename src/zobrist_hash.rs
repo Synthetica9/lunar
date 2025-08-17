@@ -6,6 +6,7 @@ use crate::castlerights::CastleRights;
 use crate::game::Game;
 use crate::piece::Piece;
 use crate::ply::ApplyPly;
+use crate::small_finite_enum::NBits;
 use crate::square::Square;
 
 mod constants;
@@ -80,6 +81,10 @@ impl ZobristHash {
     pub fn hash_after_null(mut self) -> Self {
         self.flip_side();
         self
+    }
+
+    pub fn to_nbits<const N: usize>(self) -> NBits<N> {
+        NBits(self.to_usize())
     }
 }
 

@@ -6,7 +6,7 @@ use std::i32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use fixed::traits::{Fixed, ToFixed};
+use fixed::traits::ToFixed;
 use linear_map::LinearMap;
 use smallvec::SmallVec;
 
@@ -14,6 +14,8 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
 use super::history_heuristic::HistoryTable;
+use crate::basic_enums::Color;
+use crate::eval;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -21,11 +23,11 @@ use crate::piece::Piece;
 use crate::ply::Ply;
 use crate::search::countermove::{Stats, MAX_HISTORY};
 use crate::search::parameters::params;
+use crate::small_finite_enum::NBits;
 use crate::square::Square;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
-use crate::{eval, search};
 
 pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 13;
@@ -179,6 +181,7 @@ pub struct ThreadData {
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
     capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
+    pawn_history: Box<Stats<(Color, NBits<10>, Piece, Square), Millipawns>>,
 }
 
 impl ThreadData {
@@ -224,6 +227,7 @@ impl ThreadData {
             continuation_histories,
             threat_history: ZeroInit::zero_box(),
             capture_history: ZeroInit::zero_box(),
+            pawn_history: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -262,6 +266,7 @@ impl ThreadData {
                     self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
                     self.threat_history = ZeroInit::zero_box();
                     self.capture_history = ZeroInit::zero_box();
+                    self.pawn_history = ZeroInit::zero_box();
 
                     None
                 }
@@ -995,6 +1000,16 @@ impl ThreadData {
                         self.history_table
                             .update(to_move, our_piece, ply.dst(), bonus);
 
+                        self.pawn_history.gravity_history(
+                            (
+                                to_move,
+                                self.game().pawn_hash().to_nbits(),
+                                our_piece,
+                                ply.dst(),
+                            ),
+                            bonus,
+                        );
+
                         if let Some((threat_ply, _, piece)) = self.history.threat() {
                             let threat_idx = (piece, threat_ply.dst());
 
@@ -1015,11 +1030,15 @@ impl ThreadData {
                             c.set(ply);
                         }
 
-                        for bad in bad_quiet_moves {
-                            self.history_table.update(to_move, bad.0, bad.1, -bonus);
+                        for (p, s) in bad_quiet_moves {
+                            self.history_table.update(to_move, p, s, -bonus);
                             for i in 0..N_CONTINUATION_HISTORIES {
-                                continuation_history(i, bad, -bonus);
+                                continuation_history(i, (p, s), -bonus);
                             }
+                            self.pawn_history.gravity_history(
+                                (to_move, self.game().pawn_hash().to_nbits(), p, s),
+                                -bonus,
+                            );
                         }
                     } else if let Some(captured) = undo.info.captured_piece {
                         self.capture_history

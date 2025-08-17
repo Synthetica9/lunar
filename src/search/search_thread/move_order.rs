@@ -490,6 +490,12 @@ pub fn quiet_move_order(
         val += cont;
     }
 
+    val += params().mo_pawn_history_weight()
+        * thread
+            .pawn_history
+            .get((color, game.pawn_hash().to_nbits(), piece, ply.dst()))
+            .0;
+
     Millipawns(val)
 }
 
