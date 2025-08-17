@@ -671,35 +671,26 @@ impl ThreadData {
             if N::IS_SE {
                 any_moves_pruned = true;
                 moveno += 1;
-                hash_moves_played[0] = from_tt.and_then(|x| x.best_move()).unwrap_or(Ply::NULL);
+                hash_moves_played[0] = Ply::unwrap_null(best_move);
             }
 
             while let Some(Generated {
                 ply,
-                guarantee,
+                mut guarantee,
                 score: history_score,
             }) = generator.next(self)
             {
-                if N::IS_SE && matches!(ply, GeneratedMove::HashMove) {
-                    continue;
-                }
-
-                // May be skipped
                 let is_first_move = moveno == 0;
-                let ply = {
-                    use GeneratedMove::*;
-                    match ply {
-                        HashMove => match best_move {
-                            Some(ply) => ply,
-                            None => continue,
-                        },
-                        Ply(ply) => ply,
+                let ply = match (ply, best_move) {
+                    (GeneratedMove::HashMove, Some(ply)) if !N::IS_SE => {
+                        // Checked before but will still be repeated later
+                        guarantee = GuaranteeLevel::Legal;
+                        hash_moves_played[0] = ply;
+                        ply
                     }
+                    (GeneratedMove::Ply(ply), _) if !hash_moves_played.contains(&ply) => ply,
+                    _ => continue,
                 };
-
-                if hash_moves_played.contains(&ply) {
-                    continue;
-                }
 
                 // Pruning may make us see shorter mates that don't exist...
                 let pruning_allowed = !is_first_move && value.is_mate_in_n().is_none_or(|x| x > 0);
