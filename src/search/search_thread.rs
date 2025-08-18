@@ -807,18 +807,27 @@ impl ThreadData {
                 // Experiment: Complextensions
                 if is_first_move
                     && !N::is_all()
-                    && from_tt.is_some_and(|x| x.best_move().is_some() && x.depth >= 3)
+                    && from_tt.is_some_and(|x| {
+                        x.best_move().is_some() && depth - Depth::from_num(4) <= x.depth
+                        // && x.depth >= 3
+                    })
                 {
                     if let Some(eval) = eval {
                         if let Some(tte) = from_tt {
-                            let complexity = (eval - tte.value).0.abs() as f64
-                                * 0.082
-                                * Depth::from_num(tte.depth).max(Depth::ONE).int_log2() as f64;
+                            let complexity =
+                                (eval.score_expectation() - tte.value.score_expectation()).abs()
+                                    * (tte.depth.max(1) as f64).log2();
 
-                            let complexity_ext = (0.76 - 1.0 + complexity / 1000.).clamp(0.0, 0.5);
+                            let complexity_ext = (0.8 - 1.0 + complexity * 0.9).clamp(0.0, 0.5);
 
-                            // if complexity_ext != 0.0 {
-                            //     println!("{complexity_ext} {complexity} {}", tte.depth);
+                            // if complexity_ext != 0.0 && depth >= 10 {
+                            //     println!(
+                            //         "{complexity_ext} {eval:?} ({}) {:?} ({}) {complexity} {}",
+                            //         eval.score_expectation(),
+                            //         tte.value,
+                            //         tte.value.score_expectation(),
+                            //         tte.depth
+                            //     );
                             // }
 
                             extension += Depth::from_num(complexity_ext);

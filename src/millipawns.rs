@@ -25,6 +25,13 @@ impl Millipawns {
     pub fn clamp_eval(self) -> Self {
         self.clamp(MIN_EVAL, MAX_EVAL)
     }
+
+    pub fn score_expectation(self) -> f64 {
+        let base: f64 = 10.;
+        let expt = -self.0 as f64 / 4000.;
+        let divisor = 1.0 + base.powf(expt);
+        divisor.recip()
+    }
 }
 
 // Safety: zero millipawns is a valid value
