@@ -182,6 +182,7 @@ pub struct ThreadData {
     threat_history: Box<L2History>,
     capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
     pawn_history: Box<Stats<(Color, NBits<10>, Piece, Square), Millipawns>>,
+    king_history: Box<Stats<(Color, (Square, Square), Piece, Square), Millipawns>>,
 }
 
 impl ThreadData {
@@ -228,6 +229,7 @@ impl ThreadData {
             threat_history: ZeroInit::zero_box(),
             capture_history: ZeroInit::zero_box(),
             pawn_history: ZeroInit::zero_box(),
+            king_history: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -267,6 +269,7 @@ impl ThreadData {
                     self.threat_history = ZeroInit::zero_box();
                     self.capture_history = ZeroInit::zero_box();
                     self.pawn_history = ZeroInit::zero_box();
+                    self.king_history = ZeroInit::zero_box();
 
                     None
                 }
@@ -981,8 +984,13 @@ impl ThreadData {
                         let our_piece = undo.info.our_piece;
 
                         let to_move = self.game().to_move();
+                        let game = self.game();
 
                         let ply_idx = (our_piece, ply.dst());
+                        let king_hist_idx = (
+                            game.king_square(Color::White),
+                            game.king_square(Color::Black),
+                        );
 
                         let continuation_history = |idx: usize, ply_idx, delta| {
                             let Some(oppt_info) = self.history.peek_n(idx) else {
@@ -1009,6 +1017,9 @@ impl ThreadData {
                             ),
                             bonus,
                         );
+
+                        self.king_history
+                            .gravity_history((to_move, king_hist_idx, our_piece, ply.dst()), bonus);
 
                         if let Some((threat_ply, _, piece)) = self.history.threat() {
                             let threat_idx = (piece, threat_ply.dst());
@@ -1039,6 +1050,9 @@ impl ThreadData {
                                 (to_move, self.game().pawn_hash().to_nbits(), p, s),
                                 -bonus,
                             );
+
+                            self.king_history
+                                .gravity_history((to_move, king_hist_idx, p, s), -bonus);
                         }
                     } else if let Some(captured) = undo.info.captured_piece {
                         self.capture_history

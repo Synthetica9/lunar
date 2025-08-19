@@ -496,6 +496,20 @@ pub fn quiet_move_order(
             .get((color, game.pawn_hash().to_nbits(), piece, ply.dst()))
             .0;
 
+    val += 20
+        * thread
+            .king_history
+            .get((
+                color,
+                (
+                    game.king_square(Color::White),
+                    game.king_square(Color::Black),
+                ),
+                piece,
+                ply.dst(),
+            ))
+            .0;
+
     Millipawns(val)
 }
 
