@@ -1,5 +1,4 @@
 mod countermove;
-mod history_heuristic;
 pub mod parameters;
 mod search_pool;
 mod search_thread;

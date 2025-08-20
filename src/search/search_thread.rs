@@ -13,7 +13,6 @@ use smallvec::SmallVec;
 use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::{CounterMove, L2History};
-use super::history_heuristic::HistoryTable;
 use crate::basic_enums::Color;
 use crate::eval;
 use crate::game::Game;
@@ -176,7 +175,7 @@ pub struct ThreadData {
 
     transposition_table: Arc<TranspositionTable>,
 
-    history_table: Box<HistoryTable>,
+    history_table: Box<Stats<(Color, Piece, Square), Millipawns>>,
     countermove: Box<CounterMove>,
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
@@ -998,7 +997,7 @@ impl ThreadData {
                         };
 
                         self.history_table
-                            .update(to_move, our_piece, ply.dst(), bonus);
+                            .gravity_history((to_move, our_piece, ply.dst()), bonus);
 
                         self.pawn_history.gravity_history(
                             (
@@ -1031,7 +1030,7 @@ impl ThreadData {
                         }
 
                         for (p, s) in bad_quiet_moves {
-                            self.history_table.update(to_move, p, s, -bonus);
+                            self.history_table.gravity_history((to_move, p, s), -bonus);
                             for i in 0..N_CONTINUATION_HISTORIES {
                                 continuation_history(i, (p, s), -bonus);
                             }
