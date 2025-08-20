@@ -439,9 +439,19 @@ pub fn quiet_move_order(
     let piece = game.board().occupant_piece(ply.src()).unwrap();
 
     let ply_idx = (piece, dst);
+    let threatened_bb = thread.history.threatened_bb();
 
-    let from_history =
-        thread.history_table.get((color, piece, dst)).0 * params().mo_direct_history_weight();
+    let from_history = thread
+        .history_table
+        .get((
+            color,
+            piece,
+            dst,
+            threatened_bb.get(ply.src()),
+            threatened_bb.get(ply.dst()),
+        ))
+        .0
+        * params().mo_direct_history_weight();
     // let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
     let see = static_exchange_evaluation(game, ply).0.min(0);
 
