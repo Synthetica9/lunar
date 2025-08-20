@@ -178,7 +178,7 @@ pub struct ThreadData {
 }
 
 pub struct HistoryTables {
-    main: Stats<(Color, Square, Square), Millipawns>,
+    main: Stats<(Color, Square, Square, bool, bool), Millipawns>,
     countermove: CounterMove,
     continuation:
         [Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>; N_CONTINUATION_HISTORIES],
@@ -207,10 +207,17 @@ impl HistoryTables {
         let game = stack.game();
         let color = game.to_move();
         let piece = game.board().occupant_piece(ply.src()).unwrap();
+        let threatened_bb = stack.threatened_bb();
+        let src = ply.src();
+        let dst = ply.dst();
 
-        self.main.update_cell((color, ply.src(), ply.dst()), |x| {
-            f(x, Depth::from_num(params().mo_direct_history_weight()))
-        });
+        let threatened_src = threatened_bb.get(src);
+        let threatened_dst = threatened_bb.get(dst);
+
+        self.main
+            .update_cell((color, src, dst, threatened_src, threatened_dst), |x| {
+                f(x, Depth::from_num(params().mo_direct_history_weight()))
+            });
 
         let cont_weights = continuation_weights();
 
@@ -1062,11 +1069,6 @@ impl ThreadData {
 
                         if let Some(c) = self.countermove_cell() {
                             c.set(ply);
-                        }
-
-                        for ply in bad_quiet_moves {
-                            self.history_tables
-                                .write_quiet_hist(-bonus, ply, &self.history);
                         }
                     } else if let Some(captured) = undo.info.captured_piece {
                         self.history_tables
