@@ -319,7 +319,14 @@ impl MoveGenerator for StandardMoveGenerator {
                     let src = ply.src();
                     let moved_piece = thread.game().board().occupant_piece(src).unwrap();
                     if let Some(victim) = thread.game().board().occupant_piece(dst) {
-                        value += thread.capture_history.get((moved_piece, src, victim));
+                        let threatened_bb = thread.history.threatened_bb();
+                        value += thread.capture_history.get((
+                            moved_piece,
+                            src,
+                            victim,
+                            threatened_bb.get(src),
+                            threatened_bb.get(dst),
+                        ));
                         value += victim.base_value();
                     }
 

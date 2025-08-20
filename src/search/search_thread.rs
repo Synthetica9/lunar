@@ -179,7 +179,7 @@ pub struct ThreadData {
     countermove: Box<CounterMove>,
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
-    capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
+    capture_history: Box<Stats<(Piece, Square, Piece, bool, bool), Millipawns>>,
     pawn_history: Box<Stats<(Color, NBits<10>, Piece, Square), Millipawns>>,
 }
 
@@ -633,7 +633,7 @@ impl ThreadData {
 
             let mut any_moves_searched = false;
             let mut bad_quiet_moves: SmallVec<[(Piece, Ply); 32]> = SmallVec::new();
-            let mut bad_captures: SmallVec<[_; 16]> = SmallVec::new();
+            let mut bad_captures: SmallVec<[(Piece, Ply, Piece); 16]> = SmallVec::new();
             let mut any_moves_pruned = false;
 
             let depth_clamp_zero = depth.max(Depth::ZERO);
@@ -780,7 +780,15 @@ impl ThreadData {
                 if !N::is_pv() && !is_quiet && !is_check && see < see_pruning_noisy_cutoff_upper {
                     let mut cutoff = see_pruning_noisy_cutoff_upper - Millipawns(MAX_HISTORY);
                     if let Some(victim) = ply.captured_piece(self.game()) {
-                        let idx = (ply.moved_piece(self.game()), ply.dst(), victim);
+                        let threatened_bb = self.history.threatened_bb();
+
+                        let idx = (
+                            ply.moved_piece(self.game()),
+                            ply.dst(),
+                            victim,
+                            threatened_bb.get(ply.src()),
+                            threatened_bb.get(ply.dst()),
+                        );
                         let history = self.capture_history.get(idx);
                         cutoff -= history
                     }
@@ -974,6 +982,8 @@ impl ThreadData {
                     *self.curr_ply_root_move_counts.get_mut(&ply).unwrap() += searched as u64;
                 }
 
+                let threatened_bb = self.history.threatened_bb();
+
                 if alpha >= beta {
                     let bonus = (depth.saturating_mul(depth)).to_num();
                     if is_quiet {
@@ -996,6 +1006,7 @@ impl ThreadData {
                             self.continuation_histories[idx].gravity_history(index, delta);
                         };
 
+                        let threatened_bb = self.history.threatened_bb();
                         self.history_table
                             .gravity_history((to_move, ply.src(), ply.dst()), bonus);
 
@@ -1048,12 +1059,27 @@ impl ThreadData {
                             );
                         }
                     } else if let Some(captured) = undo.info.captured_piece {
-                        self.capture_history
-                            .gravity_history((undo.info.our_piece, ply.dst(), captured), bonus);
+                        self.capture_history.gravity_history(
+                            (
+                                undo.info.our_piece,
+                                ply.dst(),
+                                captured,
+                                threatened_bb.get(ply.src()),
+                                threatened_bb.get(ply.dst()),
+                            ),
+                            bonus,
+                        );
                     }
 
-                    for bad in bad_captures {
-                        self.capture_history.gravity_history(bad, -bonus);
+                    for (piece, ply, victim) in bad_captures {
+                        let idx = (
+                            piece,
+                            ply.dst(),
+                            victim,
+                            threatened_bb.get(ply.src()),
+                            threatened_bb.get(ply.dst()),
+                        );
+                        self.capture_history.gravity_history(idx, -bonus);
                     }
                     break;
                 }
@@ -1061,7 +1087,7 @@ impl ThreadData {
                 if is_quiet {
                     bad_quiet_moves.push((undo.info.our_piece, undo.ply));
                 } else if let Some(captured) = undo.info.captured_piece {
-                    bad_captures.push((undo.info.our_piece, undo.ply.dst(), captured))
+                    bad_captures.push((undo.info.our_piece, undo.ply, captured))
                 }
             }
 
