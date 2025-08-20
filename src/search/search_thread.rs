@@ -175,7 +175,7 @@ pub struct ThreadData {
 
     transposition_table: Arc<TranspositionTable>,
 
-    history_table: Box<Stats<(Color, Square, Square), Millipawns>>,
+    history_table: Box<Stats<(Color, Square, Square, bool, bool), Millipawns>>,
     countermove: Box<CounterMove>,
     continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
     threat_history: Box<L2History>,
@@ -996,8 +996,17 @@ impl ThreadData {
                             self.continuation_histories[idx].gravity_history(index, delta);
                         };
 
-                        self.history_table
-                            .gravity_history((to_move, ply.src(), ply.dst()), bonus);
+                        let threatened_bb = self.history.threatened_bb();
+                        self.history_table.gravity_history(
+                            (
+                                to_move,
+                                ply.src(),
+                                ply.dst(),
+                                threatened_bb.get(ply.src()),
+                                threatened_bb.get(ply.dst()),
+                            ),
+                            bonus,
+                        );
 
                         self.pawn_history.gravity_history(
                             (
@@ -1032,8 +1041,16 @@ impl ThreadData {
                         }
 
                         for (piece, ply) in bad_quiet_moves {
-                            self.history_table
-                                .gravity_history((to_move, ply.src(), ply.dst()), -bonus);
+                            self.history_table.gravity_history(
+                                (
+                                    to_move,
+                                    ply.src(),
+                                    ply.dst(),
+                                    threatened_bb.get(ply.src()),
+                                    threatened_bb.get(ply.dst()),
+                                ),
+                                -bonus,
+                            );
                             for i in 0..N_CONTINUATION_HISTORIES {
                                 continuation_history(i, (piece, ply.dst()), -bonus);
                             }
