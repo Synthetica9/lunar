@@ -632,7 +632,7 @@ impl ThreadData {
             let mut moveno = 0;
 
             let mut any_moves_searched = false;
-            let mut bad_quiet_moves: SmallVec<[_; 32]> = SmallVec::new();
+            let mut bad_quiet_moves: SmallVec<[(Piece, Ply); 32]> = SmallVec::new();
             let mut bad_captures: SmallVec<[_; 16]> = SmallVec::new();
             let mut any_moves_pruned = false;
 
@@ -1015,9 +1015,11 @@ impl ThreadData {
                             self.threat_history
                                 .gravity_history((to_move, threat_idx, ply_idx), bonus);
 
-                            for bad in bad_quiet_moves.iter() {
-                                self.threat_history
-                                    .gravity_history((to_move, threat_idx, *bad), -bonus);
+                            for (piece, ply) in bad_quiet_moves.iter() {
+                                self.threat_history.gravity_history(
+                                    (to_move, threat_idx, (*piece, ply.dst())),
+                                    -bonus,
+                                );
                             }
                         }
 
@@ -1029,13 +1031,19 @@ impl ThreadData {
                             c.set(ply);
                         }
 
-                        for (p, s) in bad_quiet_moves {
-                            self.history_table.gravity_history((to_move, p, s), -bonus);
+                        for (piece, ply) in bad_quiet_moves {
+                            self.history_table
+                                .gravity_history((to_move, piece, ply.dst()), -bonus);
                             for i in 0..N_CONTINUATION_HISTORIES {
-                                continuation_history(i, (p, s), -bonus);
+                                continuation_history(i, (piece, ply.dst()), -bonus);
                             }
                             self.pawn_history.gravity_history(
-                                (to_move, self.game().pawn_hash().to_nbits(), p, s),
+                                (
+                                    to_move,
+                                    self.game().pawn_hash().to_nbits(),
+                                    piece,
+                                    ply.dst(),
+                                ),
                                 -bonus,
                             );
                         }
@@ -1051,7 +1059,7 @@ impl ThreadData {
                 }
 
                 if is_quiet {
-                    bad_quiet_moves.push((undo.info.our_piece, undo.ply.dst()));
+                    bad_quiet_moves.push((undo.info.our_piece, undo.ply));
                 } else if let Some(captured) = undo.info.captured_piece {
                     bad_captures.push((undo.info.our_piece, undo.ply.dst(), captured))
                 }
