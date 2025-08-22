@@ -514,6 +514,7 @@ impl ThreadData {
         };
 
         let from_tt = self.transposition_table.get(self.game().hash());
+        let ttpv = from_tt.is_some_and(|x| x.ttpv()) || N::is_pv();
 
         if let Some(tte) = from_tt {
             if !N::IS_SE && depth <= tte.depth && !self.history.may_be_repetition() {
@@ -884,6 +885,12 @@ impl ThreadData {
 
                 debug_assert!(reduction >= 1, "{reduction} < 1");
                 debug_assert!(extension >= 0, "{extension} < 0");
+
+                if ttpv {
+                    reduction -= Depth::ONE / 2;
+                }
+                reduction = reduction.max(Depth::ONE);
+
                 let virtual_depth = depth - reduction + extension;
                 let next_depth = if depth <= 3 {
                     depth - Depth::ONE
@@ -1102,6 +1109,7 @@ impl ThreadData {
                 best_move,
                 value,
                 value_type,
+                ttpv,
                 self.transposition_table.age(),
             );
 

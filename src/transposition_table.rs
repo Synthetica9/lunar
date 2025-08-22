@@ -80,7 +80,7 @@ pub enum TranspositionEntryType {
     UpperBound,
 }
 
-const AGE_BITS: usize = 6;
+const AGE_BITS: usize = 5;
 const MAX_AGE: u8 = (1 << AGE_BITS) - 1;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -128,7 +128,11 @@ impl TranspositionEntry {
     }
 
     pub fn age(&self) -> u8 {
-        self.age_value_type / 4
+        self.age_value_type >> (8 - AGE_BITS)
+    }
+
+    pub fn ttpv(self) -> bool {
+        (self.age_value_type >> 2) & 1 != 0
     }
 
     pub fn new(
@@ -136,6 +140,7 @@ impl TranspositionEntry {
         best_move: Option<Ply>,
         value: Millipawns,
         value_type: TranspositionEntryType,
+        ttpv: bool,
         age: u8,
     ) -> TranspositionEntry {
         debug_assert!(age <= MAX_AGE);
@@ -143,7 +148,7 @@ impl TranspositionEntry {
             depth,
             value,
             best_move: Ply::unwrap_null(best_move),
-            age_value_type: age << (8 - AGE_BITS) | value_type as u8,
+            age_value_type: age << (8 - AGE_BITS) | (ttpv as u8) << 2 | value_type as u8,
         }
     }
 }
@@ -470,11 +475,16 @@ mod tests {
             None,
             Millipawns(456),
             TranspositionEntryType::Exact,
-            tt.age(),
+            true,
+            12,
         );
 
         tt.put(game.hash(), entry);
         let entry2 = tt.get(game.hash());
+
+        debug_assert_eq!(entry.age(), 12);
+        debug_assert_eq!(entry.ttpv(), true);
+        debug_assert_eq!(entry.value_type(), TranspositionEntryType::Exact);
 
         assert_eq!(Some(entry), entry2);
     }
