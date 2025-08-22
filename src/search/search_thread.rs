@@ -181,6 +181,8 @@ pub struct ThreadData {
     threat_history: Box<L2History>,
     capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
     pawn_history: Box<Stats<(Color, NBits<10>, Piece, Square), Millipawns>>,
+    eg_history: Box<Stats<(Color, Square, Piece), Millipawns>>,
+    mg_history: Box<Stats<(Color, Square, Piece), Millipawns>>,
 }
 
 impl ThreadData {
@@ -227,6 +229,8 @@ impl ThreadData {
             threat_history: ZeroInit::zero_box(),
             capture_history: ZeroInit::zero_box(),
             pawn_history: ZeroInit::zero_box(),
+            eg_history: ZeroInit::zero_box(),
+            mg_history: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -266,6 +270,8 @@ impl ThreadData {
                     self.threat_history = ZeroInit::zero_box();
                     self.capture_history = ZeroInit::zero_box();
                     self.pawn_history = ZeroInit::zero_box();
+                    self.eg_history = ZeroInit::zero_box();
+                    self.mg_history = ZeroInit::zero_box();
 
                     None
                 }
@@ -982,6 +988,7 @@ impl ThreadData {
                         let to_move = self.game().to_move();
 
                         let ply_idx = (our_piece, ply.dst());
+                        let game_phase = eval::game_phase(self.game().board());
 
                         let continuation_history = |idx: usize, ply_idx, delta| {
                             let Some(oppt_info) = self.history.peek_n(idx) else {
@@ -998,6 +1005,16 @@ impl ThreadData {
 
                         self.history_table
                             .gravity_history((to_move, ply.src(), ply.dst()), bonus);
+
+                        self.eg_history.gravity_history(
+                            (to_move, ply.dst(), our_piece),
+                            bonus * (24 - game_phase) / 24,
+                        );
+
+                        self.mg_history.gravity_history(
+                            (to_move, ply.dst(), our_piece),
+                            bonus * game_phase / 24,
+                        );
 
                         self.pawn_history.gravity_history(
                             (
@@ -1045,6 +1062,14 @@ impl ThreadData {
                                     ply.dst(),
                                 ),
                                 -bonus,
+                            );
+                            self.eg_history.gravity_history(
+                                (to_move, ply.dst(), piece),
+                                -bonus * (24 - game_phase) / 24,
+                            );
+                            self.mg_history.gravity_history(
+                                (to_move, ply.dst(), piece),
+                                -bonus * game_phase / 24,
                             );
                         }
                     } else if let Some(captured) = undo.info.captured_piece {

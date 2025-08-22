@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 use crate::basic_enums::Color;
 use crate::bitboard::{self, Bitboard};
 use crate::board::{self, Board};
+use crate::eval;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
@@ -447,6 +448,10 @@ pub fn quiet_move_order(
 
     // let mut val = from_history + from_pesto + see;
     let mut val = from_history + see;
+
+    let game_phase = eval::game_phase(game.board());
+    val += thread.eg_history.get((color, dst, piece)).0 * (24 - game_phase);
+    val += thread.mg_history.get((color, dst, piece)).0 * game_phase;
 
     let cont_weights = continuation_weights();
 
