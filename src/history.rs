@@ -116,16 +116,6 @@ impl History {
         });
     }
 
-    pub fn hard_push(&mut self, ply: Ply) {
-        self.push(ply);
-        debug_assert!(!self.len() >= 2);
-        if self.game.half_move() == 0 {
-            // Drop all except last
-            self.stack.drain(0..self.stack.len() - 2);
-            debug_assert!(self.stack.len() <= 2);
-        }
-    }
-
     pub fn pop(&mut self) -> UndoPly {
         let prev = self.stack.pop().unwrap();
         *self.hash_count_mut(self.game.hash()) -= 1;
@@ -214,7 +204,7 @@ impl History {
             if !self.game.is_legal(*ply) {
                 return false;
             }
-            cpy.hard_push(*ply);
+            cpy.push(*ply);
         }
         cpy.game_is_finished()
     }

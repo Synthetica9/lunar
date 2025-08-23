@@ -213,7 +213,7 @@ impl UCIState {
                 self.history = History::new(Game::from_fen(&fen)?);
                 for m in moves {
                     let ply = self.history.game().parse_uci_long_name(&m)?;
-                    self.history.hard_push(ply);
+                    self.history.push(ply);
                 }
 
                 let fen = self.history.game().to_fen();

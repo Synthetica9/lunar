@@ -709,7 +709,7 @@ impl SearchThreadPool {
             match to_play {
                 Some(ply) => {
                     self.pv_hash.push(game.hash(), ply);
-                    history.hard_push(ply);
+                    history.push(ply);
                     res.push(ply);
                 }
                 None => break,
