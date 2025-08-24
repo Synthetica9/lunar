@@ -467,13 +467,6 @@ pub fn quiet_move_order(
         val += threat_history_bonus;
     }
 
-    val += params().mo_pawn_history_weight()
-        * thread
-            .history_tables
-            .pawn
-            .get((color, game.pawn_hash().to_nbits(), piece, ply.dst()))
-            .0;
-
     Millipawns(val)
 }
 

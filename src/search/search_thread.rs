@@ -205,7 +205,8 @@ impl HistoryTables {
         stack: &History,
         mut f: impl FnMut(&Cell<Millipawns>, i32),
     ) {
-        let color = stack.game().to_move();
+        let game = stack.game();
+        let color = game.to_move();
 
         self.main.update_cell((color, ply.src(), ply.dst()), |x| {
             f(x, params().mo_direct_history_weight())
@@ -219,12 +220,19 @@ impl HistoryTables {
             };
 
             if oppt_info.ply.is_null() {
-                continue; // Should be break?
+                continue; // Should this be break?
             }
 
-            let index = (color, oppt_info.piece_dst(), (our_piece, ply.dst()));
-            self.continuation[i].update_cell(index, |x| f(x, cont_weights[i]));
+            self.continuation[i].update_cell(
+                (color, oppt_info.piece_dst(), (our_piece, ply.dst())),
+                |x| f(x, cont_weights[i]),
+            );
         }
+
+        self.pawn.update_cell(
+            (color, game.pawn_hash().to_nbits(), our_piece, ply.dst()),
+            |x| f(x, params().mo_pawn_history_weight()),
+        );
     }
 
     fn read_quiet_hist(&self, ply: Ply, our_piece: Piece, stack: &History) -> i32 {
@@ -1041,16 +1049,6 @@ impl ThreadData {
                         self.history_tables
                             .write_quiet_hist(bonus, ply, our_piece, &self.history);
 
-                        self.history_tables.pawn.gravity_history(
-                            (
-                                to_move,
-                                self.game().pawn_hash().to_nbits(),
-                                our_piece,
-                                ply.dst(),
-                            ),
-                            bonus,
-                        );
-
                         if let Some((threat_ply, _, piece)) = self.history.threat() {
                             let threat_idx = (piece, threat_ply.dst());
 
@@ -1073,16 +1071,6 @@ impl ThreadData {
                         for (piece, ply) in bad_quiet_moves {
                             self.history_tables
                                 .write_quiet_hist(-bonus, ply, piece, &self.history);
-
-                            self.history_tables.pawn.gravity_history(
-                                (
-                                    to_move,
-                                    self.game().pawn_hash().to_nbits(),
-                                    piece,
-                                    ply.dst(),
-                                ),
-                                -bonus,
-                            );
                         }
                     } else if let Some(captured) = undo.info.captured_piece {
                         self.history_tables
