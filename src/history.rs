@@ -1,6 +1,7 @@
+use crate::basic_enums::Color;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
-use crate::piece::Piece;
+use crate::piece::{Piece, PieceCounts};
 use crate::ply::{Ply, UndoPly};
 use crate::zobrist_hash::ZobristHash;
 
@@ -16,6 +17,8 @@ pub struct StackElement {
     improving_rate: ImprovingRate,
     threat: Option<(Ply, Millipawns, Piece)>,
     skip_move: Ply,
+    white_piece_count: PieceCounts,
+    black_piece_count: PieceCounts,
 }
 
 impl StackElement {
@@ -43,6 +46,9 @@ impl History {
         };
 
         let eval = (!game.is_in_check()).then(|| crate::eval::evaluation(&game));
+        let white_piece_count = PieceCounts::from_board(Color::White, game.board());
+        let black_piece_count = PieceCounts::from_board(Color::Black, game.board());
+
         let stack_base = StackElement {
             undo: None,
             eval,
@@ -50,6 +56,8 @@ impl History {
             improving_rate: ImprovingRate::ZERO,
             threat: None,
             skip_move: Ply::NULL,
+            white_piece_count,
+            black_piece_count,
         };
 
         let mut res = Self {
@@ -106,6 +114,9 @@ impl History {
             ImprovingRate::ZERO
         };
 
+        let white_piece_count = PieceCounts::from_board(Color::White, self.game.board());
+        let black_piece_count = PieceCounts::from_board(Color::Black, self.game.board());
+
         self.stack.push(StackElement {
             undo: Some(undo),
             eval,
@@ -113,6 +124,8 @@ impl History {
             improving_rate,
             threat: None,
             skip_move: Ply::NULL,
+            white_piece_count,
+            black_piece_count,
         });
     }
 
@@ -274,5 +287,15 @@ impl History {
     pub fn threat(&self) -> Option<(Ply, Millipawns, Piece)> {
         let top = self.full_peek_n(0).unwrap();
         top.threat
+    }
+
+    pub fn white_piece_count(&self) -> crate::piece::PieceCounts {
+        let top = self.full_peek_n(0).unwrap();
+        top.white_piece_count
+    }
+
+    pub fn black_piece_count(&self) -> crate::piece::PieceCounts {
+        let top = self.full_peek_n(0).unwrap();
+        top.black_piece_count
     }
 }

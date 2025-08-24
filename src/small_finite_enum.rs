@@ -1,4 +1,8 @@
-use crate::{basic_enums::Color, piece::Piece, square::Square};
+use crate::{
+    basic_enums::Color,
+    piece::{Piece, PieceCounts},
+    square::Square,
+};
 
 pub trait SmallFiniteEnum {
     const SIZE: usize;

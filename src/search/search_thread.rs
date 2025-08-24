@@ -18,7 +18,7 @@ use crate::eval;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
-use crate::piece::Piece;
+use crate::piece::{Piece, PieceCounts};
 use crate::ply::Ply;
 use crate::search::countermove::{Stats, MAX_HISTORY};
 use crate::search::parameters::params;
@@ -181,6 +181,7 @@ pub struct ThreadData {
     threat_history: Box<L2History>,
     capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
     pawn_history: Box<Stats<(Color, NBits<10>, Piece, Square), Millipawns>>,
+    piece_count_history: Box<Stats<(Color, PieceCounts, PieceCounts, Piece, Square), Millipawns>>,
 }
 
 impl ThreadData {
@@ -227,6 +228,7 @@ impl ThreadData {
             threat_history: ZeroInit::zero_box(),
             capture_history: ZeroInit::zero_box(),
             pawn_history: ZeroInit::zero_box(),
+            piece_count_history: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -266,6 +268,7 @@ impl ThreadData {
                     self.threat_history = ZeroInit::zero_box();
                     self.capture_history = ZeroInit::zero_box();
                     self.pawn_history = ZeroInit::zero_box();
+                    self.piece_count_history = ZeroInit::zero_box();
 
                     None
                 }
@@ -1009,6 +1012,17 @@ impl ThreadData {
                             bonus,
                         );
 
+                        self.piece_count_history.gravity_history(
+                            (
+                                to_move,
+                                self.history.white_piece_count(),
+                                self.history.black_piece_count(),
+                                our_piece,
+                                ply.dst(),
+                            ),
+                            bonus,
+                        );
+
                         if let Some((threat_ply, _, piece)) = self.history.threat() {
                             let threat_idx = (piece, threat_ply.dst());
 
@@ -1041,6 +1055,17 @@ impl ThreadData {
                                 (
                                     to_move,
                                     self.game().pawn_hash().to_nbits(),
+                                    piece,
+                                    ply.dst(),
+                                ),
+                                -bonus,
+                            );
+
+                            self.piece_count_history.gravity_history(
+                                (
+                                    to_move,
+                                    self.history.white_piece_count(),
+                                    self.history.black_piece_count(),
                                     piece,
                                     ply.dst(),
                                 ),

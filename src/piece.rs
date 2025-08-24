@@ -1,5 +1,7 @@
 use crate::basic_enums::Color;
+use crate::board::Board;
 use crate::millipawns::Millipawns;
+use crate::small_finite_enum::SmallFiniteEnum;
 
 #[derive(Debug, Clone, PartialEq, Copy, Eq, PartialOrd, Ord)]
 // Pawn and king are special in that they can't be promoted to, should we swap them to the back?
@@ -87,5 +89,48 @@ impl Piece {
             Queen => 9000,
             King => 100000,
         })
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct PieceCounts {
+    knight: u8,
+    light_square_bishop: bool,
+    dark_square_bishop: bool,
+    rook: u8,
+    queen: bool,
+}
+
+impl PieceCounts {
+    pub fn from_board(color: Color, board: &Board) -> Self {
+        use Piece::*;
+        let knight = board.get(color, Knight).popcount().min(2);
+        let bishops = board.get(color, Bishop);
+        let light_square_bishop = !(bishops & crate::bitboard::LIGHT_SQUARES).is_empty();
+        let dark_square_bishop = !(bishops & crate::bitboard::DARK_SQUARES).is_empty();
+        let rook = board.get(color, Rook).popcount().min(2);
+        let queen = !board.get(color, Queen).is_empty();
+        Self {
+            knight,
+            light_square_bishop,
+            dark_square_bishop,
+            rook,
+            queen,
+        }
+    }
+}
+
+impl SmallFiniteEnum for PieceCounts {
+    const SIZE: usize = 3 * 2 * 2 * 3 * 2;
+
+    fn to_usize(self) -> usize {
+        let res = self.knight as usize
+            + self.light_square_bishop as usize * 3
+            + self.dark_square_bishop as usize * 3 * 2
+            + self.rook as usize * 3 * 2 * 2
+            + self.queen as usize * 3 * 2 * 2 * 3;
+
+        debug_assert!(res < Self::SIZE);
+        res
     }
 }
