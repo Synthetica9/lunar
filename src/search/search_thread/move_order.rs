@@ -369,10 +369,9 @@ impl MoveGenerator for StandardMoveGenerator {
             GenQuietMoves => {
                 self.phase = YieldOtherMoves;
                 let game = thread.game();
-                let threat = thread.history.threat();
 
                 game.for_each_pseudo_legal_move::<false>(|ply| {
-                    let value = quiet_move_order(thread, ply, threat);
+                    let value = quiet_move_order(thread, ply);
                     self.queue.push(QuietMove { ply, value });
                 });
 
@@ -411,60 +410,18 @@ pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
     victim - attacker / 128 + promotion
 }
 
-pub fn quiet_move_order(
-    thread: &ThreadData,
-    ply: Ply,
-    threatened: Option<(Ply, Millipawns, Piece)>,
-) -> Millipawns {
-    // http://www.talkchess.com/forum3/viewtopic.php?t=66312
-    // Based on Andrew Grant's idea.
+pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let game = thread.game();
-    // let square_table = &crate::eval::STATIC_PARAMETERS
-    //     .piece_square_table
-    //     .mg
-    //     .get(piece)
-    //     .values;
 
-    let color = game.to_move();
-    let dst = ply.dst();
-    let src = ply.src();
-    let piece = game.board().occupant_piece(ply.src()).unwrap();
+    let from_history = thread.history_tables.read_quiet_hist(ply, &thread.history);
 
-    let ply_idx = (piece, dst);
-
-    let from_history = thread
-        .history_tables
-        .read_quiet_hist(ply, piece, &thread.history);
-
-    // let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
     let see = static_exchange_evaluation(game, ply).0.min(0);
-
-    // let mut val = from_history + from_pesto + see;
     let mut val = from_history + see;
 
-    if let Some((threat, threat_severity, threat_piece)) = threatened {
-        let threat_sq = threat.dst();
-        if src == threat_sq {
+    if let Some((threat, _, _)) = thread.history.threat() {
+        if ply.src() == threat.dst() {
             val += params().mo_move_threatened_piece_bonus();
         }
-
-        let severity_scaling = (Depth::saturating_from_num(threat_severity.0)
-            / params().mo_sevr_scaling_max())
-        .clamp(Depth::ZERO, Depth::ONE);
-
-        let base = Depth::from_num(
-            thread
-                .history_tables
-                .threat
-                .get((color, (threat_piece, threat_sq), ply_idx))
-                .0,
-        );
-
-        let threat_history_bonus = base
-            .saturating_mul(severity_scaling * Depth::from_num(params().mo_sevr_move_threat()))
-            .to_num::<i32>();
-
-        val += threat_history_bonus;
     }
 
     Millipawns(val)
