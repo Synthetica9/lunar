@@ -319,7 +319,10 @@ impl MoveGenerator for StandardMoveGenerator {
                     let src = ply.src();
                     let moved_piece = thread.game().board().occupant_piece(src).unwrap();
                     if let Some(victim) = thread.game().board().occupant_piece(dst) {
-                        value += thread.capture_history.get((moved_piece, src, victim));
+                        value += thread
+                            .history_tables
+                            .capture
+                            .get((moved_piece, src, victim));
                         value += victim.base_value();
                     }
 
@@ -366,10 +369,9 @@ impl MoveGenerator for StandardMoveGenerator {
             GenQuietMoves => {
                 self.phase = YieldOtherMoves;
                 let game = thread.game();
-                let threat = thread.history.threat();
 
                 game.for_each_pseudo_legal_move::<false>(|ply| {
-                    let value = quiet_move_order(thread, ply, threat);
+                    let value = quiet_move_order(thread, ply);
                     self.queue.push(QuietMove { ply, value });
                 });
 
@@ -390,17 +392,6 @@ impl MoveGenerator for StandardMoveGenerator {
     // Also: what would the guarantee be in this case?
 }
 
-fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
-    let mut res = [0; N_CONTINUATION_HISTORIES];
-    let mut val = params().mo_continuation_start_weight();
-    for cell in res.iter_mut() {
-        *cell = val.to_num();
-        val *= params().mo_continuation_factor();
-    }
-
-    res
-}
-
 pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
     let board = game.board();
     let promotion = ply
@@ -419,82 +410,19 @@ pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
     victim - attacker / 128 + promotion
 }
 
-pub fn quiet_move_order(
-    thread: &ThreadData,
-    ply: Ply,
-    threatened: Option<(Ply, Millipawns, Piece)>,
-) -> Millipawns {
-    // http://www.talkchess.com/forum3/viewtopic.php?t=66312
-    // Based on Andrew Grant's idea.
+pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let game = thread.game();
-    // let square_table = &crate::eval::STATIC_PARAMETERS
-    //     .piece_square_table
-    //     .mg
-    //     .get(piece)
-    //     .values;
 
-    let color = game.to_move();
-    let dst = ply.dst();
-    let src = ply.src();
-    let piece = game.board().occupant_piece(ply.src()).unwrap();
+    let from_history = thread.history_tables.read_quiet_hist(ply, &thread.history);
 
-    let ply_idx = (piece, dst);
-
-    let from_history =
-        thread.history_table.get((color, src, dst)).0 * params().mo_direct_history_weight();
-    // let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
     let see = static_exchange_evaluation(game, ply).0.min(0);
-
-    // let mut val = from_history + from_pesto + see;
     let mut val = from_history + see;
 
-    let cont_weights = continuation_weights();
-
-    if let Some((threat, threat_severity, threat_piece)) = threatened {
-        let threat_sq = threat.dst();
-        if src == threat_sq {
+    if let Some((threat, _, _)) = thread.history.threat() {
+        if ply.src() == threat.dst() {
             val += params().mo_move_threatened_piece_bonus();
         }
-
-        let severity_scaling = (Depth::saturating_from_num(threat_severity.0)
-            / params().mo_sevr_scaling_max())
-        .clamp(Depth::ZERO, Depth::ONE);
-
-        let base = Depth::from_num(
-            thread
-                .threat_history
-                .get((color, (threat_piece, threat_sq), ply_idx))
-                .0,
-        );
-
-        let threat_history_bonus = base
-            .saturating_mul(severity_scaling * Depth::from_num(params().mo_sevr_move_threat()))
-            .to_num::<i32>();
-
-        val += threat_history_bonus;
     }
-
-    for i in 0..N_CONTINUATION_HISTORIES {
-        let Some(cont_hist) = thread.history.peek_n(i) else {
-            break;
-        };
-
-        if cont_hist.ply.is_null() {
-            continue; // TODO: Or break? Since the moves after this will be a bit dubious
-        }
-
-        let cont = thread.continuation_histories[i]
-            .get((color, cont_hist.piece_dst(), ply_idx))
-            .0
-            * cont_weights[i];
-        val += cont;
-    }
-
-    val += params().mo_pawn_history_weight()
-        * thread
-            .pawn_history
-            .get((color, game.pawn_hash().to_nbits(), piece, ply.dst()))
-            .0;
 
     Millipawns(val)
 }
