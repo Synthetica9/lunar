@@ -696,8 +696,6 @@ impl ThreadData {
                     continue;
                 }
 
-                // Pruning may make us see shorter mates that don't exist...
-                let pruning_allowed = !is_first_move && value.is_mate_in_n().is_none_or(|x| x > 0);
                 let total_nodes_before = self.total_nodes_searched;
 
                 let is_quiet = ply.promotion_piece().is_none_or(|x| x != Piece::Queen)
@@ -705,20 +703,20 @@ impl ThreadData {
                     && !ply.is_en_passant();
                 let is_check = self.game().is_check(ply);
 
+                // Pruning may make us see shorter mates that don't exist...
+                let pruning_allowed = !N::is_pv()
+                    && !is_check
+                    && !is_in_check
+                    && value.is_mate_in_n().is_none_or(|x| x > 0);
+
                 // Do the actual futility prune
                 // TODO: also do LMP here.
-                if !N::is_pv()
-                    && pruning_allowed
-                    && is_quiet
-                    && !is_check
-                    && futility_pruning
-                    && !is_first_move
-                {
+                if pruning_allowed && is_quiet && futility_pruning && !is_first_move {
                     any_moves_pruned = true;
                     continue;
                 }
 
-                if !N::is_pv() && pruning_allowed && is_quiet && !is_check && moveno > lmp_cutoff {
+                if pruning_allowed && is_quiet && moveno > lmp_cutoff {
                     any_moves_pruned = true;
                     continue;
                 }
@@ -790,13 +788,13 @@ impl ThreadData {
                     // passes.
                     cutoff = cutoff.min(Millipawns(0));
 
-                    if see < cutoff {
+                    if pruning_allowed && see < cutoff {
                         any_moves_pruned = true;
                         continue;
                     }
                 }
 
-                if !N::is_pv() && is_quiet && !is_check && see.0 < see_pruning_quiet_cutoff {
+                if pruning_allowed && is_quiet && see.0 < see_pruning_quiet_cutoff {
                     // XXX: this is post legality checking, so we should be able to tell that when we don't
                     // see any moves we can return stale-/checkmate
                     any_moves_pruned = true;
@@ -904,7 +902,6 @@ impl ThreadData {
                     && lmr
                     && virtual_depth < params().lmpahp_cutoff_depth()
                     && is_quiet
-                    && !is_check
                 {
                     continue;
                 }
