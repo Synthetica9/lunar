@@ -195,8 +195,7 @@ impl HistoryTables {
         stack: &History,
         mut f: impl FnMut(&Cell<Millipawns>, i32),
     ) {
-        let top = stack.peek().unwrap();
-        let color = top.info.to_move.other();
+        let color = stack.game().to_move();
 
         self.main.update_cell((color, ply.src(), ply.dst()), |x| {
             f(x, params().mo_direct_history_weight())
@@ -212,6 +211,15 @@ impl HistoryTables {
         });
 
         val
+    }
+
+    fn write_quiet_hist(&self, delta: i32, ply: Ply, our_piece: Piece, stack: &History) {
+        self.map_quiet_hist(ply, our_piece, stack, |x, _read_weight| {
+            x.update(|cur| {
+                let delta = delta.clamp(-MAX_HISTORY, MAX_HISTORY);
+                Millipawns(cur.0 + delta - cur.0 * delta.abs() / MAX_HISTORY)
+            });
+        });
     }
 }
 
@@ -1019,8 +1027,7 @@ impl ThreadData {
                         };
 
                         self.history_tables
-                            .main
-                            .gravity_history((to_move, ply.src(), ply.dst()), bonus);
+                            .write_quiet_hist(bonus, ply, our_piece, &self.history);
 
                         self.history_tables.pawn.gravity_history(
                             (
@@ -1057,8 +1064,8 @@ impl ThreadData {
 
                         for (piece, ply) in bad_quiet_moves {
                             self.history_tables
-                                .main
-                                .gravity_history((to_move, ply.src(), ply.dst()), -bonus);
+                                .write_quiet_hist(-bonus, ply, piece, &self.history);
+
                             for i in 0..N_CONTINUATION_HISTORIES {
                                 continuation_history(i, (piece, ply.dst()), -bonus);
                             }
