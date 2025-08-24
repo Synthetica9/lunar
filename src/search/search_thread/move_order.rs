@@ -319,7 +319,10 @@ impl MoveGenerator for StandardMoveGenerator {
                     let src = ply.src();
                     let moved_piece = thread.game().board().occupant_piece(src).unwrap();
                     if let Some(victim) = thread.game().board().occupant_piece(dst) {
-                        value += thread.capture_history.get((moved_piece, src, victim));
+                        value += thread
+                            .history_tables
+                            .capture
+                            .get((moved_piece, src, victim));
                         value += victim.base_value();
                     }
 
@@ -441,7 +444,7 @@ pub fn quiet_move_order(
     let ply_idx = (piece, dst);
 
     let from_history =
-        thread.history_table.get((color, src, dst)).0 * params().mo_direct_history_weight();
+        thread.history_tables.main.get((color, src, dst)).0 * params().mo_direct_history_weight();
     // let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
     let see = static_exchange_evaluation(game, ply).0.min(0);
 
@@ -462,7 +465,8 @@ pub fn quiet_move_order(
 
         let base = Depth::from_num(
             thread
-                .threat_history
+                .history_tables
+                .threat
                 .get((color, (threat_piece, threat_sq), ply_idx))
                 .0,
         );
@@ -483,7 +487,7 @@ pub fn quiet_move_order(
             continue; // TODO: Or break? Since the moves after this will be a bit dubious
         }
 
-        let cont = thread.continuation_histories[i]
+        let cont = thread.history_tables.continuation[i]
             .get((color, cont_hist.piece_dst(), ply_idx))
             .0
             * cont_weights[i];
@@ -492,7 +496,8 @@ pub fn quiet_move_order(
 
     val += params().mo_pawn_history_weight()
         * thread
-            .pawn_history
+            .history_tables
+            .pawn
             .get((color, game.pawn_hash().to_nbits(), piece, ply.dst()))
             .0;
 

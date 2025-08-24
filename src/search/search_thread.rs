@@ -12,7 +12,7 @@ use smallvec::SmallVec;
 
 use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
-use super::countermove::{CounterMove, L2History};
+use super::countermove::CounterMove;
 use crate::basic_enums::Color;
 use crate::eval;
 use crate::game::Game;
@@ -174,14 +174,31 @@ pub struct ThreadData {
     best_move: Option<Ply>,
 
     transposition_table: Arc<TranspositionTable>,
-
-    history_table: Box<Stats<(Color, Square, Square), Millipawns>>,
-    countermove: Box<CounterMove>,
-    continuation_histories: [Box<L2History>; N_CONTINUATION_HISTORIES],
-    threat_history: Box<L2History>,
-    capture_history: Box<Stats<(Piece, Square, Piece), Millipawns>>,
-    pawn_history: Box<Stats<(Color, NBits<10>, Piece, Square), Millipawns>>,
+    history_tables: Box<HistoryTables>,
 }
+
+pub struct HistoryTables {
+    main: Stats<(Color, Square, Square), Millipawns>,
+    countermove: CounterMove,
+    continuation:
+        [Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>; N_CONTINUATION_HISTORIES],
+    threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
+    capture: Stats<(Piece, Square, Piece), Millipawns>,
+    pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
+}
+
+impl HistoryTables {
+    fn map_quiet_hist(
+        &self,
+        ply: Ply,
+        our_piece: Piece,
+        stack: &History,
+        f: impl FnMut(Cell<Millipawns>),
+    ) {
+    }
+}
+
+unsafe impl ZeroInit for HistoryTables {}
 
 impl ThreadData {
     pub fn new(
@@ -197,8 +214,6 @@ impl ThreadData {
             }
             map
         });
-
-        let continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
 
         let mut res = Self {
             thread_id,
@@ -221,12 +236,7 @@ impl ThreadData {
             root_hash: game.hash(),
             best_move: None,
 
-            history_table: ZeroInit::zero_box(),
-            countermove: ZeroInit::zero_box(),
-            continuation_histories,
-            threat_history: ZeroInit::zero_box(),
-            capture_history: ZeroInit::zero_box(),
-            pawn_history: ZeroInit::zero_box(),
+            history_tables: ZeroInit::zero_box(),
         };
 
         // Twice, to clear both prev and curr:
@@ -260,12 +270,7 @@ impl ThreadData {
                     cmd
                 }
                 Some(C::NewGame) => {
-                    self.history_table = ZeroInit::zero_box();
-                    self.countermove = ZeroInit::zero_box();
-                    self.continuation_histories = std::array::from_fn(|_| ZeroInit::zero_box());
-                    self.threat_history = ZeroInit::zero_box();
-                    self.capture_history = ZeroInit::zero_box();
-                    self.pawn_history = ZeroInit::zero_box();
+                    self.history_tables = ZeroInit::zero_box();
 
                     None
                 }
@@ -781,7 +786,7 @@ impl ThreadData {
                     let mut cutoff = see_pruning_noisy_cutoff_upper - Millipawns(MAX_HISTORY);
                     if let Some(victim) = ply.captured_piece(self.game()) {
                         let idx = (ply.moved_piece(self.game()), ply.dst(), victim);
-                        let history = self.capture_history.get(idx);
+                        let history = self.history_tables.capture.get(idx);
                         cutoff -= history
                     }
 
@@ -993,13 +998,14 @@ impl ThreadData {
                             }
 
                             let index = (to_move, oppt_info.piece_dst(), ply_idx);
-                            self.continuation_histories[idx].gravity_history(index, delta);
+                            self.history_tables.continuation[idx].gravity_history(index, delta);
                         };
 
-                        self.history_table
+                        self.history_tables
+                            .main
                             .gravity_history((to_move, ply.src(), ply.dst()), bonus);
 
-                        self.pawn_history.gravity_history(
+                        self.history_tables.pawn.gravity_history(
                             (
                                 to_move,
                                 self.game().pawn_hash().to_nbits(),
@@ -1012,11 +1018,12 @@ impl ThreadData {
                         if let Some((threat_ply, _, piece)) = self.history.threat() {
                             let threat_idx = (piece, threat_ply.dst());
 
-                            self.threat_history
+                            self.history_tables
+                                .threat
                                 .gravity_history((to_move, threat_idx, ply_idx), bonus);
 
                             for (piece, ply) in bad_quiet_moves.iter() {
-                                self.threat_history.gravity_history(
+                                self.history_tables.threat.gravity_history(
                                     (to_move, threat_idx, (*piece, ply.dst())),
                                     -bonus,
                                 );
@@ -1032,12 +1039,13 @@ impl ThreadData {
                         }
 
                         for (piece, ply) in bad_quiet_moves {
-                            self.history_table
+                            self.history_tables
+                                .main
                                 .gravity_history((to_move, ply.src(), ply.dst()), -bonus);
                             for i in 0..N_CONTINUATION_HISTORIES {
                                 continuation_history(i, (piece, ply.dst()), -bonus);
                             }
-                            self.pawn_history.gravity_history(
+                            self.history_tables.pawn.gravity_history(
                                 (
                                     to_move,
                                     self.game().pawn_hash().to_nbits(),
@@ -1048,12 +1056,13 @@ impl ThreadData {
                             );
                         }
                     } else if let Some(captured) = undo.info.captured_piece {
-                        self.capture_history
+                        self.history_tables
+                            .capture
                             .gravity_history((undo.info.our_piece, ply.dst(), captured), bonus);
                     }
 
                     for bad in bad_captures {
-                        self.capture_history.gravity_history(bad, -bonus);
+                        self.history_tables.capture.gravity_history(bad, -bonus);
                     }
                     break;
                 }
@@ -1198,7 +1207,7 @@ impl ThreadData {
                     == self.game().to_move().other()
         );
 
-        Some(self.countermove.get_cell((
+        Some(self.history_tables.countermove.get_cell((
             self.game().to_move(),
             last_info.info.our_piece,
             last_info.ply.dst(),
