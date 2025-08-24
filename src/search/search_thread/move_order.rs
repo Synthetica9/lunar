@@ -393,17 +393,6 @@ impl MoveGenerator for StandardMoveGenerator {
     // Also: what would the guarantee be in this case?
 }
 
-fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
-    let mut res = [0; N_CONTINUATION_HISTORIES];
-    let mut val = params().mo_continuation_start_weight();
-    for cell in res.iter_mut() {
-        *cell = val.to_num();
-        val *= params().mo_continuation_factor();
-    }
-
-    res
-}
-
 pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
     let board = game.board();
     let promotion = ply
@@ -453,8 +442,6 @@ pub fn quiet_move_order(
     // let mut val = from_history + from_pesto + see;
     let mut val = from_history + see;
 
-    let cont_weights = continuation_weights();
-
     if let Some((threat, threat_severity, threat_piece)) = threatened {
         let threat_sq = threat.dst();
         if src == threat_sq {
@@ -478,22 +465,6 @@ pub fn quiet_move_order(
             .to_num::<i32>();
 
         val += threat_history_bonus;
-    }
-
-    for i in 0..N_CONTINUATION_HISTORIES {
-        let Some(cont_hist) = thread.history.peek_n(i) else {
-            break;
-        };
-
-        if cont_hist.ply.is_null() {
-            continue; // TODO: Or break? Since the moves after this will be a bit dubious
-        }
-
-        let cont = thread.history_tables.continuation[i]
-            .get((color, cont_hist.piece_dst(), ply_idx))
-            .0
-            * cont_weights[i];
-        val += cont;
     }
 
     val += params().mo_pawn_history_weight()

@@ -187,6 +187,16 @@ pub struct HistoryTables {
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
 }
 
+fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
+    let mut res = [0; N_CONTINUATION_HISTORIES];
+    let mut val = params().mo_continuation_start_weight();
+    for cell in res.iter_mut() {
+        *cell = val.to_num();
+        val *= params().mo_continuation_factor();
+    }
+
+    res
+}
 impl HistoryTables {
     fn map_quiet_hist(
         &self,
@@ -200,6 +210,21 @@ impl HistoryTables {
         self.main.update_cell((color, ply.src(), ply.dst()), |x| {
             f(x, params().mo_direct_history_weight())
         });
+
+        let cont_weights = continuation_weights();
+
+        for i in 0..N_CONTINUATION_HISTORIES {
+            let Some(oppt_info) = stack.peek_n(i) else {
+                continue;
+            };
+
+            if oppt_info.ply.is_null() {
+                continue; // Should be break?
+            }
+
+            let index = (color, oppt_info.piece_dst(), (our_piece, ply.dst()));
+            self.continuation[i].update_cell(index, |x| f(x, cont_weights[i]));
+        }
     }
 
     fn read_quiet_hist(&self, ply: Ply, our_piece: Piece, stack: &History) -> i32 {
@@ -1013,19 +1038,6 @@ impl ThreadData {
 
                         let ply_idx = (our_piece, ply.dst());
 
-                        let continuation_history = |idx: usize, ply_idx, delta| {
-                            let Some(oppt_info) = self.history.peek_n(idx) else {
-                                return;
-                            };
-
-                            if oppt_info.ply.is_null() {
-                                return;
-                            }
-
-                            let index = (to_move, oppt_info.piece_dst(), ply_idx);
-                            self.history_tables.continuation[idx].gravity_history(index, delta);
-                        };
-
                         self.history_tables
                             .write_quiet_hist(bonus, ply, our_piece, &self.history);
 
@@ -1054,10 +1066,6 @@ impl ThreadData {
                             }
                         }
 
-                        for i in 0..N_CONTINUATION_HISTORIES {
-                            continuation_history(i, ply_idx, bonus);
-                        }
-
                         if let Some(c) = self.countermove_cell() {
                             c.set(ply);
                         }
@@ -1066,9 +1074,6 @@ impl ThreadData {
                             self.history_tables
                                 .write_quiet_hist(-bonus, ply, piece, &self.history);
 
-                            for i in 0..N_CONTINUATION_HISTORIES {
-                                continuation_history(i, (piece, ply.dst()), -bonus);
-                            }
                             self.history_tables.pawn.gravity_history(
                                 (
                                     to_move,
