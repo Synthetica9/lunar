@@ -193,8 +193,25 @@ impl HistoryTables {
         ply: Ply,
         our_piece: Piece,
         stack: &History,
-        f: impl FnMut(Cell<Millipawns>),
+        mut f: impl FnMut(&Cell<Millipawns>, i32),
     ) {
+        let top = stack.peek().unwrap();
+        let color = top.info.to_move.other();
+
+        self.main.update_cell((color, ply.src(), ply.dst()), |x| {
+            f(x, params().mo_direct_history_weight())
+        });
+    }
+
+    fn read_quiet_hist(&self, ply: Ply, our_piece: Piece, stack: &History) -> i32 {
+        let mut val = 0;
+        let x = &mut val;
+
+        self.map_quiet_hist(ply, our_piece, stack, |cell, weight| {
+            *x += cell.get().0 * weight
+        });
+
+        val
     }
 }
 

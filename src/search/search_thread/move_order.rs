@@ -443,8 +443,10 @@ pub fn quiet_move_order(
 
     let ply_idx = (piece, dst);
 
-    let from_history =
-        thread.history_tables.main.get((color, src, dst)).0 * params().mo_direct_history_weight();
+    let from_history = thread
+        .history_tables
+        .read_quiet_hist(ply, piece, &thread.history);
+
     // let from_pesto = square_table[dst as usize] as i32 - square_table[src as usize] as i32;
     let see = static_exchange_evaluation(game, ply).0.min(0);
 

@@ -44,12 +44,17 @@ where
 
     pub fn update<F>(&self, index: Index, f: F)
     where
-        F: Fn(Val) -> Val,
+        F: FnOnce(Val) -> Val,
     {
-        let cell = self.get_cell(index);
-        let val = cell.get();
-        let new_val = f(val);
-        cell.set(new_val);
+        self.update_cell(index, |cell| {
+            let val = cell.get();
+            let new_val = f(val);
+            cell.set(new_val);
+        });
+    }
+
+    pub fn update_cell(&self, index: Index, f: impl FnOnce(&Cell<Val>)) {
+        f(self.get_cell(index));
     }
 }
 
