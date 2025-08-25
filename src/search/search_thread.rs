@@ -887,7 +887,7 @@ impl ThreadData {
                 debug_assert!(extension >= 0, "{extension} < 0");
 
                 if ttpv {
-                    reduction -= Depth::ONE / 2;
+                    reduction -= Depth::ONE;
                 }
                 reduction = reduction.max(Depth::ONE);
 
