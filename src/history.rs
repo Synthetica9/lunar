@@ -136,13 +136,6 @@ impl History {
         undo
     }
 
-    pub fn last_is_null(&self) -> bool {
-        self.stack
-            .last()
-            .and_then(|top| top.undo)
-            .is_some_and(|x| x.ply.is_null())
-    }
-
     pub fn skip(&mut self, skip: Ply) {
         self.stack.last_mut().unwrap().skip_move = skip;
     }
