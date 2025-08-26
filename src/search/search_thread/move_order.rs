@@ -411,12 +411,7 @@ pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
 }
 
 pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
-    let game = thread.game();
-
-    let from_history = thread.history_tables.read_quiet_hist(ply, &thread.history);
-
-    let see = static_exchange_evaluation(game, ply).0.min(0);
-    let mut val = from_history + see;
+    let mut val = thread.history_tables.read_quiet_hist(ply, &thread.history);
 
     if let Some((threat, _, _)) = thread.history.threat() {
         if ply.src() == threat.dst() {
