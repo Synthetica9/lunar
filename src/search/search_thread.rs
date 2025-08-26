@@ -1070,6 +1070,11 @@ impl ThreadData {
                         if let Some(c) = self.countermove_cell() {
                             c.set(ply);
                         }
+
+                        for ply in bad_quiet_moves {
+                            self.history_tables
+                                .write_quiet_hist(-bonus, ply, &self.history);
+                        }
                     } else if let Some(captured) = undo.info.captured_piece {
                         self.history_tables
                             .capture
