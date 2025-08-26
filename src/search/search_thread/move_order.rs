@@ -158,14 +158,6 @@ impl QueuedPly {
         }
     }
 
-    fn to_generated(self) -> Generated {
-        Generated {
-            ply: GeneratedMove::Ply(self.ply()),
-            guarantee: GuaranteeLevel::PseudoLegal,
-            score: self.score(),
-        }
-    }
-
     fn score(self) -> Millipawns {
         match self {
             QueuedPly::LosingCapture { value, .. }
@@ -196,6 +188,7 @@ pub struct Generated {
     pub ply: GeneratedMove,
     pub guarantee: GuaranteeLevel,
     pub score: Millipawns,
+    pub see: Option<Millipawns>,
 }
 
 #[derive(Debug)]
@@ -245,6 +238,7 @@ impl MoveGenerator for RootMoveGenerator {
             ply: GeneratedMove::Ply(ply),
             guarantee: GuaranteeLevel::Legal,
             score: Millipawns(0),
+            see: None,
         })
     }
 }
@@ -272,7 +266,12 @@ impl MoveGenerator for StandardMoveGenerator {
         match self.queue.last().copied() {
             Some(x) if x.min_phase() <= self.phase => {
                 self.queue.pop();
-                return Some(x.to_generated());
+                return Some(Generated {
+                    ply: GeneratedMove::Ply(x.ply()),
+                    guarantee: GuaranteeLevel::PseudoLegal,
+                    score: x.score(),
+                    see: None,
+                });
             }
             _ => {}
         }
@@ -284,6 +283,7 @@ impl MoveGenerator for StandardMoveGenerator {
                     ply: GeneratedMove::HashMove,
                     guarantee: HashLike,
                     score: Millipawns(0),
+                    see: None,
                 });
             }
             NMPThreat => 'nmp: {
@@ -304,6 +304,7 @@ impl MoveGenerator for StandardMoveGenerator {
                     ply: GeneratedMove::Ply(ply),
                     guarantee: GuaranteeLevel::HashLike,
                     score: sevr, // dubious?
+                    see: None,
                 });
             }
             GenQuiescenceMoves => {
@@ -343,6 +344,7 @@ impl MoveGenerator for StandardMoveGenerator {
                             ply: GeneratedMove::Ply(ply),
                             guarantee: PseudoLegal,
                             score: value + see,
+                            see: Some(see),
                         });
                     }
                 }
@@ -363,6 +365,7 @@ impl MoveGenerator for StandardMoveGenerator {
                         ply: GeneratedMove::Ply(ply),
                         guarantee: GuaranteeLevel::HashLike,
                         score: Millipawns(0),
+                        see: None,
                     });
                 }
             }
