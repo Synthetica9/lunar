@@ -745,6 +745,7 @@ impl ThreadData {
                 ply,
                 guarantee,
                 score: history_score,
+                see,
             }) = generator.next(self)
             {
                 if N::IS_SE && matches!(ply, GeneratedMove::HashMove) {
@@ -841,7 +842,8 @@ impl ThreadData {
 
                 moveno += 1;
 
-                let see = crate::search::static_exchange_evaluation(self.game(), ply);
+                let see = see
+                    .unwrap_or_else(|| crate::search::static_exchange_evaluation(self.game(), ply));
 
                 // SEE Pruning
                 if pruning_allowed && !is_quiet && !is_check && see < see_pruning_noisy_cutoff_upper
