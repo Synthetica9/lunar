@@ -579,18 +579,16 @@ impl ThreadData {
         let from_tt = self.transposition_table.get(self.game().hash());
         let ttpv = from_tt.is_some_and(|x| x.ttpv()) || N::is_pv();
 
-        let eval = if let Some(raw) = raw_eval {
-            from_tt
-                .filter(|x| match x.value_type() {
+        let eval = from_tt
+            .filter(|x| {
+                raw_eval.is_some_and(|raw| match x.value_type() {
                     Exact => true,
                     LowerBound => x.value >= raw,
                     UpperBound => x.value <= raw,
                 })
-                .map(|x| x.value.clamp_eval())
-                .or(raw_eval)
-        } else {
-            None
-        };
+            })
+            .map(|x| x.value.clamp_eval())
+            .or(raw_eval);
 
         let futility_pruning = if let Some(eval) = eval {
             let fut_margin = Millipawns(
