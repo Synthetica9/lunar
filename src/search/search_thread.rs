@@ -581,11 +581,12 @@ impl ThreadData {
 
         let eval = from_tt
             .filter(|x| {
-                raw_eval.is_some_and(|raw| match x.value_type() {
-                    Exact => true,
-                    LowerBound => x.value >= raw,
-                    UpperBound => x.value <= raw,
-                })
+                !N::IS_SE
+                    && raw_eval.is_some_and(|raw| match x.value_type() {
+                        Exact => true,
+                        LowerBound => x.value >= raw,
+                        UpperBound => x.value <= raw,
+                    })
             })
             .map(|x| x.value.clamp_eval())
             .or(raw_eval);
