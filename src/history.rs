@@ -91,6 +91,8 @@ impl History {
                 continue;
             };
 
+            debug_assert!(sp.undo.is_none_or(|x| x.info.to_move == undo.info.to_move));
+
             if sp.eval.is_none() {
                 continue;
             }
@@ -251,6 +253,10 @@ impl History {
 
     pub fn improving(&self) -> bool {
         self.full_peek_n(0).unwrap().improving
+    }
+
+    pub fn opponent_improving(&self) -> bool {
+        self.full_peek_n(1).map(|x| x.improving).unwrap_or(false)
     }
 
     pub fn set_threat(&mut self, ply: Ply, threat_severity: Millipawns) {

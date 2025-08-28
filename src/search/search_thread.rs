@@ -178,7 +178,7 @@ pub struct ThreadData {
 }
 
 pub struct HistoryTables {
-    main: Stats<(Color, Square, Square, bool), Millipawns>,
+    main: Stats<(Color, Square, Square, bool, bool), Millipawns>,
     countermove: CounterMove,
     continuation:
         [Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>; N_CONTINUATION_HISTORIES],
@@ -208,10 +208,16 @@ impl HistoryTables {
         let color = game.to_move();
         let piece = game.board().occupant_piece(ply.src()).unwrap();
 
-        self.main
-            .update_cell((color, ply.src(), ply.dst(), stack.improving()), |x| {
-                f(x, Depth::from_num(params().mo_direct_history_weight()))
-            });
+        self.main.update_cell(
+            (
+                color,
+                ply.src(),
+                ply.dst(),
+                stack.improving(),
+                stack.opponent_improving(),
+            ),
+            |x| f(x, Depth::from_num(params().mo_direct_history_weight())),
+        );
 
         let cont_weights = continuation_weights();
 
