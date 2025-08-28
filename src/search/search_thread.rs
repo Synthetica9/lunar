@@ -871,6 +871,28 @@ impl ThreadData {
                     continue;
                 }
 
+                // Bad Noisy Futility Pruning
+                // https://github.com/kelseyde/calvin-chess-engine/compare/9f2316da..9ce7a26c
+                if let Some(eval) = eval {
+                    let margin =
+                        eval + Millipawns((2000 * depth).to_num()) + see / 2 + Millipawns(3000);
+                    if !is_in_check
+                        && pruning_allowed
+                        && depth < 6
+                        && see.0 < 0
+                        && !is_quiet
+                        && margin <= alpha
+                        && matches!(guarantee, GuaranteeLevel::PseudoLegal)
+                    {
+                        // TODO: need to get a phase from movegen
+                        // println!(
+                        //     "{margin:?} {alpha:?} {see:?} {} {ply:?}",
+                        //     self.game().to_fen()
+                        // );
+                        break;
+                    }
+                }
+
                 let hash_before = self.game().hash();
 
                 let mut reduction = Depth::ONE;
