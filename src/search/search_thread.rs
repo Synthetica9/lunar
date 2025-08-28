@@ -31,6 +31,8 @@ use crate::zobrist_hash::ZobristHash;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 13;
 
+pub const MAX_CORR_HIST: Millipawns = Millipawns(8192);
+
 mod move_order;
 
 pub use move_order::static_exchange_evaluation;
@@ -185,6 +187,8 @@ pub struct HistoryTables {
     threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
     capture: Stats<(Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
+
+    pawn_corr: Stats<(Color, NBits<16>), Millipawns>,
 }
 
 fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
@@ -197,6 +201,7 @@ fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
 
     res
 }
+
 impl HistoryTables {
     fn map_quiet_hist(
         &self,
@@ -265,6 +270,33 @@ impl HistoryTables {
             x.update(|cur| {
                 let delta = delta.clamp(-MAX_HISTORY, MAX_HISTORY);
                 Millipawns(cur.0 + delta - cur.0 * delta.abs() / MAX_HISTORY)
+            });
+        });
+    }
+
+    fn map_corrhist(&self, stack: &History, mut f: impl FnMut(&Cell<Millipawns>, i32)) {
+        let game = stack.game();
+        let color = game.to_move();
+        let pawn_hash = game.pawn_hash();
+
+        self.pawn_corr
+            .update_cell((color, pawn_hash.to_nbits()), |x| f(x, 66));
+    }
+
+    fn read_corrhist(&self, stack: &History) -> Millipawns {
+        let mut res = Millipawns(0);
+
+        let w_res = &mut res;
+        self.map_corrhist(stack, |x, weight| *w_res += x.get() * weight / 512);
+
+        res
+    }
+
+    fn write_corrhist(&self, stack: &History, delta: Millipawns) {
+        self.map_corrhist(stack, |x, _weight| {
+            x.update(|cur| {
+                let delta = delta.clamp(-MAX_CORR_HIST, MAX_CORR_HIST);
+                cur + delta - Millipawns(cur.0 * delta.0.abs() / MAX_CORR_HIST.0)
             });
         });
     }
@@ -573,7 +605,9 @@ impl ThreadData {
         let mut alpha = alpha;
         let mut beta = beta;
 
-        let eval = self.history.eval();
+        let static_eval = self.history.eval();
+        let eval = static_eval
+            .map(|x| (x + self.history_tables.read_corrhist(&self.history)).clamp_eval());
         let is_in_check = self.game().is_in_check();
 
         let futility_pruning = if let Some(eval) = eval {
@@ -1114,15 +1148,16 @@ impl ThreadData {
         }
 
         // Don't write worse SE move to TT
+        let value_type = if value <= alpha_orig {
+            UpperBound
+        } else if value >= beta {
+            LowerBound
+        } else {
+            Exact
+        };
+
         if !N::IS_SE {
             use crate::transposition_table::*;
-            let value_type = if value <= alpha_orig {
-                UpperBound
-            } else if value >= beta {
-                LowerBound
-            } else {
-                Exact
-            };
 
             let tte = TranspositionEntry::new(
                 depth.max(Depth::ZERO).to_num(),
@@ -1137,6 +1172,28 @@ impl ThreadData {
                 PutResult::ValueAdded => self.tt_puts += 1,
                 PutResult::ValueReplaced | PutResult::Noop => {}
             }
+        }
+
+        let best_is_noisy = best_move.is_none_or(|x| {
+            self.game().board().occupant_piece(x.dst()).is_some() || x.is_en_passant()
+        });
+
+        let write_corr_hist = !is_in_check
+            && !best_is_noisy
+            && static_eval.is_some_and(|eval| match value_type {
+                Exact => true,
+                LowerBound => value >= eval,
+                UpperBound => value <= eval,
+            })
+            && depth >= 1;
+
+        if write_corr_hist {
+            let static_eval = static_eval.unwrap();
+            // TODO: use full fidelity depth
+            let delta = (value - static_eval) * depth.to_num::<i32>() / 8;
+            let delta = delta.clamp(-MAX_CORR_HIST / 4, MAX_CORR_HIST / 4);
+
+            self.history_tables.write_corrhist(&self.history, delta);
         }
 
         Ok((value, best_move))
