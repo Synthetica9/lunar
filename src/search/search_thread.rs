@@ -31,7 +31,7 @@ use crate::zobrist_hash::ZobristHash;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 13;
 
-pub const MAX_CORR_HIST: Millipawns = Millipawns(8192);
+pub const MAX_CORR_HIST: Millipawns = Millipawns(1024);
 
 mod move_order;
 
