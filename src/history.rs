@@ -249,6 +249,10 @@ impl History {
         self.full_peek_n(0).unwrap().improving_rate
     }
 
+    pub fn improving(&self) -> bool {
+        self.full_peek_n(0).unwrap().improving
+    }
+
     pub fn set_threat(&mut self, ply: Ply, threat_severity: Millipawns) {
         let src = ply.src();
         debug_assert_eq!(

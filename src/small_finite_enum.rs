@@ -5,6 +5,13 @@ pub trait SmallFiniteEnum {
     fn to_usize(self) -> usize;
 }
 
+impl SmallFiniteEnum for bool {
+    const SIZE: usize = 2;
+    fn to_usize(self) -> usize {
+        self as usize
+    }
+}
+
 impl SmallFiniteEnum for Color {
     const SIZE: usize = 2;
     fn to_usize(self) -> usize {
