@@ -1148,16 +1148,15 @@ impl ThreadData {
         }
 
         // Don't write worse SE move to TT
-        let value_type = if value <= alpha_orig {
-            UpperBound
-        } else if value >= beta {
-            LowerBound
-        } else {
-            Exact
-        };
-
         if !N::IS_SE {
             use crate::transposition_table::*;
+            let value_type = if value <= alpha_orig {
+                UpperBound
+            } else if value >= beta {
+                LowerBound
+            } else {
+                Exact
+            };
 
             let tte = TranspositionEntry::new(
                 depth.max(Depth::ZERO).to_num(),
@@ -1172,28 +1171,29 @@ impl ThreadData {
                 PutResult::ValueAdded => self.tt_puts += 1,
                 PutResult::ValueReplaced | PutResult::Noop => {}
             }
-        }
 
-        let best_is_noisy = best_move.is_none_or(|x| {
-            self.game().board().occupant_piece(x.dst()).is_some() || x.is_en_passant()
-        });
+            // Corrhist update
+            let best_is_noisy = best_move.is_none_or(|x| {
+                self.game().board().occupant_piece(x.dst()).is_some() || x.is_en_passant()
+            });
 
-        let write_corr_hist = !is_in_check
-            && !best_is_noisy
-            && static_eval.is_some_and(|eval| match value_type {
-                Exact => true,
-                LowerBound => value >= eval,
-                UpperBound => value <= eval,
-            })
-            && depth >= 1;
+            let write_corr_hist = !is_in_check
+                && !best_is_noisy
+                && static_eval.is_some_and(|eval| match value_type {
+                    Exact => true,
+                    LowerBound => value >= eval,
+                    UpperBound => value <= eval,
+                })
+                && depth >= 1;
 
-        if write_corr_hist {
-            let static_eval = static_eval.unwrap();
-            // TODO: use full fidelity depth
-            let delta = (value - static_eval) * depth.to_num::<i32>() / 8;
-            let delta = delta.clamp(-MAX_CORR_HIST / 4, MAX_CORR_HIST / 4);
+            if write_corr_hist {
+                let static_eval = static_eval.unwrap();
+                // TODO: use full fidelity depth
+                let delta = (value - static_eval) * depth.to_num::<i32>() / 8;
+                let delta = delta.clamp(-MAX_CORR_HIST / 4, MAX_CORR_HIST / 4);
 
-            self.history_tables.write_corrhist(&self.history, delta);
+                self.history_tables.write_corrhist(&self.history, delta);
+            }
         }
 
         Ok((value, best_move))
