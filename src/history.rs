@@ -14,6 +14,7 @@ pub struct StackElement {
     eval: Option<Millipawns>,
     hash: ZobristHash,
     improving_rate: ImprovingRate,
+    improving: bool,
     threat: Option<(Ply, Millipawns, Piece)>,
     skip_move: Ply,
 }
@@ -48,6 +49,7 @@ impl History {
             eval,
             hash,
             improving_rate: ImprovingRate::ZERO,
+            improving: false,
             threat: None,
             skip_move: Ply::NULL,
         };
@@ -97,13 +99,14 @@ impl History {
             break;
         }
 
-        let improving_rate = if let (Some(prev), Some(eval)) = (prev, eval) {
+        let (improving_rate, improving) = if let (Some(prev), Some(eval)) = (prev, eval) {
             let prev_eval = prev.eval.unwrap();
             let diff = eval - prev_eval;
-            (prev.improving_rate + ImprovingRate::saturating_from_num(diff.0) / 500)
-                .clamp(ImprovingRate::NEG_ONE, ImprovingRate::ONE)
+            let rate = (prev.improving_rate + ImprovingRate::saturating_from_num(diff.0) / 500)
+                .clamp(ImprovingRate::NEG_ONE, ImprovingRate::ONE);
+            (rate, prev_eval < eval)
         } else {
-            ImprovingRate::ZERO
+            (ImprovingRate::ZERO, false)
         };
 
         self.stack.push(StackElement {
@@ -111,6 +114,7 @@ impl History {
             eval,
             hash,
             improving_rate,
+            improving,
             threat: None,
             skip_move: Ply::NULL,
         });
