@@ -419,6 +419,10 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
         }
     }
 
+    if thread.game().is_check(ply) {
+        val += 1000;
+    }
+
     Millipawns(val)
 }
 
