@@ -180,8 +180,7 @@ pub struct ThreadData {
 pub struct HistoryTables {
     main: Stats<(Color, Square, Square), Millipawns>,
     countermove: CounterMove,
-    continuation:
-        [Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>; N_CONTINUATION_HISTORIES],
+    continuation: Stats<((Color, Piece, Square), (Color, Piece, Square)), Millipawns>,
     threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
     capture: Stats<(Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
@@ -223,10 +222,10 @@ impl HistoryTables {
                 continue; // Should this be break?
             }
 
-            self.continuation[i]
-                .update_cell((color, oppt_info.piece_dst(), (piece, ply.dst())), |x| {
-                    f(x, Depth::from_num(cont_weights[i]))
-                });
+            self.continuation.update_cell(
+                (oppt_info.color_piece_dst(), (color, piece, ply.dst())),
+                |x| f(x, Depth::from_num(cont_weights[i])),
+            );
         }
 
         self.pawn.update_cell(
@@ -869,6 +868,27 @@ impl ThreadData {
                     // see any moves we can return stale-/checkmate
                     any_moves_pruned = true;
                     continue;
+                }
+
+                // Bad Noisy Futility Pruning
+                // https://github.com/kelseyde/calvin-chess-engine/compare/9f2316da..9ce7a26c
+                if let Some(eval) = eval {
+                    let margin = eval + Millipawns((2000 * depth).to_num());
+                    if !is_in_check
+                        && pruning_allowed
+                        && depth < 6
+                        && see.0 < 0
+                        && !is_quiet
+                        && margin <= alpha
+                        && matches!(guarantee, GuaranteeLevel::PseudoLegal)
+                    {
+                        // TODO: need to get a phase from movegen
+                        // println!(
+                        //     "{margin:?} {alpha:?} {see:?} {} {ply:?}",
+                        //     self.game().to_fen()
+                        // );
+                        break;
+                    }
                 }
 
                 let hash_before = self.game().hash();
