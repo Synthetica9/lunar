@@ -31,7 +31,7 @@ use crate::zobrist_hash::ZobristHash;
 pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 13;
 
-pub const MAX_CORR_HIST: Millipawns = Millipawns(1024);
+pub const MAX_CORR_HIST: Millipawns = Millipawns(2048);
 
 mod move_order;
 
@@ -280,7 +280,7 @@ impl HistoryTables {
         let pawn_hash = game.pawn_hash();
 
         self.pawn_corr
-            .update_cell((color, pawn_hash.to_nbits()), |x| f(x, 66));
+            .update_cell((color, pawn_hash.to_nbits()), |x| f(x, 25));
     }
 
     fn read_corrhist(&self, stack: &History) -> Millipawns {
