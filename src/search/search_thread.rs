@@ -180,8 +180,7 @@ pub struct ThreadData {
 pub struct HistoryTables {
     main: Stats<(Color, Square, Square), Millipawns>,
     countermove: CounterMove,
-    continuation:
-        [Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>; N_CONTINUATION_HISTORIES],
+    continuation: Stats<((Color, Piece, Square), (Color, Piece, Square)), Millipawns>,
     threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
     capture: Stats<(Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
@@ -214,6 +213,7 @@ impl HistoryTables {
 
         let cont_weights = continuation_weights();
 
+        let own_triplet = (color, piece, ply.dst());
         for i in 0..N_CONTINUATION_HISTORIES {
             let Some(oppt_info) = stack.peek_n(i) else {
                 continue;
@@ -223,8 +223,14 @@ impl HistoryTables {
                 continue; // Should this be break?
             }
 
-            self.continuation[i]
-                .update_cell((color, oppt_info.piece_dst(), (piece, ply.dst())), |x| {
+            let other_triplet = (
+                oppt_info.info.to_move,
+                oppt_info.info.our_piece,
+                oppt_info.ply.dst(),
+            );
+
+            self.continuation
+                .update_cell((other_triplet, own_triplet), |x| {
                     f(x, Depth::from_num(cont_weights[i]))
                 });
         }
