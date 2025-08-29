@@ -635,7 +635,11 @@ impl ThreadData {
         let ttpv = from_tt.is_some_and(|x| x.ttpv()) || N::is_pv();
 
         if let Some(tte) = from_tt {
-            if !N::IS_SE && depth <= tte.depth && !self.history.may_be_repetition() {
+            if !N::IS_SE
+                && depth <= tte.depth
+                && !self.history.may_be_repetition()
+                && self.game().half_move() <= 80
+            {
                 // println!("Transposition table hit");
                 // https://en.wikipedia.org/wiki/Negamax#Negamax_with_alpha_beta_pruning_and_transposition_tables
 
