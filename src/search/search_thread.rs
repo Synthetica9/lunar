@@ -188,7 +188,7 @@ pub struct HistoryTables {
     capture: Stats<(Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
 
-    pawn_corr: Stats<(Color, NBits<16>), Millipawns>,
+    pawn_corr: Stats<(Color, NBits<20>), Millipawns>,
 }
 
 fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
