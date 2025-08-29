@@ -1173,7 +1173,7 @@ impl ThreadData {
             }
 
             // Corrhist update
-            let best_is_noisy = best_move.is_none_or(|x| {
+            let best_is_noisy = best_move.is_some_and(|x| {
                 self.game().board().occupant_piece(x.dst()).is_some() || x.is_en_passant()
             });
 
