@@ -605,8 +605,9 @@ impl ThreadData {
         let mut alpha = alpha;
         let mut beta = beta;
 
-        let static_eval = self.history.eval();
-        let eval = static_eval
+        let eval = self
+            .history
+            .eval()
             .map(|x| (x + self.history_tables.read_corrhist(&self.history)).clamp_eval());
         let is_in_check = self.game().is_in_check();
 
@@ -1179,7 +1180,7 @@ impl ThreadData {
 
             let write_corr_hist = !is_in_check
                 && !best_is_noisy
-                && static_eval.is_some_and(|eval| match value_type {
+                && eval.is_some_and(|eval| match value_type {
                     Exact => true,
                     LowerBound => value >= eval,
                     UpperBound => value <= eval,
@@ -1187,9 +1188,9 @@ impl ThreadData {
                 && depth >= 1;
 
             if write_corr_hist {
-                let static_eval = static_eval.unwrap();
+                let eval = eval.unwrap();
                 // TODO: use full fidelity depth
-                let delta = (value - static_eval) * depth.to_num::<i32>() / 8;
+                let delta = (value - eval) * depth.to_num::<i32>() / 8;
                 let delta = delta.clamp(-MAX_CORR_HIST / 4, MAX_CORR_HIST / 4);
 
                 self.history_tables.write_corrhist(&self.history, delta);
