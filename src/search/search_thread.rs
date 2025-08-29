@@ -12,7 +12,6 @@ use smallvec::SmallVec;
 
 use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
-use super::countermove::CounterMove;
 use crate::basic_enums::Color;
 use crate::eval;
 use crate::game::Game;
@@ -179,7 +178,7 @@ pub struct ThreadData {
 
 pub struct HistoryTables {
     main: Stats<(Color, Square, Square), Millipawns>,
-    countermove: CounterMove,
+    countermove: Stats<(Color, (Piece, Square), (Piece, Square)), Ply>,
     continuation:
         [Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>; N_CONTINUATION_HISTORIES],
     threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
@@ -1208,6 +1207,7 @@ impl ThreadData {
 
     fn countermove_cell(&self) -> Option<&Cell<Ply>> {
         let last_info = self.history.peek_n(0)?;
+        let other_info = self.history.peek_n(1)?;
 
         // TODO: uncomment bugfix, but may influence playing strength:
         // if last_info.ply.is_null() {
@@ -1226,8 +1226,8 @@ impl ThreadData {
 
         Some(self.history_tables.countermove.get_cell((
             self.game().to_move(),
-            last_info.info.our_piece,
-            last_info.ply.dst(),
+            other_info.piece_dst(),
+            last_info.piece_dst(),
         )))
     }
 }
