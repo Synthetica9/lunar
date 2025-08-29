@@ -58,8 +58,6 @@ where
     }
 }
 
-pub type CounterMove = Stats<(Color, Piece, Square), Ply>;
-
 impl<Index> Stats<Index, Millipawns>
 where
     Index: SmallFiniteEnum,
