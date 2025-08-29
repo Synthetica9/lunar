@@ -923,6 +923,7 @@ impl ThreadData {
                     };
                 };
 
+                let improving_rate = self.history.improving_rate();
                 let lmr = !is_in_check && !is_first_move;
 
                 if lmr {
@@ -936,7 +937,6 @@ impl ThreadData {
                         (params().lmr_quiet_slope(), params().lmr_quiet_offset())
                     };
 
-                    let improving_rate = self.history.improving_rate();
                     reduction += (a * x + b)
                         * (Depth::ONE - improving_rate * params().lmr_improving_rate())
                             .max(Depth::ONE);
@@ -981,12 +981,14 @@ impl ThreadData {
                 debug_assert_eq!(is_reduced, next_depth < full_depth);
 
                 // "We have LMP at home" pruning
-                if pruning_allowed
-                    && lmr
-                    && virtual_depth < params().lmpahp_cutoff_depth()
-                    && is_quiet
-                    && !is_check
-                {
+                let lmpah_cutoff = {
+                    let base = params().lmpahp_cutoff_depth();
+                    let imp_fac = (Depth::ONE + improving_rate / 8).min(Depth::ONE);
+
+                    base * imp_fac
+                };
+
+                if pruning_allowed && lmr && virtual_depth < lmpah_cutoff && is_quiet && !is_check {
                     continue;
                 }
 
