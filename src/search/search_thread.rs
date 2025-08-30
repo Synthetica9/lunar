@@ -209,7 +209,7 @@ impl HistoryTables {
         let piece = game.board().occupant_piece(ply.src()).unwrap();
 
         self.main.update_cell((color, ply.src(), ply.dst()), |x| {
-            f(x, Depth::from_num(params().mo_direct_history_weight()))
+            f(x, params().mo_main_history_weight())
         });
 
         let cont_weights = continuation_weights();
@@ -231,7 +231,7 @@ impl HistoryTables {
 
         self.pawn.update_cell(
             (color, game.pawn_hash().to_nbits(), piece, ply.dst()),
-            |x| f(x, Depth::from_num(params().mo_pawn_history_weight())),
+            |x| f(x, params().mo_pawn_history_weight()),
         );
 
         if let Some((threat, threat_severity, threat_piece)) = stack.threat() {
@@ -240,7 +240,7 @@ impl HistoryTables {
             .clamp(Depth::ZERO, Depth::ONE);
             let threat_sq = threat.dst();
 
-            let weight = severity_scaling * Depth::from_num(params().mo_sevr_move_threat());
+            let weight = severity_scaling * params().mo_sevr_move_threat();
 
             self.threat.update_cell(
                 (color, (threat_piece, threat_sq), (piece, ply.dst())),
