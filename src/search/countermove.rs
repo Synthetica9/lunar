@@ -31,12 +31,13 @@ where
         Stats(std::array::from_fn(|_| Cell::new(val)))
     }
 
-    pub fn get_raw(&self, index: usize) -> &Cell<Val> {
-        &self.0[index]
-    }
-
     pub fn get_cell(&self, index: Index) -> &Cell<Val> {
-        &self.0[index.to_usize()]
+        let index = index.to_usize();
+        unsafe {
+            core::hint::assert_unchecked(index < self.0.len());
+        }
+
+        &self.0[index]
     }
 
     pub fn get(&self, index: Index) -> Val {
