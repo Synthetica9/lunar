@@ -178,14 +178,14 @@ make_tunable_params! {
 
     tt_capture_reduction: Depth = 0.5918770254854429, 0., 2., 0.1, 0.002;
 
-    mo_continuation_start_weight:  Depth = 44.045077506372664, 0., 100., 5., 0.002;
-    mo_continuation_factor: Depth = 0.7506528958448074, 0., 1., 0.05, 0.002;
-    mo_direct_history_weight: i32 = 40, 0, 100, 5., 0.002;
-    mo_move_threatened_piece_bonus: i32 = 1305, 0, 3000, 150., 0.002;
     mo_nmp_threat_min_sevr: i32 = 143, 0, 2000, 30., 0.002;
+    mo_move_threatened_piece_bonus: i32 = 1305, 0, 3000, 150., 0.002;
+    mo_main_history_weight: Depth = 40., 0., 100., 5., 0.002;
+    mo_continuation_start_weight: Depth = 44.045077506372664, 0., 100., 5., 0.002;
+    mo_continuation_factor: Depth = 0.7506528958448074, 0., 1., 0.05, 0.002;
+    mo_pawn_history_weight: Depth = 30., 0., 200., 5., 0.002;
     mo_sevr_scaling_max: i32 = 2591, 0, 10000, 200., 0.002;
-    mo_sevr_move_threat: i32 = 41, 0, 200, 5., 0.002;
-    mo_pawn_history_weight: i32 = 30, 0, 200, 5., 0.002;
+    mo_sevr_move_threat: Depth = 41., 0., 200., 5., 0.002;
 
     aw_min_depth: i32 = 5, 2, 10, 0.5, 0.002;
     aw_base_window: f64 = 340.29425793210805, 0., 1000., 50., 0.002;
