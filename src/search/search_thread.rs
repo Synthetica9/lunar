@@ -230,7 +230,7 @@ impl HistoryTables {
             );
 
             self.continuation
-                .update_cell((other_triplet, own_triplet), |x| {
+                .update_cell((own_triplet, other_triplet), |x| {
                     f(x, Depth::from_num(cont_weights[i]))
                 });
         }
