@@ -1,7 +1,7 @@
 EXE = lunar
 
-.PHONY: pgo
+.PHONY: lunar
 
-pgo:
-	bash ./scripts/build_pgo.sh
-	cp ./target/release/lunar_pgo "$(EXE)"
+$(EXE):
+	cargo build --release
+	cp ./target/release/lunar "$(EXE)"
