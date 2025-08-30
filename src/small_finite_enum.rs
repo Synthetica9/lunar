@@ -13,7 +13,7 @@ impl SmallFiniteEnum for Color {
 }
 
 impl SmallFiniteEnum for Piece {
-    const SIZE: usize = 6;
+    const SIZE: usize = 8; // rounded to pow2
     fn to_usize(self) -> usize {
         self as usize
     }

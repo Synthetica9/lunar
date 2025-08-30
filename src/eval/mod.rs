@@ -211,7 +211,7 @@ pub fn base_eval(game: &Game) -> Millipawns {
 }
 
 pub fn to_feature_idx(piece: Piece, color: Color, square: Square) -> usize {
-    (piece, color, square).to_usize()
+    64 * 6 * color as usize + 64 * piece as usize + square as usize
 }
 
 #[cfg(test)]
