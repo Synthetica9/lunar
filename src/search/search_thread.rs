@@ -3,7 +3,6 @@
 
 use std::cell::Cell;
 use std::i32;
-use std::intrinsics::assume;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -23,7 +22,7 @@ use crate::piece::Piece;
 use crate::ply::Ply;
 use crate::search::countermove::{Stats, MAX_HISTORY};
 use crate::search::parameters::params;
-use crate::small_finite_enum::{NBits, SmallFiniteEnum};
+use crate::small_finite_enum::NBits;
 use crate::square::Square;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
@@ -181,7 +180,7 @@ pub struct ThreadData {
 pub struct HistoryTables {
     main: Stats<(Color, Square, Square), Millipawns>,
     countermove: CounterMove,
-    continuation: Stats<((Color, Piece, Square), (Color, Piece, Square)), Millipawns>,
+    continuation: Stats<(Color, Piece, Square, (Color, Piece, Square)), Millipawns>,
     threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
     capture: Stats<(Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
@@ -214,8 +213,6 @@ impl HistoryTables {
 
         let cont_weights = continuation_weights();
 
-        let own_triplet = (color, piece, ply.dst());
-        let base_idx = own_triplet.to_usize() * 2 * 6 * 64; // UUUUGH
         for i in 0..N_CONTINUATION_HISTORIES {
             let Some(oppt_info) = stack.peek_n(i) else {
                 continue;
@@ -231,12 +228,10 @@ impl HistoryTables {
                 oppt_info.ply.dst(),
             );
 
-            let idx = base_idx + other_triplet.to_usize();
-
-            f(
-                self.continuation.get_raw(idx),
-                Depth::from_num(cont_weights[i]),
-            );
+            self.continuation
+                .update_cell((color, piece, ply.dst(), other_triplet), |x| {
+                    f(x, Depth::from_num(cont_weights[i]))
+                });
         }
 
         self.pawn.update_cell(
