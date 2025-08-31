@@ -296,7 +296,7 @@ impl HistoryTables {
         self.map_corrhist(stack, |x, weight| {
             let value = T::from_num(x.get().0) * T::from_num(weight);
             *w_correction += value;
-            *w_complexity += value.abs();
+            *w_complexity += value * value / 1024;
         });
 
         (
@@ -1016,7 +1016,8 @@ impl ThreadData {
                     reduction -= Depth::ONE;
                 }
 
-                reduction -= Depth::from_num(corrplexity.0) / params().corrplexity_scale();
+                let corrplexity_lmr = Depth::from_num(corrplexity.0) / params().corrplexity_scale();
+                reduction -= corrplexity_lmr;
 
                 reduction = reduction.max(Depth::ONE);
 

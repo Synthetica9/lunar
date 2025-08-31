@@ -224,7 +224,7 @@ make_tunable_params! {
 
     corrhist_pawn_weight: Depth = 0.12890625, 0.0, 1.0, 0.05, 0.002;
 
-    corrplexity_scale: Depth = 256., 50., 1000., 20., 0.002;
+    corrplexity_scale: Depth = 24.2, 5., 100., 2., 0.002;
 }
 
 #[cfg(feature = "tunable")]
