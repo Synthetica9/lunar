@@ -100,6 +100,28 @@ impl Hash for ZobristHash {
     }
 }
 
+pub fn pseudo_structure_delta(color: Color, piece: Piece, square: Square) -> ZobristHash {
+    use crate::square::ranks::*;
+    use Square::*;
+
+    let square = match piece {
+        Piece::Pawn => Square::new(square.file(), TWO),
+        Piece::Bishop => {
+            if crate::bitboard::DARK_SQUARES.get(square) {
+                A1
+            } else {
+                A2
+            }
+        }
+        Piece::King => square,
+        _ => A1,
+    };
+
+    let mut res = ZobristHash::new();
+    res.toggle_piece(color, piece, square);
+    res
+}
+
 #[test]
 fn test_zobrist_hash() {
     // Tests from http://hgm.nubati.net/book_format.html

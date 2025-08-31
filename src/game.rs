@@ -1,5 +1,3 @@
-use std::fmt::DebugSet;
-
 use smallvec::SmallVec;
 
 use crate::basic_enums::{CastleDirection, Color};
@@ -10,10 +8,9 @@ use crate::castlerights::CastleRights;
 use crate::direction::directions;
 use crate::eval::{to_feature_idx, Accumulator};
 use crate::legality::LegalityChecker;
-use crate::small_finite_enum::SmallFiniteEnum;
 
 use crate::piece::Piece;
-use crate::ply::{ApplyPly, GameInfoForPly, Ply, SpecialFlag, UndoPly, _combination_moves};
+use crate::ply::{ApplyPly, Ply, SpecialFlag, UndoPly, _combination_moves};
 use crate::plyset::PlySet;
 use crate::search::static_exchange_evaluation;
 use crate::square::Square;
@@ -33,6 +30,7 @@ pub struct Game {
     half_move_total: i16,
     hash: ZobristHash,
     pawn_hash: ZobristHash,
+    pseudo_structure_hash: ZobristHash,
 
     white_accum: Accumulator,
     black_accum: Accumulator,
@@ -85,6 +83,10 @@ impl Game {
         self.hash
     }
 
+    pub const fn pseudo_structure_hash(&self) -> ZobristHash {
+        self.pseudo_structure_hash
+    }
+
     pub fn pawn_hash(&self) -> ZobristHash {
         self.pawn_hash
     }
@@ -107,6 +109,12 @@ impl Game {
         // TODO: pawn hash
         self.hash = ZobristHash::from_game(self, false);
         self.pawn_hash = ZobristHash::from_game(self, true);
+        self.pseudo_structure_hash = ZobristHash::new();
+
+        for (color, piece, square) in self.board().to_piece_list() {
+            let delta = crate::zobrist_hash::pseudo_structure_delta(color, piece, square);
+            self.pseudo_structure_hash.0 = self.pseudo_structure_hash.0.wrapping_add(delta.0);
+        }
     }
 
     pub fn recalc_accum(&mut self, side: Color) {
@@ -280,6 +288,7 @@ impl Game {
             half_move_total: (full_move - 1) * 2 + (to_move as i16),
             hash,
             pawn_hash,
+            pseudo_structure_hash: ZobristHash::new(),
 
             white_accum: Accumulator::new(),
             black_accum: Accumulator::new(),
@@ -1158,6 +1167,8 @@ impl ApplyPly for Game {
             .flip_vert(),
         );
         let net = &crate::eval::NNUE;
+
+        let psd = crate::zobrist_hash::pseudo_structure_delta(color, piece, square);
         if exists_after {
             self.white_accum.add_feature(idx_white, net);
             self.black_accum.add_feature(idx_black, net);
@@ -1168,9 +1179,13 @@ impl ApplyPly for Game {
                     Color::Black => self.black_king = square,
                 }
             }
+
+            self.pseudo_structure_hash.0 = self.pseudo_structure_hash.0.wrapping_add(psd.0)
         } else {
             self.white_accum.remove_feature(idx_white, net);
             self.black_accum.remove_feature(idx_black, net);
+
+            self.pseudo_structure_hash.0 = self.pseudo_structure_hash.0.wrapping_sub(psd.0)
         }
     }
 
@@ -1683,9 +1698,10 @@ mod tests {
             let mut game = game;
             let hash = game.hash();
             let pawn_hash = game.pawn_hash();
+            let pseudo_structure_hash = game.pseudo_structure_hash();
 
             game.recalc_hash();
-            hash == game.hash() && pawn_hash == game.pawn_hash()
+            hash == game.hash() && pawn_hash == game.pawn_hash() && pseudo_structure_hash == game.pseudo_structure_hash()
         }
 
         fn do_undo_correct(game: Game) -> bool {
