@@ -6,7 +6,7 @@ use std::i32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use fixed::traits::ToFixed;
+use fixed::traits::{Fixed, ToFixed};
 use linear_map::LinearMap;
 use smallvec::SmallVec;
 
@@ -318,17 +318,28 @@ impl HistoryTables {
         }
     }
 
-    fn read_corrhist(&self, stack: &History) -> Millipawns {
+    fn read_corrhist(&self, stack: &History) -> (Millipawns, Millipawns) {
         use fixed::types::I32F32 as T;
 
-        let mut res = T::ZERO;
-        let w_res = &mut res;
+        let mut correction = T::ZERO;
+        let w_correction = &mut correction;
+        let mut complexity = T::ZERO;
+        let w_complexity = &mut complexity;
+        let mut total_weight = T::ZERO;
+        let w_total_weight = &mut total_weight;
 
         self.map_corrhist(stack, |x, weight| {
-            *w_res += T::from_num(x.get().0) * T::from_num(weight)
+            let weight = T::from_num(weight);
+            let value = T::from_num(x.get().0) * weight;
+            *w_correction += value;
+            *w_complexity += value * value / 1024;
+            *w_total_weight += weight;
         });
 
-        Millipawns(res.to_num())
+        (
+            Millipawns(correction.to_num()),
+            Millipawns((complexity / total_weight).to_num()),
+        )
     }
 
     fn write_corrhist(&self, stack: &History, delta: Millipawns) {
@@ -658,10 +669,8 @@ impl ThreadData {
         let mut alpha = alpha;
         let mut beta = beta;
 
-        let eval = self
-            .history
-            .eval()
-            .map(|x| (x + self.history_tables.read_corrhist(&self.history)).clamp_eval());
+        let (correction, corrplexity) = self.history_tables.read_corrhist(&self.history);
+        let eval = self.history.eval().map(|x| (x + correction).clamp_eval());
         let is_in_check = self.game().is_in_check();
 
         let futility_pruning = if let Some(eval) = eval {
@@ -1056,6 +1065,12 @@ impl ThreadData {
                 if ttpv {
                     reduction -= Depth::ONE;
                 }
+
+                let corrplexity_lmr = Depth::from_num(corrplexity.0) / params().corrplexity_scale();
+
+                // println!("mean: {corrplexity_lmr}");
+                reduction -= corrplexity_lmr;
+
                 reduction = reduction.max(Depth::ONE);
 
                 let virtual_depth = depth - reduction + extension;
