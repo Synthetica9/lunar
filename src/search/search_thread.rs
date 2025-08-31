@@ -1057,7 +1057,9 @@ impl ThreadData {
                         )?
                         .0;
 
-                    if is_reduced && x > alpha {
+                    // Lily clockwork cook: https://clockworkopenbench.pythonanywhere.com/test/222/
+                    let skip_lmr = x > beta && next_depth >= depth - params().lmr_probcut_margin();
+                    if is_reduced && x > alpha && !skip_lmr {
                         x = -self
                             .alpha_beta_search::<N::OtherSuccessors>(
                                 -alpha - Millipawns::ONE,
