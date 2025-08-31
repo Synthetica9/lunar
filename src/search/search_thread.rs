@@ -350,17 +350,24 @@ impl HistoryTables {
         }
     }
 
-    fn read_corrhist(&self, stack: &History) -> Millipawns {
+    fn read_corrhist(&self, stack: &History) -> (Millipawns, Depth) {
         use fixed::types::I32F32 as T;
 
-        let mut res = T::ZERO;
-        let w_res = &mut res;
+        let mut correction = T::ZERO;
+        let w_correction = &mut correction;
+        let mut complexity = T::ZERO;
+        let w_complexity = &mut complexity;
 
         self.map_corrhist(stack, |x, weight| {
-            *w_res += T::from_num(x.get().0) * T::from_num(weight);
+            let weight = T::from_num(weight);
+            let value = T::from_num(x.get().0);
+            let rel_value = value / T::from_num(MAX_CORR_HIST.0);
+
+            *w_correction += value * weight;
+            *w_complexity += rel_value * rel_value * weight;
         });
 
-        Millipawns(res.to_num())
+        (Millipawns(correction.to_num()), complexity.to_num())
     }
 
     fn write_corrhist(&self, stack: &History, delta: Millipawns) {
@@ -688,10 +695,8 @@ impl ThreadData {
         let alpha_orig = alpha;
         let mut alpha = alpha;
 
-        let eval = self
-            .history
-            .eval()
-            .map(|x| (x + self.history_tables.read_corrhist(&self.history)).clamp_eval());
+        let (correction, corrplexity) = self.history_tables.read_corrhist(&self.history);
+        let eval = self.history.eval().map(|x| (x + correction).clamp_eval());
         let is_in_check = self.game().is_in_check();
 
         let futility_pruning = if let Some(eval) = eval {
@@ -760,7 +765,10 @@ impl ThreadData {
             let base_margin = depth
                 .max(Depth::ONE)
                 .saturating_mul(params().rfp_depth_slope());
-            let margin = Millipawns((base_margin * improving_fac).to_num());
+            let mut margin = base_margin * improving_fac;
+            margin += params().rfp_corrplexity_scale() * corrplexity;
+
+            let margin = Millipawns(margin.to_num());
 
             if !skip_rfp && eval - margin >= beta && depth <= params().rfp_min_depth() {
                 use fixed::types::I32F32 as T;
