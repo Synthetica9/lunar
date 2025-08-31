@@ -1057,7 +1057,13 @@ impl ThreadData {
                         )?
                         .0;
 
-                    if is_reduced && x > alpha {
+                    let overkill = x - beta;
+                    let min_overkill = Millipawns((depth_squared * 200).to_num());
+
+                    let skip_full_search = overkill >= min_overkill;
+                    let lmr_fail = is_reduced && x > alpha;
+
+                    if lmr_fail && !skip_full_search {
                         x = -self
                             .alpha_beta_search::<N::OtherSuccessors>(
                                 -alpha - Millipawns::ONE,
