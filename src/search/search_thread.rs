@@ -189,6 +189,7 @@ pub struct HistoryTables {
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
 
     pawn_corr: Stats<(Color, NBits<20>), Millipawns>,
+    pseudo_structure_corr: Stats<(Color, NBits<20>), Millipawns>,
 }
 
 fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
@@ -282,6 +283,13 @@ impl HistoryTables {
         self.pawn_corr
             .update_cell((color, pawn_hash.to_nbits()), |x| {
                 f(x, params().corrhist_pawn_weight())
+            });
+
+        let pseudo_structure_hash = game.pseudo_structure_hash();
+
+        self.pseudo_structure_corr
+            .update_cell((color, pseudo_structure_hash.to_nbits()), |x| {
+                f(x, Depth::from_num(20) / 512)
             });
     }
 
