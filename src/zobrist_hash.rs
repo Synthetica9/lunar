@@ -45,16 +45,21 @@ impl ZobristHash {
         Self(0)
     }
 
-    pub fn from_game(game: &Game, pawns_only: bool) -> Self {
+    pub fn from_game(
+        game: &Game,
+        mut filter: impl FnMut(Color, Piece, Square) -> bool,
+        pieces_only: bool,
+    ) -> Self {
         let mut hash = Self::new();
 
         for (color, piece, square) in game.board().to_piece_list() {
-            if !pawns_only || piece == Piece::Pawn {
-                hash.toggle_piece(color, piece, square);
+            if !filter(color, piece, square) {
+                continue;
             }
+            hash.toggle_piece(color, piece, square);
         }
 
-        if !pawns_only {
+        if !pieces_only {
             hash.toggle_castle_rights(game.castle_rights());
 
             if let Some(square) = game.en_passant() {

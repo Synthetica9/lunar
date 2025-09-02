@@ -104,9 +104,9 @@ impl Game {
     }
 
     pub fn recalc_hash(&mut self) {
-        // TODO: pawn hash
-        self.hash = ZobristHash::from_game(self, false);
-        self.pawn_hash = ZobristHash::from_game(self, true);
+        // TODO: simd
+        self.hash = ZobristHash::from_game(self, |_, _, _| true, false);
+        self.pawn_hash = ZobristHash::from_game(self, |_, p, _| matches!(p, Piece::Pawn), true);
     }
 
     pub fn recalc_accum(&mut self, side: Color) {
@@ -1132,9 +1132,11 @@ impl Default for Game {
 impl ApplyPly for Game {
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
         self.board.toggle_piece(color, piece, square);
+
         self.hash.toggle_piece(color, piece, square);
-        if piece == Piece::Pawn {
-            self.pawn_hash.toggle_piece(color, piece, square);
+        match piece {
+            Piece::Pawn => self.pawn_hash.toggle_piece(color, piece, square),
+            _ => {}
         }
 
         let exists_after = self.board.get_color(color).get(square);
