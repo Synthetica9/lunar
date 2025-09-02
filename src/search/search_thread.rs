@@ -274,6 +274,33 @@ impl HistoryTables {
         });
     }
 
+    fn quiet_variance(&self, ply: Ply, stack: &History) -> Depth {
+        // Calculate variance of stored history values as a measure of complexity.
+        // Large variance -> high complexity.
+
+        // TODO: weighted variance?
+
+        use fixed::types::I32F32 as T;
+
+        let mut sum_of_squares = T::ZERO;
+        let mut sum = T::ZERO;
+        let mut n = 0;
+        let p_sum_of_square = &mut sum_of_squares;
+        let p_sum = &mut sum;
+        let p_n = &mut n;
+
+        self.map_quiet_hist(ply, stack, |x, _weight| {
+            let val = T::from_num(x.get().0) / T::from_num(MAX_HISTORY);
+            *p_sum_of_square += val * val;
+            *p_sum += val;
+            *p_n += 1;
+        });
+
+        let mean = sum / n;
+        let variance = sum_of_squares / n - mean * mean;
+        variance.to_num()
+    }
+
     fn map_corrhist(&self, stack: &History, mut f: impl FnMut(&Cell<Millipawns>, Depth)) {
         let game = stack.game();
         let color = game.to_move();
@@ -1006,6 +1033,11 @@ impl ThreadData {
 
                 debug_assert!(reduction >= 1, "{reduction} < 1");
                 debug_assert!(extension >= 0, "{extension} < 0");
+
+                if is_quiet {
+                    let quiet_variance = self.history_tables.quiet_variance(ply, &self.history);
+                    reduction -= quiet_variance * 5;
+                }
 
                 if ttpv {
                     reduction -= Depth::ONE;
