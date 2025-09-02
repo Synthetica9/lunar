@@ -33,6 +33,7 @@ pub struct Game {
     half_move_total: i16,
     hash: ZobristHash,
     pawn_hash: ZobristHash,
+    minor_hash: ZobristHash,
 
     white_accum: Accumulator,
     black_accum: Accumulator,
@@ -89,6 +90,10 @@ impl Game {
         self.pawn_hash
     }
 
+    pub fn minor_hash(&self) -> ZobristHash {
+        self.minor_hash
+    }
+
     pub fn king_square(&self, side: Color) -> Square {
         match side {
             Color::White => self.white_king,
@@ -107,6 +112,11 @@ impl Game {
         // TODO: simd
         self.hash = ZobristHash::from_game(self, |_, _, _| true, false);
         self.pawn_hash = ZobristHash::from_game(self, |_, p, _| matches!(p, Piece::Pawn), true);
+        self.minor_hash = ZobristHash::from_game(
+            self,
+            |_, p, _| matches!(p, Piece::Knight | Piece::Bishop | Piece::King),
+            true,
+        );
     }
 
     pub fn recalc_accum(&mut self, side: Color) {
@@ -266,8 +276,6 @@ impl Game {
             .parse::<i16>()
             .map_err(|e| format!("Error parsing full move number: {e}"))?;
 
-        let hash = ZobristHash::new();
-        let pawn_hash = ZobristHash::new();
         let white_king = board.king_square(Color::White);
         let black_king = board.king_square(Color::Black);
 
@@ -278,8 +286,9 @@ impl Game {
             en_passant,
             half_move,
             half_move_total: (full_move - 1) * 2 + (to_move as i16),
-            hash,
-            pawn_hash,
+            hash: ZobristHash::new(),
+            pawn_hash: ZobristHash::new(),
+            minor_hash: ZobristHash::new(),
 
             white_accum: Accumulator::new(),
             black_accum: Accumulator::new(),
@@ -1136,6 +1145,9 @@ impl ApplyPly for Game {
         self.hash.toggle_piece(color, piece, square);
         match piece {
             Piece::Pawn => self.pawn_hash.toggle_piece(color, piece, square),
+            Piece::King | Piece::Knight | Piece::Bishop => {
+                self.minor_hash.toggle_piece(color, piece, square)
+            }
             _ => {}
         }
 
@@ -1685,9 +1697,10 @@ mod tests {
             let mut game = game;
             let hash = game.hash();
             let pawn_hash = game.pawn_hash();
+            let minor_hash = game.minor_hash();
 
             game.recalc_hash();
-            hash == game.hash() && pawn_hash == game.pawn_hash()
+            hash == game.hash() && pawn_hash == game.pawn_hash() && minor_hash == game.minor_hash()
         }
 
         fn do_undo_correct(game: Game) -> bool {

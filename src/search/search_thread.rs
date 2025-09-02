@@ -180,15 +180,20 @@ pub struct ThreadData {
 }
 
 pub struct HistoryTables {
+    // Normal hists:
     main: Stats<(Color, Square, Square), Millipawns>,
-    countermove: CounterMove,
     continuation:
         [Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>; N_CONTINUATION_HISTORIES],
     threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
     capture: Stats<(Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
 
+    // Corrhists
     pawn_corr: Stats<(Color, NBits<20>), Millipawns>,
+    minor_corr: Stats<(Color, NBits<20>), Millipawns>,
+
+    // Odd one out:
+    countermove: CounterMove,
 }
 
 fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
@@ -277,10 +282,14 @@ impl HistoryTables {
     fn map_corrhist(&self, stack: &History, mut f: impl FnMut(&Cell<Millipawns>, Depth)) {
         let game = stack.game();
         let color = game.to_move();
-        let pawn_hash = game.pawn_hash();
 
         self.pawn_corr
-            .update_cell((color, pawn_hash.to_nbits()), |x| {
+            .update_cell((color, game.pawn_hash().to_nbits()), |x| {
+                f(x, params().corrhist_pawn_weight())
+            });
+
+        self.minor_corr
+            .update_cell((color, game.minor_hash().to_nbits()), |x| {
                 f(x, params().corrhist_pawn_weight())
             });
     }
