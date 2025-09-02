@@ -224,6 +224,7 @@ make_tunable_params! {
 
     corrhist_pawn_weight: Depth = 0.12890625, 0.0, 0.3, 0.01, 0.002;
     corrhist_minor_weight: Depth = 0.12890625, 0.0, 0.3, 0.01, 0.002;
+    corrhist_major_weight: Depth = 0.12, 0.0, 0.3, 0.01, 0.002;
 }
 
 #[cfg(feature = "tunable")]

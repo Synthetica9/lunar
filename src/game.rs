@@ -34,6 +34,7 @@ pub struct Game {
     hash: ZobristHash,
     pawn_hash: ZobristHash,
     minor_hash: ZobristHash,
+    major_hash: ZobristHash,
 
     white_accum: Accumulator,
     black_accum: Accumulator,
@@ -94,6 +95,10 @@ impl Game {
         self.minor_hash
     }
 
+    pub fn major_hash(&self) -> ZobristHash {
+        self.major_hash
+    }
+
     pub fn king_square(&self, side: Color) -> Square {
         match side {
             Color::White => self.white_king,
@@ -115,6 +120,11 @@ impl Game {
         self.minor_hash = ZobristHash::from_game(
             self,
             |_, p, _| matches!(p, Piece::Knight | Piece::Bishop | Piece::King),
+            true,
+        );
+        self.major_hash = ZobristHash::from_game(
+            self,
+            |_, p, _| matches!(p, Piece::Rook | Piece::Queen | Piece::King),
             true,
         );
     }
@@ -289,6 +299,7 @@ impl Game {
             hash: ZobristHash::new(),
             pawn_hash: ZobristHash::new(),
             minor_hash: ZobristHash::new(),
+            major_hash: ZobristHash::new(),
 
             white_accum: Accumulator::new(),
             black_accum: Accumulator::new(),
@@ -1145,10 +1156,12 @@ impl ApplyPly for Game {
         self.hash.toggle_piece(color, piece, square);
         match piece {
             Piece::Pawn => self.pawn_hash.toggle_piece(color, piece, square),
-            Piece::King | Piece::Knight | Piece::Bishop => {
-                self.minor_hash.toggle_piece(color, piece, square)
+            Piece::Knight | Piece::Bishop => self.minor_hash.toggle_piece(color, piece, square),
+            Piece::Rook | Piece::Queen => self.major_hash.toggle_piece(color, piece, square),
+            Piece::King => {
+                self.minor_hash.toggle_piece(color, piece, square);
+                self.major_hash.toggle_piece(color, piece, square);
             }
-            _ => {}
         }
 
         let exists_after = self.board.get_color(color).get(square);
@@ -1698,9 +1711,13 @@ mod tests {
             let hash = game.hash();
             let pawn_hash = game.pawn_hash();
             let minor_hash = game.minor_hash();
+            let major_hash = game.major_hash();
 
             game.recalc_hash();
-            hash == game.hash() && pawn_hash == game.pawn_hash() && minor_hash == game.minor_hash()
+            hash == game.hash()
+                && pawn_hash == game.pawn_hash()
+                && minor_hash == game.minor_hash()
+                && major_hash == game.major_hash()
         }
 
         fn do_undo_correct(game: Game) -> bool {
