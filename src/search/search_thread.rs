@@ -192,6 +192,7 @@ pub struct HistoryTables {
     // Corrhists
     pawn_corr: Stats<(Color, NBits<20>), Millipawns>,
     minor_corr: Stats<(Color, NBits<20>), Millipawns>,
+    major_corr: Stats<(Color, NBits<20>), Millipawns>,
 
     // Odd one out:
     countermove: CounterMove,
@@ -284,15 +285,25 @@ impl HistoryTables {
         let game = stack.game();
         let color = game.to_move();
 
-        self.pawn_corr
-            .update_cell((color, game.pawn_hash().to_nbits()), |x| {
-                f(x, params().corrhist_pawn_weight())
-            });
-
-        self.minor_corr
-            .update_cell((color, game.minor_hash().to_nbits()), |x| {
-                f(x, params().corrhist_minor_weight())
-            });
+        for (weight, table, hash) in [
+            (
+                params().corrhist_pawn_weight(),
+                &self.pawn_corr,
+                game.pawn_hash(),
+            ),
+            (
+                params().corrhist_minor_weight(),
+                &self.minor_corr,
+                game.minor_hash(),
+            ),
+            (
+                params().corrhist_major_weight(),
+                &self.major_corr,
+                game.major_hash(),
+            ),
+        ] {
+            table.update_cell((color, hash.to_nbits()), |x| f(x, weight));
+        }
     }
 
     fn read_corrhist(&self, stack: &History) -> Millipawns {
