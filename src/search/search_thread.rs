@@ -1061,7 +1061,7 @@ impl ThreadData {
                     let reduction_squared = reduction * reduction;
                     let min_overkill = Millipawns((reduction_squared * 500).to_num());
 
-                    let skip_full_search = overkill >= min_overkill;
+                    let skip_full_search = overkill >= min_overkill && !ttpv;
                     let lmr_fail = is_reduced && x > alpha;
 
                     if lmr_fail && !skip_full_search {
