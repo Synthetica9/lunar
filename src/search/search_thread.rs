@@ -290,7 +290,7 @@ impl HistoryTables {
 
         self.minor_corr
             .update_cell((color, game.minor_hash().to_nbits()), |x| {
-                f(x, params().corrhist_pawn_weight())
+                f(x, params().corrhist_minor_weight())
             });
     }
 
