@@ -143,7 +143,7 @@ enum GeneratorPhase {
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub enum QueuedPly {
     // Should be searched _last_
-    LosingCapture { value: Millipawns, ply: Ply },
+    LosingCapture { see: Millipawns, ply: Ply },
     QuietMove { value: Millipawns, ply: Ply },
     MVVLVACapture { value: Millipawns, ply: Ply },
     // Should be searched _first_
@@ -160,7 +160,7 @@ impl QueuedPly {
 
     fn score(self) -> Millipawns {
         match self {
-            QueuedPly::LosingCapture { value, .. }
+            QueuedPly::LosingCapture { see: value, .. }
             | QueuedPly::QuietMove { value, .. }
             | QueuedPly::MVVLVACapture { value, .. } => value,
         }
@@ -338,7 +338,7 @@ impl MoveGenerator for StandardMoveGenerator {
                     let game = thread.game();
                     let see = static_exchange_evaluation(game, ply);
                     if see.0 < 0 {
-                        self.bad_captures.push(LosingCapture { value: see, ply });
+                        self.bad_captures.push(LosingCapture { see, ply });
                     } else {
                         return Some(Generated {
                             ply: GeneratedMove::Ply(ply),
