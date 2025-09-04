@@ -1013,6 +1013,11 @@ impl ThreadData {
                     extension += params().mate_threat_extension();
                 }
 
+                if N::is_pv() && lmr && alpha_orig < alpha {
+                    // Alpha was already raised
+                    reduction += Depth::ONE / 2;
+                }
+
                 debug_assert!(reduction >= 1, "{reduction} < 1");
                 debug_assert!(extension >= 0, "{extension} < 0");
 
