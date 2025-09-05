@@ -747,7 +747,7 @@ impl ThreadData {
                 // > - Position is in check
                 is_in_check
                 // > - Node type is a PV node.
-                || N::is_pv()
+                || ttpv
                 // > - Position is or has been a PV node.
                 // || from_tt.is_none_or(|x| x.value_type() == TranspositionEntryType::Exact)
                 // > - TT move does not exist or is capture.
