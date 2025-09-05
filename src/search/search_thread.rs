@@ -955,11 +955,10 @@ impl ThreadData {
                         .0;
 
                     if singular_value <= singular_beta {
-                        let margin =
-                            Depth::saturating_from_num((singular_beta - singular_value).0 + 4);
-                        let multi_ext = margin / (90 * margin.int_log2());
+                        let margin = Depth::saturating_from_num((singular_beta - singular_value).0);
+                        let multi_ext = margin.sqrt() / 20;
                         extension +=
-                            params().se_ext() + multi_ext.clamp(Depth::ZERO, 3 * Depth::ONE);
+                            params().se_ext() + multi_ext.clamp(Depth::ZERO, 2 * Depth::ONE);
                     } else if singular_beta >= beta {
                         // Multi-cut
                         return Ok((
