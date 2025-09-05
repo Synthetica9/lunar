@@ -954,18 +954,12 @@ impl ThreadData {
                         )?
                         .0;
 
-                    if singular_value + Millipawns(params().se_double_ext_margin()) <= singular_beta
-                    {
-                        extension += params().se_double_ext();
-                    }
-
-                    if singular_value + Millipawns(params().se_triple_ext_margin()) <= singular_beta
-                    {
-                        extension += params().se_triple_ext();
-                    }
-
                     if singular_value <= singular_beta {
-                        extension += params().se_ext();
+                        let margin =
+                            Depth::saturating_from_num((singular_beta - singular_value).0 + 4);
+                        let multi_ext = margin / (90 * margin.int_log2());
+                        extension +=
+                            params().se_ext() + multi_ext.clamp(Depth::ZERO, 3 * Depth::ONE);
                     } else if singular_beta >= beta {
                         // Multi-cut
                         return Ok((
