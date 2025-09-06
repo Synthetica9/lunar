@@ -3,11 +3,17 @@
 
 set -euxo pipefail
 
+BATCH_ID="${1:-unknown}"
+BATCHES="${BATCHES:-unknown}"
+
 # Configurable via env variable:
-N="${N:-256}"
+BATCH_SIZE="${BATCH_SIZE:-256}"
 CONCURRENCY="${CONCURRENCY:-4}"
 OUT_DIR="${OUT_DIR:-/tmp/lunar_data}"
 BULLET_UTILS="${BULLET_UTLS:-../bullet/target/release/bullet-utils}"
+LOG_FILE="/tmp/datagen.log"
+
+echo "Starting batch $BATCH_ID/$BATCHES $(date)" >> $LOG_FILE
 
 test -d "$OUT_DIR"
 
@@ -41,7 +47,7 @@ def main():
 main()
 '
 
-./scripts/book_randomize.py test_data/chess324.fen -n "$N" > $BOOK
+./scripts/book_randomize.py test_data/chess324.fen -n "$BATCH_SIZE" > $BOOK
 
 mkdir -p data
 
@@ -53,8 +59,10 @@ $BULLET_UTILS convert --from text --input <(cat $FIFO | python -c "$CONVERT_PY")
     -each nodes=5000 option.Hash=8 option.SoftNodes=true \
     -sample freq=1 resolve=y file="$FIFO" \
     -openings file="$BOOK" \
-    -games "$N" \
+    -games "$BATCH_SIZE" \
     -concurrency "$CONCURRENCY"
 
 mv "$TMP_BIN" "$OUT"
 rm -r "$TMP_DIR"
+
+echo "Finished batch $BATCH_ID/$BATCHES $(date)" >> $LOG_FILE
