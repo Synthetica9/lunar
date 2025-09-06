@@ -3,11 +3,23 @@
 
 set -euxo pipefail
 
-FIFO=/tmp/lunar_fifo
-BULLET_UTILS=../bullet/target/release/bullet-utils
+# Configurable via env variable:
+N="${N:-256}"
+CONCURRENCY="${CONCURRENCY:-4}"
+OUT_DIR="${OUT_DIR:-/tmp/lunar_data}"
+BULLET_UTILS="${BULLET_UTLS:-../bullet/target/release/bullet-utils}"
+
+test -d "$OUT_DIR"
+
+OUT="$OUT_DIR/$$.bin"
+
+TMP_DIR=$(mktemp -d)
+BOOK="$TMP_DIR/book.fen"
+FIFO="$TMP_DIR/fifo"
+TMP_BIN="$TMP_DIR/out.bin"
 mkfifo "$FIFO"
 
-./scripts/build_pgo.sh
+# ./scripts/build_pgo.sh
 
 # Converts to format expected by bullet_convert
 CONVERT_PY='
@@ -29,19 +41,20 @@ def main():
 main()
 '
 
-./scripts/book_randomize.py test_data/chess324.fen -n 10000 > /tmp/book.fen
+./scripts/book_randomize.py test_data/chess324.fen -n "$N" > $BOOK
 
 mkdir -p data
 
-$BULLET_UTILS convert --from text --input <(cat $FIFO | python -c "$CONVERT_PY") --output data/$(date -u +"%Y-%m-%dT%H:%M:%SZ").bin &
+$BULLET_UTILS convert --from text --input <(cat $FIFO | python -c "$CONVERT_PY") --output "$TMP_BIN" &
 
 ./scripts/c_chess_cli.py \
     -engine cmd=./target/release/lunar_pgo \
     -engine cmd=./target/release/lunar_pgo \
-    -each depth=8 option.Hash=8 \
+    -each nodes=5000 option.Hash=8 option.SoftNodes=true \
     -sample freq=1 resolve=y file="$FIFO" \
-    -openings file=/tmp/book.fen \
-    -games 10000 \
-    -concurrency 4
+    -openings file="$BOOK" \
+    -games "$N" \
+    -concurrency "$CONCURRENCY"
 
-rm /tmp/lunar_fifo
+mv "$TMP_BIN" "$OUT"
+rm -r "$TMP_DIR"

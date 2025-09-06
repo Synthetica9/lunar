@@ -24,6 +24,7 @@ use crate::uci::TimePolicy;
 use crate::zobrist_hash::ZobristHash;
 
 pub const PREDICTED_BRANCHING_FACTOR: f64 = 2.1;
+pub const SOFT_NODES_HARD_STOP_FACTOR: usize = 4;
 
 pub enum TimePolicyResult {
     Continue,
@@ -627,7 +628,14 @@ impl SearchThreadPool {
                     }
                     hard_stop(res)
                 }
-                Nodes(n) => soft_stop(nodes_searched >= n || *best_depth >= 100),
+                Nodes(n) => {
+                    if *nodes_searched >= *n * SOFT_NODES_HARD_STOP_FACTOR {
+                        // Catch search explosions
+                        HardStop
+                    } else {
+                        soft_stop(nodes_searched >= n || *best_depth >= 100)
+                    }
+                }
             }
         } else {
             Continue
