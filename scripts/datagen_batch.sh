@@ -10,7 +10,7 @@ BATCHES="${BATCHES:-unknown}"
 BATCH_SIZE="${BATCH_SIZE:-256}"
 CONCURRENCY="${CONCURRENCY:-4}"
 OUT_DIR="${OUT_DIR:-/tmp/lunar_data}"
-BULLET_UTILS="${BULLET_UTLS:-../bullet/target/release/bullet-utils}"
+BULLET_UTILS="${BULLET_UTILS:-../bullet/target/release/bullet-utils}"
 LOG_FILE="/tmp/datagen.log"
 
 echo "Starting batch $BATCH_ID/$BATCHES $(date)" >> $LOG_FILE
@@ -51,7 +51,7 @@ main()
 
 mkdir -p data
 
-$BULLET_UTILS convert --from text --input <(cat $FIFO | python -c "$CONVERT_PY") --output "$TMP_BIN" &
+$BULLET_UTILS convert --from text --input <(cat $FIFO | python3 -c "$CONVERT_PY") --output "$TMP_BIN" &
 
 ./scripts/c_chess_cli.py \
     -engine cmd=./target/release/lunar_pgo \
