@@ -44,6 +44,7 @@ pub enum ThreadCommand {
     Quit,
     NewGame,
     StopSearch,
+    SoftStop,
     SearchThis(Arc<History>, Arc<LinearMap<Ply, AtomicUsize>>),
 }
 
@@ -158,6 +159,7 @@ pub struct ThreadData {
     thread_id: usize,
 
     searching: bool,
+    soft_stop: bool,
 
     history: History,
 
@@ -341,6 +343,7 @@ impl ThreadData {
             transposition_table,
 
             searching: false,
+            soft_stop: false,
 
             history: History::new(Game::new()),
             nodes_searched: 0,
@@ -386,7 +389,12 @@ impl ThreadData {
                     let cmd = self.send_status_update();
 
                     self.searching = false;
+                    self.soft_stop = false;
                     cmd
+                }
+                Some(C::SoftStop) => {
+                    // If we're here, stop search explicitly.
+                    Some(C::StopSearch)
                 }
                 Some(C::NewGame) => {
                     self.history_tables = ZeroInit::zero_box();
@@ -432,6 +440,10 @@ impl ThreadData {
     #[must_use]
     fn communicate(&mut self) -> Result<(), ThreadCommand> {
         match self.send_status_update() {
+            Some(ThreadCommand::SoftStop) => {
+                self.soft_stop = true;
+                Ok(())
+            }
             Some(cmd) => Err(cmd),
             None => Ok(()),
         }
@@ -485,6 +497,10 @@ impl ThreadData {
                 debug_assert!(self.game().hash() == self.root_hash);
 
                 self.communicate()?;
+
+                if self.soft_stop {
+                    return Err(ThreadCommand::StopSearch);
+                }
 
                 // TODO: message fail high/lows to main thread
                 if score > alpha && best_move.is_some() {

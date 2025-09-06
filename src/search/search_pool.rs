@@ -25,6 +25,12 @@ use crate::zobrist_hash::ZobristHash;
 
 pub const PREDICTED_BRANCHING_FACTOR: f64 = 2.1;
 
+pub enum TimePolicyResult {
+    Continue,
+    HardStop,
+    SoftStop,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
 enum PoolState {
@@ -71,6 +77,7 @@ pub struct SearchThreadPool {
     threads: Vec<ThreadHandle>,
     transposition_table: Arc<TranspositionTable>,
     ponder: bool,
+    pub soft_nodes: bool,
     pub base_instability: f64,
     rng: SmallRng,
 
@@ -138,6 +145,7 @@ impl SearchThreadPool {
             base_instability: 1.0,
 
             ponder: false,
+            soft_nodes: false,
             state: PoolState::Idle,
             opening_book: None,
             rng,
@@ -453,7 +461,9 @@ impl SearchThreadPool {
         }
     }
 
-    pub fn time_policy_finished(&self) -> bool {
+    pub fn time_policy_finished(&self) -> TimePolicyResult {
+        use TimePolicyResult::*;
+
         if let PoolState::Searching {
             start_time,
             clock_start_time,
@@ -474,17 +484,35 @@ impl SearchThreadPool {
         {
             use TimePolicy::*;
             if *is_pondering {
-                return false;
+                return Continue;
             }
 
+            let hard_stop = |x: bool| {
+                if x {
+                    HardStop
+                } else {
+                    Continue
+                }
+            };
+
+            let soft_stop = |x: bool| {
+                if !x {
+                    Continue
+                } else if self.soft_nodes {
+                    SoftStop
+                } else {
+                    HardStop
+                }
+            };
+
             match time_policy {
-                Depth(depth) => best_depth >= depth,
+                Depth(depth) => hard_stop(best_depth >= depth),
                 MoveTime(time) => {
                     // TODO: configurable
                     let elapsed = start_time.elapsed() + Duration::from_millis(100);
-                    elapsed >= *time
+                    hard_stop(elapsed >= *time)
                 }
-                Infinite => false,
+                Infinite => Continue,
                 FreeTime {
                     wtime,
                     btime,
@@ -498,20 +526,20 @@ impl SearchThreadPool {
                     // "go depth 15" (though we also don't really want to then after that search
                     // return the book move?)
                     if *in_book {
-                        return true;
+                        return HardStop;
                     }
 
                     let game = history.game();
 
                     if best_move.is_none() {
-                        return false;
+                        return Continue;
                     }
 
                     // If we are this deep, we probably just found a forced end. Let's just return.
                     // Alternatively, if we are in a forced move we can still ponder. But directly
                     // as soon as time starts to be a factor, we want to return.
                     if *best_depth >= 100 || game.legal_moves().len() == 1 {
-                        return true;
+                        return HardStop;
                     };
 
                     let (time, inc) = match game.to_move() {
@@ -526,13 +554,13 @@ impl SearchThreadPool {
                         // regardles`s to avoid losing on time.
                         if time <= time_spent + Duration::from_millis(30) {
                             println!("info string exiting because lt 30ms remain");
-                            return true;
+                            return HardStop;
                         }
 
                         // If we spent a large percentage of our time, also return.
                         if time <= time_spent * 2 {
                             println!("info string exiting because large part of time was spent");
-                            return true;
+                            return HardStop;
                         }
                     }
 
@@ -597,12 +625,12 @@ impl SearchThreadPool {
                         let discarded = *nodes_searched - *last_depth_increase;
                         println!("info string normal dynamic quit, nodes discarded {discarded}");
                     }
-                    res
+                    hard_stop(res)
                 }
-                Nodes(n) => nodes_searched >= n || *best_depth >= 100,
+                Nodes(n) => soft_stop(nodes_searched >= n || *best_depth >= 100),
             }
         } else {
-            false
+            Continue
         }
     }
 
@@ -726,10 +754,19 @@ impl SearchThreadPool {
         println!("info string new base instability {}", self.base_instability);
     }
 
+    pub fn any_idle(&self) -> bool {
+        self.threads.iter().any(|x| !x.is_searching)
+    }
+
     pub fn maybe_end_search(&mut self, force: bool) -> Option<String> {
-        if !(force || self.time_policy_finished()) {
-            return None;
-        };
+        match self.time_policy_finished() {
+            TimePolicyResult::Continue if !force => return None,
+            TimePolicyResult::SoftStop if !self.any_idle() => {
+                self.broadcast(&ThreadCommand::SoftStop).unwrap();
+                return None;
+            }
+            _ => {}
+        }
 
         let PoolState::Searching {
             best_move,

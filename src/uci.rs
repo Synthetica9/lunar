@@ -1,12 +1,10 @@
 use std::io::Write;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::game::Game;
 use crate::history::History;
 use crate::polyglot::PolyglotBook;
-use crate::search::parameters::params;
 use crate::transposition_table::TranspositionTable;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -177,7 +175,6 @@ impl UCIState {
 
                 let value = value.trim();
 
-                self.info(&format!("Setting option '{name}' to '{value}'"));
                 self.set_option(name, value)?;
             }
             "position" => {
@@ -380,7 +377,12 @@ impl UCIState {
 
     pub fn set_option(&mut self, name: &str, value: &str) -> Result<(), String> {
         if let Ok(opt) = AVAILABLE_OPTIONS.get(name) {
-            (opt.setter)(value, self)?
+            self.info(&format!(
+                "Setting option '{name}' ({:?}) to '{value}'",
+                opt.typ
+            ));
+
+            return (opt.setter)(value, self);
         }
 
         #[cfg(feature = "tunable")]
@@ -400,6 +402,7 @@ impl Default for UCIState {
 }
 
 #[allow(dead_code)]
+#[derive(Debug)]
 enum UCIOptionType<'a> {
     Button,
     Spin {
@@ -550,6 +553,15 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
             setter: |val, state| {
                 let val = val.parse::<u64>().map_err(|x| x.to_string())?;
                 state.print_interval = val;
+                Ok(())
+            },
+        },
+        UCIOption {
+            name: "SoftNodes",
+            typ: &Check { default: false },
+            setter: |val, state| {
+                let val = parse_bool(val)?;
+                state.search_thread_pool.soft_nodes = val;
                 Ok(())
             },
         },
