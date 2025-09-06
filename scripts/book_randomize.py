@@ -2,10 +2,12 @@
 #!nix-shell -p "python3.withPackages (p: with p; [chess])" -i python
 
 import chess
+import chess.engine
 import argparse
 import random
 import itertools
 import sys
+
 
 
 def get_parser():
@@ -18,7 +20,7 @@ def get_parser():
         type=int,
         help="Number of lines to generate (default: keep going)",
     )
-    parser.add_argument("depth", nargs="?", type=int, default=4)
+    parser.add_argument("depth", nargs="?", type=int, default=16)
     parser.add_argument(
         "--output", "-o", type=argparse.FileType("w"), default=sys.stdout
     )
@@ -58,23 +60,35 @@ def main():
         r.seed(args.seed)
 
     book = [read_fen(s.strip()) for s in args.book]
-    it = range(args.num_lines) if args.num_lines is not None else itertools.count()
+    engine = chess.engine.SimpleEngine.popen_uci("target/release/lunar_pgo")
+    n = 0
     try:
-        for n in it:
+        while True:
             base = r.choice(book).copy()
             final = line(r, base, args.depth)
 
             if final is not None:
-                print(final.fen(), file=args.output)
+                result = engine.analyse(final, chess.engine.Limit(depth=10))
+                score = result['score']
+                if score.is_mate() or abs(score.white().score()) >= 300:
+                    print(f"Score out of range: {score}", file=sys.stderr)
+                    continue
 
-            if n % 1000 == 0:
-                print(f"{n + 1} lines generated...", file=sys.stderr)
+                print(final.fen(), file=args.output)
+                if n % 1000 == 0:
+                    print(f"{n + 1} lines generated...", file=sys.stderr)
+
+                n += 1
+
+            if n >= args.num_lines:
+                break
 
     except KeyboardInterrupt:
         print("Interrupted.")
         sys.exit(2)
     finally:
-        print(f"{n + 1} lines generated.", file=sys.stderr)
+        engine.quit()
+        print(f"{n} lines generated.", file=sys.stderr)
 
 
 if __name__ == "__main__":
