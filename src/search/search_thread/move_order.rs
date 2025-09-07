@@ -323,7 +323,7 @@ impl MoveGenerator for StandardMoveGenerator {
                         value += thread
                             .history_tables
                             .capture
-                            .get((moved_piece, src, victim));
+                            .get((moved_piece, dst, victim));
                         value += victim.base_value();
                     }
 
