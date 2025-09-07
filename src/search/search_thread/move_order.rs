@@ -310,6 +310,7 @@ impl MoveGenerator for StandardMoveGenerator {
             GenQuiescenceMoves => {
                 self.phase = YieldWinningOrEqualCaptures;
                 let side_to_move = thread.game().to_move();
+                let threatened_bb = thread.history.threatened_bb();
 
                 thread.game().for_each_pseudo_legal_move::<true>(|ply| {
                     let mut value = Millipawns(0);
@@ -326,6 +327,8 @@ impl MoveGenerator for StandardMoveGenerator {
                             moved_piece,
                             dst,
                             victim,
+                            threatened_bb.get(src),
+                            threatened_bb.get(dst),
                         ));
                         value += victim.base_value();
                     }
