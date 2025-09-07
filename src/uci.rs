@@ -452,7 +452,15 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
                 default: 128,
             },
             setter: |value, state| {
-                let parsed = parse_spin(value)?;
+                let mut parsed = parse_spin(value)? as u64;
+
+                if !parsed.is_power_of_two() {
+                    let rounded = 1_u64 << (64 - parsed.leading_zeros() - 1);
+                    println!("info string parsed Hash {parsed} but rounding to lower power of 2: {rounded}");
+                    parsed = rounded;
+                }
+
+                println!("info string Setting hash to {parsed} (MiB)");
 
                 let tt = TranspositionTable::new(1024 * 1024 * parsed as usize);
                 state.transposition_table = Arc::new(tt);
