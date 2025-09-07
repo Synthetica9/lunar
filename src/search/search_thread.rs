@@ -187,7 +187,7 @@ pub struct HistoryTables {
     continuation:
         [Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>; N_CONTINUATION_HISTORIES],
     threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
-    capture: Stats<(Piece, Square, Piece), Millipawns>,
+    capture: Stats<(Color, Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
 
     // Corrhists
@@ -678,8 +678,9 @@ impl ThreadData {
 
         let game = self.game();
         let board = game.board();
-        let friendly_pieces = board.get_color(game.to_move());
-        let enemy_pieces = board.get_color(game.to_move().other());
+        let side_to_move = game.to_move();
+        let friendly_pieces = board.get_color(side_to_move);
+        let enemy_pieces = board.get_color(side_to_move.other());
         let kp = (board.get_piece(Piece::Pawn) | board.get_piece(Piece::King)) & friendly_pieces;
         let side_to_move_only_kp = kp == friendly_pieces;
         let tt_is_capture =
@@ -916,7 +917,12 @@ impl ThreadData {
                 {
                     let mut cutoff = see_pruning_noisy_cutoff_upper - Millipawns(MAX_HISTORY);
                     if let Some(victim) = ply.captured_piece(self.game()) {
-                        let idx = (ply.moved_piece(self.game()), ply.dst(), victim);
+                        let idx = (
+                            side_to_move,
+                            ply.moved_piece(self.game()),
+                            ply.dst(),
+                            victim,
+                        );
                         let history = self.history_tables.capture.get(idx);
                         cutoff -= history
                     }
@@ -1131,13 +1137,16 @@ impl ThreadData {
                                 .write_quiet_hist(-bonus, ply, &self.history);
                         }
                     } else if let Some(captured) = undo.info.captured_piece {
-                        self.history_tables
-                            .capture
-                            .gravity_history((undo.info.our_piece, ply.dst(), captured), bonus);
+                        self.history_tables.capture.gravity_history(
+                            (side_to_move, undo.info.our_piece, ply.dst(), captured),
+                            bonus,
+                        );
                     }
 
-                    for bad in bad_captures {
-                        self.history_tables.capture.gravity_history(bad, -bonus);
+                    for (piece, dst, victim) in bad_captures {
+                        self.history_tables
+                            .capture
+                            .gravity_history((side_to_move, piece, dst, victim), -bonus);
                     }
                     break;
                 }
