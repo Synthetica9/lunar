@@ -184,8 +184,7 @@ pub struct ThreadData {
 pub struct HistoryTables {
     // Normal hists:
     main: Stats<(Color, Square, Square), Millipawns>,
-    continuation:
-        [Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>; N_CONTINUATION_HISTORIES],
+    continuation: Stats<((Color, Piece, Square), (Color, Piece, Square)), Millipawns>,
     threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
     capture: Stats<(Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
@@ -235,10 +234,10 @@ impl HistoryTables {
                 continue; // Should this be break?
             }
 
-            self.continuation[i]
-                .update_cell((color, oppt_info.piece_dst(), (piece, ply.dst())), |x| {
-                    f(x, Depth::from_num(cont_weights[i]))
-                });
+            self.continuation.update_cell(
+                (oppt_info.color_piece_dst(), (color, piece, ply.dst())),
+                |x| f(x, Depth::from_num(cont_weights[i])),
+            );
         }
 
         self.pawn.update_cell(

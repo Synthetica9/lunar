@@ -316,6 +316,10 @@ impl UndoPly {
         // Used for a lot of history heuristic stuffs.
         (self.info.our_piece, self.ply.dst())
     }
+
+    pub(crate) fn color_piece_dst(&self) -> (Color, Piece, Square) {
+        (self.info.to_move, self.info.our_piece, self.ply.dst())
+    }
 }
 
 impl GameInfoForPly {
