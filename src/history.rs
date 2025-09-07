@@ -1,3 +1,4 @@
+use crate::bitboard::Bitboard;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
@@ -15,6 +16,7 @@ pub struct StackElement {
     improving_rate: ImprovingRate,
     threat: Option<Threat>,
     skip_move: Ply,
+    threatened_bb: Bitboard,
 }
 
 impl StackElement {
@@ -49,6 +51,7 @@ impl History {
         };
 
         let eval = (!game.is_in_check()).then(|| crate::eval::evaluation(&game));
+        let threatened_bb = game.board().attacked_squares(game.to_move().other());
         let stack_base = StackElement {
             undo: None,
             eval,
@@ -56,6 +59,7 @@ impl History {
             improving_rate: ImprovingRate::ZERO,
             threat: None,
             skip_move: Ply::NULL,
+            threatened_bb,
         };
 
         let mut res = Self {
@@ -111,6 +115,11 @@ impl History {
             ImprovingRate::ZERO
         };
 
+        let threatened_bb = self
+            .game
+            .board()
+            .attacked_squares(self.game.to_move().other());
+
         self.stack.push(StackElement {
             undo: Some(undo),
             eval,
@@ -118,6 +127,7 @@ impl History {
             improving_rate,
             threat: None,
             skip_move: Ply::NULL,
+            threatened_bb,
         });
     }
 
@@ -272,5 +282,10 @@ impl History {
     pub fn threat(&self) -> Option<&Threat> {
         let top = self.full_peek_n(0).unwrap();
         top.threat.as_ref()
+    }
+
+    pub fn threatened_bb(&self) -> Bitboard {
+        let top = self.full_peek_n(0).unwrap();
+        top.threatened_bb
     }
 }
