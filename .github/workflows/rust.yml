@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+          fetch-depth: 0
       - name: Setup Hugepages
         run: |
           cat /sys/kernel/mm/transparent_hugepage/enabled
