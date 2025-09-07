@@ -1,8 +1,50 @@
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 
 pub mod magics;
 use magics::gen_magics_file;
+
+fn lunar_version() -> String {
+    let from_env = std::env::var("LUNAR_VERSION");
+    if let Ok(ver) = from_env {
+        return ver;
+    }
+
+    let from_git = std::process::Command::new("git")
+        .arg("describe")
+        .arg("--tags")
+        .arg("--dirty")
+        .output();
+    if let Ok(output) = from_git {
+        if output.status.success() {
+            println!("cargo:rerun-if-changed=.git/HEAD");
+            let revision = std::fs::File::open(".git/HEAD");
+            if let Ok(mut revision) = revision {
+                let mut content = String::new();
+                revision.read_to_string(&mut content).unwrap();
+
+                if let Some(r) = content.strip_prefix("ref: ") {
+                    content = r.to_string();
+                }
+
+                if let Some(r) = content.strip_suffix("\n") {
+                    content = r.to_string();
+                }
+
+                println!("cargo:rerun-if-changed=.git/{content}");
+            }
+
+            return String::from_utf8(output.stdout).unwrap();
+        }
+    }
+
+    let from_cargo = std::env::var("CARGO_PKG_VERSION");
+    if let Ok(ver) = from_cargo {
+        return ver;
+    }
+
+    "unknown".to_owned()
+}
 
 pub fn main() -> std::io::Result<()> {
     println!("cargo:rerun-if-changed=build");
@@ -29,6 +71,10 @@ pub fn main() -> std::io::Result<()> {
     println!("cargo:rustc-env=NETWORK={string_path}");
     println!("cargo:rerun-if-changed={string_path}");
     println!("cargo:rerun-if-env-changed=EVALFILE");
+
+    println!("cargo:rustc-env=LUNAR_VERSION={}", lunar_version());
+    println!("cargo:rerun-if-env-changed=LUNAR_VERSION");
+    println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
 
     // std::thread::sleep(std::time::Duration::from_secs(10));
     Ok(())

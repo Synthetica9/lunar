@@ -7,7 +7,7 @@ use crate::history::History;
 use crate::polyglot::PolyglotBook;
 use crate::transposition_table::TranspositionTable;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("LUNAR_VERSION");
 const NAME: &str = env!("CARGO_PKG_NAME");
 const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
 
