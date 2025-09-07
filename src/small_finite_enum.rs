@@ -5,6 +5,13 @@ pub trait SmallFiniteEnum {
     fn to_usize(self) -> usize;
 }
 
+impl SmallFiniteEnum for bool {
+    const SIZE: usize = 2;
+    fn to_usize(self) -> usize {
+        self as usize
+    }
+}
+
 impl SmallFiniteEnum for Color {
     const SIZE: usize = 2;
     fn to_usize(self) -> usize {
@@ -82,6 +89,23 @@ where
     fn to_usize(self) -> usize {
         let (t1, t2, t3, t4, t5) = self;
         T5::SIZE * (t1, t2, t3, t4).to_usize() + t5.to_usize()
+    }
+}
+
+impl<T1, T2, T3, T4, T5, T6> SmallFiniteEnum for (T1, T2, T3, T4, T5, T6)
+where
+    T1: SmallFiniteEnum,
+    T2: SmallFiniteEnum,
+    T3: SmallFiniteEnum,
+    T4: SmallFiniteEnum,
+    T5: SmallFiniteEnum,
+    T6: SmallFiniteEnum,
+{
+    const SIZE: usize = <(T1, T2, T3, T4, T5)>::SIZE * T6::SIZE;
+
+    fn to_usize(self) -> usize {
+        let (t1, t2, t3, t4, t5, t6) = self;
+        T6::SIZE * (t1, t2, t3, t4, t5).to_usize() + t6.to_usize()
     }
 }
 
