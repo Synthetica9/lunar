@@ -442,47 +442,6 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         }
     }
 
-    fn hash_setter(value: &str, state: &mut UCIState) -> Result<(), String> {
-        let parsed = parse_spin(value)?;
-
-        let tt = TranspositionTable::new(1024 * 1024 * parsed as usize);
-        state.transposition_table = Arc::new(tt);
-        state.search_thread_pool = SearchThreadPool::new(
-            state.search_thread_pool.num_threads(),
-            state.transposition_table.clone(),
-        );
-
-        Ok(())
-    }
-
-    fn thread_setter(value: &str, state: &mut UCIState) -> Result<(), String> {
-        let parsed = parse_spin(value)?;
-
-        let tt = state.transposition_table.clone();
-        state.search_thread_pool = SearchThreadPool::new(parsed as usize, tt);
-
-        Ok(())
-    }
-
-    fn instabilty_setter(value: &str, state: &mut UCIState) -> Result<(), String> {
-        let parsed = value.parse::<f64>().map_err(|x| x.to_string())?;
-        state.search_thread_pool.base_instability = parsed;
-        state.base_instability = parsed;
-
-        Ok(())
-    }
-
-    fn opening_book_setter(value: &str, state: &mut UCIState) -> Result<(), String> {
-        let book = if value.is_empty() {
-            None
-        } else {
-            let book = PolyglotBook::load_from_path(value)?;
-            Some(book)
-        };
-        state.search_thread_pool.set_opening_book(book);
-        Ok(())
-    }
-
     &[
         UCIOption {
             name: "Hash",
@@ -492,7 +451,18 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
                 max: 1024 * 1024,
                 default: 128,
             },
-            setter: hash_setter,
+            setter: |value, state| {
+                let parsed = parse_spin(value)?;
+
+                let tt = TranspositionTable::new(1024 * 1024 * parsed as usize);
+                state.transposition_table = Arc::new(tt);
+                state.search_thread_pool = SearchThreadPool::new(
+                    state.search_thread_pool.num_threads(),
+                    state.transposition_table.clone(),
+                );
+
+                Ok(())
+            },
         },
         UCIOption {
             name: "Threads",
@@ -501,7 +471,14 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
                 max: 1024,
                 default: 1,
             },
-            setter: thread_setter,
+            setter: |value, state| {
+                let parsed = parse_spin(value)?;
+
+                let tt = state.transposition_table.clone();
+                state.search_thread_pool = SearchThreadPool::new(parsed as usize, tt);
+
+                Ok(())
+            },
         },
         UCIOption {
             name: "Log File",
@@ -536,12 +513,27 @@ const AVAILABLE_OPTIONS: AvailableOptions = AvailableOptions({
         UCIOption {
             name: "BaseInstability",
             typ: &Str { default: "1.0" },
-            setter: instabilty_setter,
+            setter: |value, state| {
+                let parsed = value.parse::<f64>().map_err(|x| x.to_string())?;
+                state.search_thread_pool.base_instability = parsed;
+                state.base_instability = parsed;
+
+                Ok(())
+            },
         },
         UCIOption {
             name: "OpeningBook",
             typ: &Str { default: "" },
-            setter: opening_book_setter,
+            setter: |value, state| {
+                let book = if value.is_empty() {
+                    None
+                } else {
+                    let book = PolyglotBook::load_from_path(value)?;
+                    Some(book)
+                };
+                state.search_thread_pool.set_opening_book(book);
+                Ok(())
+            },
         },
         UCIOption {
             name: "PrintIntervalMS",
