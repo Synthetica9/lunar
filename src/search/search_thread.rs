@@ -514,8 +514,8 @@ impl ThreadData {
                 if score <= alpha {
                     fail_lows += 1;
                     let alpha_before = alpha;
-                    alpha = score - count_to_window(fail_lows);
-                    alpha = alpha.max(LOSS);
+                    let window = count_to_window(fail_lows);
+                    alpha = (value - window).min(score - window / 2).max(LOSS);
                     println!(
                         "info string Fail low! α':{alpha:?} < s:{score:?} <= α:{alpha_before:?} < β:{beta:?}"
                     );
@@ -526,8 +526,8 @@ impl ThreadData {
                 } else if score > beta {
                     fail_highs += 1;
                     let beta_before = beta;
-                    beta = score + count_to_window(fail_highs);
-                    beta = beta.min(WIN);
+                    let window = count_to_window(fail_highs);
+                    beta = (value + window).max(score + window / 2).min(WIN);
                     println!(
                         "info string Fail high! α:{alpha:?} < β:{beta_before:?} < s:{score:?} < β':{beta:?}"
                     );
