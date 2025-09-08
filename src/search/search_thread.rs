@@ -977,7 +977,13 @@ impl ThreadData {
 
                     if singular_value <= singular_beta {
                         let margin = Depth::saturating_from_num((singular_beta - singular_value).0);
-                        let multi_ext = margin.sqrt() / params().se_multi_ext_scaling();
+                        let mut multi_ext = margin.sqrt() / params().se_multi_ext_scaling();
+
+                        // It's a capture/queen promo, it ain't that deep fam
+                        if !is_quiet {
+                            multi_ext *= params().se_multi_ext_noisy();
+                        }
+
                         extension +=
                             params().se_ext() + multi_ext.min(params().se_multi_ext_limit());
                     } else if singular_beta >= beta {

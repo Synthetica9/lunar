@@ -213,6 +213,7 @@ make_tunable_params! {
     se_ext: Depth = 0.9289110668077334, 0., 2., 0.1, 0.002;
     se_multi_ext_scaling: Depth = 20., 5., 50., 5., 0.002;
     se_multi_ext_limit: Depth = 2., 0., 5., 0.2, 0.002;
+    se_multi_ext_noisy: Depth = 0.8, 0.33, 1.5, 0.1, 0.002;
 
     lmpahp_cutoff_depth: Depth = -2.0846465770501754, -4., 0., 0.2, 0.002;
 
