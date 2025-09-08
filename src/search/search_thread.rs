@@ -27,7 +27,8 @@ use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
 
-pub const N_CONTINUATION_HISTORIES: usize = 2;
+pub const N_CONTINUATION_HISTORIES: usize = 3;
+pub const CONTINUATION_HISTORIES: [usize; N_CONTINUATION_HISTORIES] = [0, 1, 3];
 const COMMS_INTERVAL: usize = 1 << 13;
 
 pub const MAX_CORR_HIST: Millipawns = Millipawns(1024);
@@ -231,7 +232,7 @@ impl HistoryTables {
 
         let cont_weights = continuation_weights();
 
-        for (i, weight) in cont_weights.iter().enumerate() {
+        for (weight, i) in cont_weights.into_iter().zip(CONTINUATION_HISTORIES) {
             let Some(oppt_info) = stack.peek_n(i) else {
                 continue;
             };
@@ -242,7 +243,7 @@ impl HistoryTables {
 
             self.continuation.update_cell(
                 (oppt_info.color_piece_dst(), (color, piece, ply.dst())),
-                |x| f(x, Depth::from_num(*weight)),
+                |x| f(x, Depth::from_num(weight)),
             );
         }
 
