@@ -20,7 +20,8 @@ const QB: i16 = 64;
 pub static NNUE: Network = unsafe { std::mem::transmute(*include_bytes!(env!("NETWORK"))) };
 
 pub fn evaluation(game: &Game) -> Millipawns {
-    let output_bucket = game.board().get_occupied().popcount() as usize / OUTPUT_BUCKETS;
+    const DIVISOR: usize = 32usize.div_ceil(OUTPUT_BUCKETS);
+    let output_bucket = (game.board().get_occupied().popcount() as usize - 2) / DIVISOR;
 
     let (us, them) = match game.to_move() {
         Color::White => (game.accum(Color::White), game.accum(Color::Black)),
