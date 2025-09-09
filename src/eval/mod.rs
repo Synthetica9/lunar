@@ -13,17 +13,20 @@ use crate::{
 
 const HIDDEN_SIZE: usize = 512;
 const SCALE: i32 = 4000;
+const OUTPUT_BUCKETS: usize = 8;
 const QA: i16 = 255;
 const QB: i16 = 64;
 
 pub static NNUE: Network = unsafe { std::mem::transmute(*include_bytes!(env!("NETWORK"))) };
 
 pub fn evaluation(game: &Game) -> Millipawns {
+    let output_bucket = game.board().get_occupied().popcount() as usize / OUTPUT_BUCKETS;
+
     let (us, them) = match game.to_move() {
         Color::White => (game.accum(Color::White), game.accum(Color::Black)),
         Color::Black => (game.accum(Color::Black), game.accum(Color::White)),
     };
-    Millipawns(NNUE.evaluate(us, them))
+    Millipawns(NNUE.evaluate(us, them, output_bucket))
 }
 
 #[inline]
@@ -44,31 +47,35 @@ pub struct Network {
     /// Column-Major `1 x (2 * HIDDEN_SIZE)`
     /// matrix, we use it like this to make the
     /// code nicer in `Network::evaluate`.
-    output_weights: [i16; 2 * HIDDEN_SIZE],
+    output_weights: [[i16; 2 * HIDDEN_SIZE]; OUTPUT_BUCKETS],
     /// Scalar output bias.
-    output_bias: i16,
+    output_bias: [i16; OUTPUT_BUCKETS],
 }
 
 impl Network {
     /// Calculates the output of the network, starting from the already
     /// calculated hidden layer (done efficiently during makemoves).
-    pub fn evaluate(&self, us: &Accumulator, them: &Accumulator) -> i32 {
+    pub fn evaluate(&self, us: &Accumulator, them: &Accumulator, output_bucket: usize) -> i32 {
+        let output_weights = &self.output_weights[output_bucket];
+
         // Generic implementation
-        let acc_sum = || {
+        let acc_sum_naive = || {
             let mut res = 0;
 
             // Side-To-Move Accumulator -> Output.
-            for (&input, &weight) in us.vals.iter().zip(&self.output_weights[..HIDDEN_SIZE]) {
+            for (&input, &weight) in us.vals.iter().zip(&output_weights[..HIDDEN_SIZE]) {
                 res += screlu(input) * i32::from(weight);
             }
 
             // Not-Side-To-Move Accumulator -> Output.
-            for (&input, &weight) in them.vals.iter().zip(&self.output_weights[HIDDEN_SIZE..]) {
+            for (&input, &weight) in them.vals.iter().zip(&output_weights[HIDDEN_SIZE..]) {
                 res += screlu(input) * i32::from(weight);
             }
 
             res
         };
+
+        let acc_sum = acc_sum_naive;
 
         #[cfg(all(target_arch = "x86_64", feature = "asm", target_feature = "avx2"))]
         let acc_sum = || unsafe {
@@ -83,12 +90,8 @@ impl Network {
 
             let us_ptr = us.vals.as_ptr().cast::<__m256i>();
             let them_ptr = them.vals.as_ptr().cast::<__m256i>();
-            let us_weights_ptr = self.output_weights.as_ptr().cast::<__m256i>();
-            let them_weights_ptr = self
-                .output_weights
-                .as_ptr()
-                .add(HIDDEN_SIZE)
-                .cast::<__m256i>();
+            let us_weights_ptr = output_weights.as_ptr().cast::<__m256i>();
+            let them_weights_ptr = us_weights_ptr.add(HIDDEN_SIZE / SUM_SIZE);
 
             for i in 0..(HIDDEN_SIZE / SUM_SIZE) {
                 let us = _mm256_load_si256(us_ptr.add(i));
@@ -122,20 +125,21 @@ impl Network {
         };
 
         // Initialise output with bias.
-        let mut output = 0;
+        let mut output: i64 = 0;
 
-        output += acc_sum();
-        output /= i32::from(QA);
+        output += acc_sum() as i64;
+        debug_assert_eq!(acc_sum_naive() as i64, output);
+        output /= i64::from(QA);
 
-        output += i32::from(self.output_bias);
+        output += i64::from(self.output_bias[output_bucket]);
 
         // Apply eval scale.
-        output *= SCALE;
+        output *= SCALE as i64;
 
         // Remove quantisation.
-        output /= i32::from(QA) * i32::from(QB);
+        output /= (QA as i64) * (QB as i64);
 
-        output
+        output as i32
     }
 }
 
