@@ -279,7 +279,7 @@ impl History {
         };
 
         match (cur.threat, prev.threat) {
-            (Some((cur, _, _)), Some((prev, _, _))) => cur == prev,
+            (Some((cur, _, _)), Some((prev, _, _))) => cur.dst() == prev.dst(),
             _ => false,
         }
     }
