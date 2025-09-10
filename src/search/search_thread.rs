@@ -185,7 +185,7 @@ pub struct HistoryTables {
     // Normal hists:
     main: Stats<(Color, Square, Square), Millipawns>,
     continuation: Stats<((Color, Piece, Square), (Color, Piece, Square)), Millipawns>,
-    threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
+    threat: Stats<(Color, bool, (Piece, Square), (Piece, Square)), Millipawns>,
     capture: Stats<(Color, Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
 
@@ -254,7 +254,12 @@ impl HistoryTables {
             let weight = severity_scaling * params().mo_sevr_move_threat();
 
             self.threat.update_cell(
-                (color, (threat_piece, threat_sq), (piece, ply.dst())),
+                (
+                    color,
+                    stack.botvinnik_markoff_elligible(),
+                    (threat_piece, threat_sq),
+                    (piece, ply.dst()),
+                ),
                 |x| f(x, weight),
             );
         }

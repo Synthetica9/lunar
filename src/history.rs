@@ -268,4 +268,19 @@ impl History {
         let top = self.full_peek_n(0).unwrap();
         top.threat
     }
+
+    pub fn botvinnik_markoff_elligible(&self) -> bool {
+        let Some(cur) = &self.full_peek_n(0) else {
+            return false;
+        };
+
+        let Some(prev) = &self.full_peek_n(2) else {
+            return false;
+        };
+
+        match (cur.threat, prev.threat) {
+            (Some((cur, _, _)), Some((prev, _, _))) => cur == prev,
+            _ => false,
+        }
+    }
 }
