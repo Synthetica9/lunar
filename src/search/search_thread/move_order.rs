@@ -292,18 +292,18 @@ impl MoveGenerator for StandardMoveGenerator {
                     break 'nmp;
                 };
 
-                let Some((ply, sevr, _)) = peek.threat() else {
+                let Some(threat) = peek.threat() else {
                     break 'nmp;
                 };
 
-                if sevr <= Millipawns(params().mo_nmp_threat_min_sevr()) {
+                if threat.severity <= Millipawns(params().mo_nmp_threat_min_sevr()) {
                     break 'nmp;
                 }
 
                 return Some(Generated {
-                    ply: GeneratedMove::Ply(ply),
+                    ply: GeneratedMove::Ply(threat.ply),
                     guarantee: GuaranteeLevel::HashLike,
-                    score: sevr, // dubious?
+                    score: threat.severity, // dubious?
                     see: None,
                 });
             }
@@ -419,8 +419,8 @@ pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
 pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     let mut val = thread.history_tables.read_quiet_hist(ply, &thread.history);
 
-    if let Some((threat, _, _)) = thread.history.threat() {
-        if ply.src() == threat.dst() {
+    if let Some(threat) = thread.history.threat() {
+        if ply.src() == threat.ply.dst() {
             val += params().mo_move_threatened_piece_bonus();
         }
     }

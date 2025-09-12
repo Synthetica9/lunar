@@ -14,14 +14,21 @@ pub struct StackElement {
     eval: Option<Millipawns>,
     hash: ZobristHash,
     improving_rate: ImprovingRate,
-    threat: Option<(Ply, Millipawns, Piece)>,
+    threat: Option<Threat>,
     skip_move: Ply,
 }
 
 impl StackElement {
-    pub fn threat(&self) -> Option<(Ply, Millipawns, Piece)> {
-        self.threat
+    pub fn threat(&self) -> Option<&Threat> {
+        self.threat.as_ref()
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct Threat {
+    pub ply: Ply,
+    pub severity: Millipawns,
+    pub piece: Piece,
 }
 
 #[derive(Clone, Debug)]
@@ -245,7 +252,7 @@ impl History {
         self.full_peek_n(0).unwrap().improving_rate
     }
 
-    pub fn set_threat(&mut self, ply: Ply, threat_severity: Millipawns) {
+    pub fn set_threat(&mut self, ply: Ply, severity: Millipawns) {
         let src = ply.src();
         debug_assert_eq!(
             self.game().board().occupant_color(src),
@@ -261,11 +268,15 @@ impl History {
         let top = self.full_peek_n_mut(0).unwrap();
         // XXX: This should actually start holding again
         // debug_assert_eq!(top.threat, None);
-        top.threat = Some((ply, threat_severity, piece));
+        top.threat = Some(Threat {
+            piece,
+            ply,
+            severity,
+        });
     }
 
-    pub fn threat(&self) -> Option<(Ply, Millipawns, Piece)> {
+    pub fn threat(&self) -> Option<&Threat> {
         let top = self.full_peek_n(0).unwrap();
-        top.threat
+        top.threat.as_ref()
     }
 }

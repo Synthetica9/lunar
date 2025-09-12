@@ -245,16 +245,16 @@ impl HistoryTables {
             |x| f(x, params().mo_pawn_history_weight()),
         );
 
-        if let Some((threat, threat_severity, threat_piece)) = stack.threat() {
-            let severity_scaling = (Depth::saturating_from_num(threat_severity.0)
+        if let Some(threat) = stack.threat() {
+            let severity_scaling = (Depth::saturating_from_num(threat.severity.0)
                 / params().mo_sevr_scaling_max())
             .clamp(Depth::ZERO, Depth::ONE);
-            let threat_sq = threat.dst();
+            let threat_sq = threat.ply.dst();
 
             let weight = severity_scaling * params().mo_sevr_move_threat();
 
             self.threat.update_cell(
-                (color, (threat_piece, threat_sq), (piece, ply.dst())),
+                (color, (threat.piece, threat_sq), (piece, ply.dst())),
                 |x| f(x, weight),
             );
         }
