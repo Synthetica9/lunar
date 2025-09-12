@@ -29,6 +29,7 @@ pub struct Threat {
     pub ply: Ply,
     pub severity: Millipawns,
     pub piece: Piece,
+    pub is_mate_threat: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -252,7 +253,7 @@ impl History {
         self.full_peek_n(0).unwrap().improving_rate
     }
 
-    pub fn set_threat(&mut self, ply: Ply, severity: Millipawns) {
+    pub fn set_threat(&mut self, ply: Ply, severity: Millipawns, is_mate_threat: bool) {
         let src = ply.src();
         debug_assert_eq!(
             self.game().board().occupant_color(src),
@@ -272,6 +273,7 @@ impl History {
             piece,
             ply,
             severity,
+            is_mate_threat,
         });
     }
 

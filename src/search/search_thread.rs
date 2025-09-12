@@ -185,7 +185,7 @@ pub struct HistoryTables {
     // Normal hists:
     main: Stats<(Color, Square, Square), Millipawns>,
     continuation: Stats<((Color, Piece, Square), (Color, Piece, Square)), Millipawns>,
-    threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
+    threat: Stats<(Color, bool, (Piece, Square), (Piece, Square)), Millipawns>,
     capture: Stats<(Color, Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
 
@@ -254,7 +254,12 @@ impl HistoryTables {
             let weight = severity_scaling * params().mo_sevr_move_threat();
 
             self.threat.update_cell(
-                (color, (threat.piece, threat_sq), (piece, ply.dst())),
+                (
+                    color,
+                    threat.is_mate_threat,
+                    (threat.piece, threat_sq),
+                    (piece, ply.dst()),
+                ),
                 |x| f(x, weight),
             );
         }
@@ -755,12 +760,14 @@ impl ThreadData {
                     return Ok((null_value, best_move));
                 }
 
+                is_mate_threat = null_value.is_mate_in_n().is_some();
+
                 if let Some(threat) = null_res.1 {
                     let threat_score = beta - null_value;
-                    self.history.set_threat(threat, threat_score);
+                    self.history
+                        .set_threat(threat, threat_score, is_mate_threat);
                     debug_assert!(threat_score >= Millipawns(0));
                 }
-                is_mate_threat = null_value.is_mate_in_n().is_some();
             };
 
             let mut hash_moves_played = [Ply::NULL; 8];

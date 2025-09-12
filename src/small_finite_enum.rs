@@ -94,3 +94,11 @@ impl<const N: usize> SmallFiniteEnum for NBits<N> {
         self.0 % Self::SIZE
     }
 }
+
+impl SmallFiniteEnum for bool {
+    const SIZE: usize = 2;
+
+    fn to_usize(self) -> usize {
+        self as usize
+    }
+}
