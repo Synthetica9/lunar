@@ -11,7 +11,7 @@ use crate::{
     small_finite_enum::SmallFiniteEnum, square::Square,
 };
 
-const HIDDEN_SIZE: usize = 512;
+const HIDDEN_SIZE: usize = 768;
 const SCALE: i32 = 4000;
 const QA: i16 = 255;
 const QB: i16 = 64;
@@ -124,20 +124,20 @@ impl Network {
         };
 
         // Initialise output with bias.
-        let mut output = 0;
+        let mut output: i64 = 0;
 
-        output += acc_sum();
-        output /= i32::from(QA);
+        output += acc_sum() as i64;
+        output /= QA as i64;
 
-        output += i32::from(self.output_bias);
+        output += self.output_bias as i64;
 
         // Apply eval scale.
-        output *= SCALE;
+        output *= SCALE as i64;
 
         // Remove quantisation.
-        output /= i32::from(QA) * i32::from(QB);
+        output /= QA as i64 * QB as i64;
 
-        output
+        output as i32
     }
 }
 
