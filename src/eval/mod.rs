@@ -11,7 +11,7 @@ use crate::{
     small_finite_enum::SmallFiniteEnum, square::Square,
 };
 
-const HIDDEN_SIZE: usize = 768;
+const HIDDEN_SIZE: usize = 1024;
 const SCALE: i32 = 4000;
 const QA: i16 = 255;
 const QB: i16 = 64;
