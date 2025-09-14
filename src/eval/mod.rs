@@ -19,11 +19,13 @@ const QB: i16 = 64;
 pub static NNUE: Network = unsafe { std::mem::transmute(*include_bytes!(env!("NETWORK"))) };
 
 pub fn evaluation(game: &Game) -> Millipawns {
-    let (us, them) = match game.to_move() {
-        Color::White => (game.accum(Color::White), game.accum(Color::Black)),
-        Color::Black => (game.accum(Color::Black), game.accum(Color::White)),
-    };
-    Millipawns(NNUE.evaluate(us, them))
+    let color = game.to_move();
+    let us = game.accum(color);
+    let them = game.accum(color.other());
+
+    let res = Millipawns(NNUE.evaluate(us, them));
+    debug_assert_eq!(res, res.clamp_eval());
+    res
 }
 
 #[inline]
