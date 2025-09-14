@@ -11,12 +11,11 @@ use bullet_lib::{
 
 fn main() {
     // hyperparams to fiddle with
-    let hl_size = 512;
+    let hl_size = 768;
     let dataset_path = "data/baseline.bin";
     let initial_lr = 0.001;
     let final_lr = 0.001 * 0.3f32.powi(5);
-    let superbatches = 160;
-    let wdl_proportion = 0.75;
+    let superbatches = 240;
     let qa = 255;
     let qb = 64;
 
