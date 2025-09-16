@@ -1182,6 +1182,14 @@ impl ThreadData {
             value -= Millipawns::ONE;
         }
 
+        if value >= beta
+            && value.is_mate_in_n().is_none()
+            && beta.is_mate_in_n().is_none()
+            && depth >= 0
+        {
+            value.0 = (value.0 * depth.to_num::<i32>() + beta.0) / (depth.to_num::<i32>() + 1);
+        };
+
         // Don't write worse SE move to TT
         if !N::IS_SE {
             use crate::transposition_table::*;
