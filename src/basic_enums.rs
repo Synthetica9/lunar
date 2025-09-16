@@ -20,6 +20,13 @@ impl Color {
         }
     }
 
+    pub const fn from_bool(is_black: bool) -> Self {
+        match is_black {
+            false => Self::White,
+            true => Self::Black,
+        }
+    }
+
     pub const fn to_fen_part(self) -> &'static str {
         match self {
             Color::White => "w",

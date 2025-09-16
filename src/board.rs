@@ -18,6 +18,7 @@ use crate::{
 pub struct Board {
     colors: [Bitboard; 2],
     pieces: [Bitboard; 6],
+    mailbox: [u8; 64],
 }
 
 impl Default for Board {
@@ -26,11 +27,29 @@ impl Default for Board {
     }
 }
 
+const fn to_mailbox_value(color: Color, piece: Piece) -> u8 {
+    (color as u8) << 6 | (piece as u8 + 1)
+}
+
+const fn from_mailbox_value(value: u8) -> Option<(Color, Piece)> {
+    const BLACK_MASK: u8 = 1 << 6;
+
+    if value == 0 {
+        return None;
+    }
+
+    let color = Color::from_bool((value & BLACK_MASK) != 0);
+    let piece = unsafe { Piece::unchecked_from_u8((value & !BLACK_MASK) - 1) };
+
+    Some((color, piece))
+}
+
 impl Board {
     pub const fn new() -> Board {
         Board {
             colors: [Bitboard(0); 2],
             pieces: [Bitboard(0); 6],
+            mailbox: [0; 64],
         }
     }
 
@@ -67,71 +86,17 @@ impl Board {
         king.first_occupied_or_a1()
     }
 
-    pub const fn occupant_piece(&self, square: Square) -> Option<Piece> {
-        use crate::piece::Piece::*;
-        const PIECE_OPTION_ARRAY: [Option<Piece>; 8] = {
-            use crate::piece::Piece::*;
-
-            [
-                None,
-                Some(Pawn),
-                Some(Knight),
-                Some(Bishop),
-                Some(Rook),
-                Some(Queen),
-                Some(King),
-                None,
-            ]
-        };
-
-        // Binary search. (with bit fiddling)
-        // let empty = self.get_occupied().not_const();
-        let pawn = self.get_piece(Pawn);
-        let knight = self.get_piece(Knight);
-        let bishop = self.get_piece(Bishop);
-
-        let rook = self.get_piece(Rook);
-        let queen = self.get_piece(Queen);
-        let king = self.get_piece(King);
-
-        let sq_bb = Bitboard::from_square(square);
-        let bit_0 = pawn.or(bishop).or(queen).intersects(sq_bb);
-        let bit_1 = knight.or(bishop).or(king).intersects(sq_bb);
-        let bit_3 = rook.or(queen).or(king).intersects(sq_bb);
-
-        let idx = (bit_0 as usize) | (bit_1 as usize) << 1 | (bit_3 as usize) << 2;
-
-        PIECE_OPTION_ARRAY[idx]
+    pub fn occupant_piece(&self, square: Square) -> Option<Piece> {
+        self.square(square).map(|x| x.1)
     }
 
-    pub const fn occupant_color(&self, square: Square) -> Option<Color> {
-        // debug_assert!(self.is_not_corrupt());
-
-        let white = self.get_color(Color::White).get(square);
-        let black = self.get_color(Color::Black).get(square);
-
-        // debug_assert!(!(white && black));
-
-        match (white, black) {
-            (true, false) => Some(Color::White),
-            (false, true) => Some(Color::Black),
-            _ => None,
-        }
+    pub fn occupant_color(&self, square: Square) -> Option<Color> {
+        self.square(square).map(|x| x.0)
     }
 
-    pub fn square(&self, square: Square) -> Option<(Color, Piece)> {
+    pub const fn square(&self, square: Square) -> Option<(Color, Piece)> {
         // TODO: should probably be renamed occupant.
-        // debug_assert!(self.is_not_corrupt());
-
-        let color = self.occupant_color(square);
-        let piece = self.occupant_piece(square);
-
-        // debug_assert!(color.is_some() == piece.is_some());
-
-        match (color, piece) {
-            (Some(color), Some(piece)) => Some((color, piece)),
-            _ => None,
-        }
+        from_mailbox_value(self.mailbox[square as usize])
     }
 
     pub fn to_piece_list(&self) -> Vec<(Color, Piece, Square)> {
@@ -152,6 +117,7 @@ impl Board {
 
         self.colors[color as usize] ^= mask;
         self.pieces[piece as usize] ^= mask;
+        self.mailbox[square as usize] ^= to_mailbox_value(color, piece);
 
         // debug_assert!(self.is_not_corrupt());
     }
@@ -611,12 +577,6 @@ impl ApplyPly for Board {
     #[inline]
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
         self.toggle_mut_invalid(square, color, piece);
-    }
-
-    fn toggle_piece_multi(&mut self, color: Color, piece: Piece, squares: &[Square]) {
-        let bb = Bitboard::from_squares(squares);
-        *self.get_color_mut(color) ^= bb;
-        *self.get_piece_mut(piece) ^= bb;
     }
 
     fn toggle_castle_rights(&mut self, _rights: CastleRights) {}

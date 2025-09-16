@@ -25,9 +25,14 @@ impl Piece {
         }
     }
 
-    pub const fn from_u8(n: u8) -> Option<&'static Piece> {
+    pub const unsafe fn unchecked_from_u8(n: u8) -> Piece {
+        debug_assert!(n < 6);
+        std::mem::transmute(n)
+    }
+
+    pub const fn from_u8(n: u8) -> Option<Piece> {
         if n < 6 {
-            Some(&Piece::PIECES[n as usize])
+            Some(Piece::PIECES[n as usize])
         } else {
             None
         }
