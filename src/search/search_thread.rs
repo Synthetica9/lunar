@@ -1182,12 +1182,15 @@ impl ThreadData {
             value -= Millipawns::ONE;
         }
 
-        if value >= beta
-            && value.is_mate_in_n().is_none()
-            && beta.is_mate_in_n().is_none()
-            && depth >= 0
-        {
-            value.0 = (value.0 * depth.to_num::<i32>() + beta.0) / (depth.to_num::<i32>() + 1);
+        if value >= beta && value.is_mate_in_n().is_none() && beta.is_mate_in_n().is_none() {
+            type T = fixed::types::I32F32;
+
+            let depth_fac = T::from_num(depth.max(Depth::ONE));
+            let beta_fac = T::from_num(1);
+
+            value.0 = ((value.0 as i64 * depth_fac + beta.0 as i64 * beta_fac)
+                / (depth_fac + beta_fac))
+                .to_num();
         };
 
         // Don't write worse SE move to TT
