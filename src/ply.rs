@@ -185,12 +185,12 @@ impl Ply {
         }
     }
 
-    pub const fn _captured_piece(self, game: &Game) -> Option<Piece> {
+    pub fn _captured_piece(self, game: &Game) -> Option<Piece> {
         // captured_piece, but doesn't track en passant.
         game.board().occupant_piece(self.dst())
     }
 
-    pub const fn captured_piece(self, game: &Game) -> Option<Piece> {
+    pub fn captured_piece(self, game: &Game) -> Option<Piece> {
         if self.is_en_passant() {
             debug_assert!(game.board().occupant_piece(self.dst()).is_none());
             Some(Piece::Pawn)
@@ -199,7 +199,7 @@ impl Ply {
         }
     }
 
-    pub const fn is_capture(self, game: &Game) -> bool {
+    pub fn is_capture(self, game: &Game) -> bool {
         // Todo: move to game object
         self.captured_piece(game).is_some()
     }
@@ -376,12 +376,6 @@ pub(crate) trait ApplyPly {
     fn toggle_en_passant(&mut self, en_passant: Square);
     fn flip_side(&mut self);
 
-    fn toggle_piece_multi(&mut self, color: Color, piece: Piece, squares: &[Square]) {
-        for sq in squares {
-            self.toggle_piece(color, piece, *sq);
-        }
-    }
-
     fn _apply_ply(&mut self, game: &Game, ply: Ply) {
         let info = GameInfoForPly::new(game, ply);
         self._apply_ply_with_info(info, ply);
@@ -405,7 +399,8 @@ pub(crate) trait ApplyPly {
             self.toggle_piece(info.to_move.other(), victim, dst);
         }
 
-        self.toggle_piece_multi(info.to_move, info.our_piece, &[src, dst]);
+        self.toggle_piece(info.to_move, info.our_piece, src);
+        self.toggle_piece(info.to_move, info.our_piece, dst);
         self.flip_side();
     }
 
@@ -461,7 +456,6 @@ pub(crate) trait ApplyPly {
         } else {
             self.toggle_piece(info.to_move, info.our_piece, src);
             self.toggle_piece(info.to_move, info.our_piece, dst);
-            // self.toggle_piece_multi(to_move, our_piece, &[src, dst]);
         }
 
         if let Some(SpecialFlag::Castling) = flag {
@@ -477,7 +471,6 @@ pub(crate) trait ApplyPly {
             let rook_src = Square::new(rook_src_file, rank);
             let rook_dst = Square::new(rook_dst_file, rank);
 
-            // self.toggle_piece_multi(to_move, Rook, &[rook_src, rook_dst]);
             self.toggle_piece(info.to_move, Rook, rook_src);
             self.toggle_piece(info.to_move, Rook, rook_dst);
         }
