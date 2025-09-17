@@ -15,8 +15,6 @@ default = ["asm", "readline", "intrinsics"]
 # Enables custom assembly. Can be disabled on platforms that support it
 # to test "generic" code. All ASM _should_ be feature-gated.
 asm = []
-# Explicitly uses std::simd. Currently experimental, so disabled by default
-simd = []
 readline = ["rustyline"]
 # Enable core_intrinsics and some implementations that that enables.
 intrinsics = []

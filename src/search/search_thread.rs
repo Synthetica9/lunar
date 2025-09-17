@@ -210,26 +210,6 @@ fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
     res
 }
 
-fn kpp_hash(piece1: Piece, piece2: Piece, board: &Board) -> ZobristHash {
-    const P: u64 = 12967380967317188849;
-
-    debug_assert!(piece1 < piece2);
-
-    let mut res: u64 = 0;
-
-    for piece in [piece1, piece2, Piece::King] {
-        for color in Color::iter() {
-            let bb = board.get(color, piece);
-            res ^= bb.0;
-            res = res.wrapping_mul(P);
-            res ^= res << 23;
-            res ^= res >> 18;
-        }
-    }
-
-    ZobristHash(res)
-}
-
 impl HistoryTables {
     fn map_quiet_hist(
         &self,
@@ -311,13 +291,16 @@ impl HistoryTables {
                 f(x, params().corrhist_pawn_weight())
             });
 
+        let sub_hashes = game.sub_hashes();
         for piece1 in Piece::iter() {
             for piece2 in Piece::iter() {
                 if piece1 == Piece::King || piece2 == Piece::King || piece2 <= piece1 {
                     continue;
                 }
 
-                let h = kpp_hash(piece1, piece2, game.board());
+                let h = sub_hashes.piece(piece1)
+                    ^ sub_hashes.piece(piece2)
+                    ^ sub_hashes.piece(Piece::King);
 
                 self.kpp_corr
                     .update_cell((color, piece1, piece2, h.to_nbits()), |x| {

@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "simd", feature(portable_simd))]
+#![feature(portable_simd)]
 #![cfg_attr(unix, feature(allocator_api, slice_ptr_get))]
 #![cfg_attr(feature = "intrinsics", feature(core_intrinsics))]
 #![feature(generic_const_exprs)]
@@ -27,6 +27,7 @@ pub mod ply;
 pub mod plyset;
 pub mod polyglot;
 pub mod search;
+pub mod simd_zobrist;
 pub mod small_finite_enum;
 pub mod square;
 pub mod transposition_table;

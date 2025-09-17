@@ -1,5 +1,6 @@
 use std::hash::Hash;
 use std::hint::assert_unchecked;
+use std::ops::BitXor;
 
 use crate::basic_enums::Color;
 use crate::castlerights::CastleRights;
@@ -9,15 +10,14 @@ use crate::ply::ApplyPly;
 use crate::small_finite_enum::NBits;
 use crate::square::Square;
 
-mod constants;
+pub mod constants;
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct ZobristHash(pub u64);
 
 impl ApplyPly for ZobristHash {
     fn toggle_piece(&mut self, color: Color, piece: Piece, square: Square) {
-        let kind_of_piece = color.as_index() + piece.as_index() * 2;
-        let idx = square.as_index() + kind_of_piece * 64;
+        let idx = to_idx(color, piece, square);
         unsafe { assert_unchecked(idx < constants::PIECE_HASHES.len()) };
         self.0 ^= constants::PIECE_HASHES[idx];
     }
@@ -40,35 +40,49 @@ impl ApplyPly for ZobristHash {
     }
 }
 
+pub const fn to_idx(color: Color, piece: Piece, square: Square) -> usize {
+    let kind_of_piece = color.as_index() + piece.as_index() * 2;
+    let idx = square.as_index() + kind_of_piece * 64;
+    idx
+}
+
+pub const fn idx_to_features(mut idx: usize) -> (Color, Piece, Square) {
+    let orig_idx = idx;
+    debug_assert!(idx < 768);
+    let square = idx % 64;
+    idx /= 64;
+    let color = idx % 2;
+    idx /= 2;
+    let piece = idx;
+
+    let square = Square::from_index(square as u8);
+    let piece = unsafe { Piece::from_u8(piece as u8).unwrap_unchecked() };
+    let color = Color::from_bool(color != 0);
+    debug_assert!(to_idx(color, piece, square) == orig_idx);
+
+    (color, piece, square)
+}
+
 impl ZobristHash {
     pub fn new() -> Self {
         Self(0)
     }
 
-    pub fn from_game(
-        game: &Game,
-        mut filter: impl FnMut(Color, Piece, Square) -> bool,
-        pieces_only: bool,
-    ) -> Self {
+    pub fn from_game(game: &Game) -> Self {
         let mut hash = Self::new();
 
         for (color, piece, square) in game.board().to_piece_list() {
-            if !filter(color, piece, square) {
-                continue;
-            }
             hash.toggle_piece(color, piece, square);
         }
 
-        if !pieces_only {
-            hash.toggle_castle_rights(game.castle_rights());
+        hash.toggle_castle_rights(game.castle_rights());
 
-            if let Some(square) = game.en_passant() {
-                hash.toggle_en_passant(square);
-            }
+        if let Some(square) = game.en_passant() {
+            hash.toggle_en_passant(square);
+        }
 
-            if game.to_move() == Color::White {
-                hash.flip_side();
-            }
+        if game.to_move() == Color::White {
+            hash.flip_side();
         }
 
         hash
@@ -102,6 +116,14 @@ impl Default for ZobristHash {
 impl Hash for ZobristHash {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         state.write_u64(self.0);
+    }
+}
+
+impl BitXor for ZobristHash {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self {
+        Self(self.0 ^ rhs.0)
     }
 }
 

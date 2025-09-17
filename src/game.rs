@@ -10,6 +10,7 @@ use crate::castlerights::CastleRights;
 use crate::direction::directions;
 use crate::eval::{to_feature_idx, Accumulator};
 use crate::legality::LegalityChecker;
+use crate::simd_zobrist::SimdZobrist;
 use crate::small_finite_enum::SmallFiniteEnum;
 
 use crate::piece::Piece;
@@ -32,7 +33,7 @@ pub struct Game {
     // management? (Along with 3-fold draw bookkeeping.)
     half_move_total: i16,
     hash: ZobristHash,
-    pawn_hash: ZobristHash,
+    sub_hashes: SimdZobrist,
 
     white_accum: Accumulator,
     black_accum: Accumulator,
@@ -86,7 +87,11 @@ impl Game {
     }
 
     pub fn pawn_hash(&self) -> ZobristHash {
-        self.pawn_hash
+        self.sub_hashes().piece(Piece::Pawn)
+    }
+
+    pub fn sub_hashes(&self) -> &SimdZobrist {
+        &self.sub_hashes
     }
 
     pub fn king_square(&self, side: Color) -> Square {
@@ -105,8 +110,8 @@ impl Game {
 
     pub fn recalc_hash(&mut self) {
         // TODO: simd
-        self.hash = ZobristHash::from_game(self, |_, _, _| true, false);
-        self.pawn_hash = ZobristHash::from_game(self, |_, p, _| matches!(p, Piece::Pawn), true);
+        self.hash = ZobristHash::from_game(self);
+        self.sub_hashes = SimdZobrist::from_game(self);
     }
 
     pub fn recalc_accum(&mut self, side: Color) {
@@ -277,7 +282,7 @@ impl Game {
             half_move,
             half_move_total: (full_move - 1) * 2 + (to_move as i16),
             hash: ZobristHash::new(),
-            pawn_hash: ZobristHash::new(),
+            sub_hashes: SimdZobrist::new(),
 
             white_accum: Accumulator::new(),
             black_accum: Accumulator::new(),
@@ -1132,10 +1137,7 @@ impl ApplyPly for Game {
         self.board.toggle_piece(color, piece, square);
 
         self.hash.toggle_piece(color, piece, square);
-        match piece {
-            Piece::Pawn => self.pawn_hash.toggle_piece(color, piece, square),
-            _ => {}
-        }
+        self.sub_hashes.toggle_piece(color, piece, square);
 
         let exists_after = self.board.get_color(color).get(square);
         let idx_white = to_feature_idx(
