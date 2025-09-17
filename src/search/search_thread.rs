@@ -14,7 +14,8 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::CounterMove;
 use crate::basic_enums::Color;
-use crate::eval;
+use crate::bitboard::Bitboard;
+use crate::board::Board;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -27,6 +28,7 @@ use crate::square::Square;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
+use crate::{eval, piece};
 
 pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 13;
@@ -192,6 +194,10 @@ pub struct HistoryTables {
     // Corrhists
     pawn_corr: Stats<(Color, NBits<20>), Millipawns>,
     minor_corr: Stats<(Color, NBits<20>), Millipawns>,
+    krp_corr: Stats<(Color, NBits<16>), Millipawns>,
+    krn_corr: Stats<(Color, NBits<16>), Millipawns>,
+    krb_corr: Stats<(Color, NBits<16>), Millipawns>,
+    major_corr: Stats<(Color, NBits<16>), Millipawns>,
 
     // Odd one out:
     countermove: CounterMove,
@@ -281,6 +287,8 @@ impl HistoryTables {
     }
 
     fn map_corrhist(&self, stack: &History, mut f: impl FnMut(&Cell<Millipawns>, Depth)) {
+        use Piece::*;
+
         let game = stack.game();
         let color = game.to_move();
 
@@ -289,10 +297,25 @@ impl HistoryTables {
                 f(x, params().corrhist_pawn_weight())
             });
 
+        let sub_hashes = game.sub_hashes();
+        let minor_hash =
+            sub_hashes.piece(Knight) ^ sub_hashes.piece(Bishop) ^ sub_hashes.piece(King);
+
         self.minor_corr
-            .update_cell((color, game.minor_hash().to_nbits()), |x| {
+            .update_cell((color, minor_hash.to_nbits()), |x| {
                 f(x, params().corrhist_minor_weight())
             });
+
+        let kr_hash = sub_hashes.piece(Rook) ^ sub_hashes.piece(King);
+        for (piece, table, weight) in [
+            (Pawn, &self.krp_corr, params().corrhist_krp_weight()),
+            (Knight, &self.krn_corr, params().corrhist_krn_weight()),
+            (Bishop, &self.krb_corr, params().corrhist_krb_weight()),
+            (Queen, &self.major_corr, params().corrhist_major_weight()),
+        ] {
+            let h = sub_hashes.piece(piece) ^ kr_hash;
+            table.update_cell((color, h.to_nbits()), |x| f(x, weight));
+        }
     }
 
     fn read_corrhist(&self, stack: &History) -> Millipawns {
