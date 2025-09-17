@@ -14,7 +14,8 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::CounterMove;
 use crate::basic_enums::Color;
-use crate::eval;
+use crate::bitboard::Bitboard;
+use crate::board::Board;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -27,6 +28,7 @@ use crate::square::Square;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
+use crate::{eval, piece};
 
 pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 13;
@@ -191,7 +193,7 @@ pub struct HistoryTables {
 
     // Corrhists
     pawn_corr: Stats<(Color, NBits<20>), Millipawns>,
-    minor_corr: Stats<(Color, NBits<20>), Millipawns>,
+    kpp_corr: Stats<(Color, Piece, Piece, NBits<15>), Millipawns>,
 
     // Odd one out:
     countermove: CounterMove,
@@ -206,6 +208,26 @@ fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
     }
 
     res
+}
+
+fn kpp_hash(piece1: Piece, piece2: Piece, board: &Board) -> ZobristHash {
+    const P: u64 = 12967380967317188849;
+
+    debug_assert!(piece1 < piece2);
+
+    let mut res: u64 = 0;
+
+    for piece in [piece1, piece2, Piece::King] {
+        for color in Color::iter() {
+            let bb = board.get(color, piece);
+            res ^= bb.0;
+            res = res.wrapping_mul(P);
+            res ^= res << 23;
+            res ^= res >> 18;
+        }
+    }
+
+    ZobristHash(res)
 }
 
 impl HistoryTables {
@@ -289,10 +311,20 @@ impl HistoryTables {
                 f(x, params().corrhist_pawn_weight())
             });
 
-        self.minor_corr
-            .update_cell((color, game.minor_hash().to_nbits()), |x| {
-                f(x, params().corrhist_minor_weight())
-            });
+        for piece1 in Piece::iter() {
+            for piece2 in Piece::iter() {
+                if piece1 == Piece::King || piece2 == Piece::King || piece2 <= piece1 {
+                    continue;
+                }
+
+                let h = kpp_hash(piece1, piece2, game.board());
+
+                self.kpp_corr
+                    .update_cell((color, piece1, piece2, h.to_nbits()), |x| {
+                        f(x, params().corrhist_minor_weight() / 25)
+                    });
+            }
+        }
     }
 
     fn read_corrhist(&self, stack: &History) -> Millipawns {
