@@ -298,13 +298,18 @@ impl HistoryTables {
                     continue;
                 }
 
-                let h = sub_hashes.piece(piece1)
-                    ^ sub_hashes.piece(piece2)
-                    ^ sub_hashes.piece(Piece::King);
+                let h1 = sub_hashes.piece(piece1);
+                let h2 = sub_hashes.piece(piece2);
+
+                if h1.0 == 0 || h2.0 == 0 {
+                    continue;
+                }
+
+                let h = h1 ^ h2 ^ sub_hashes.piece(Piece::King);
 
                 self.kpp_corr
                     .update_cell((color, piece1, piece2, h.to_nbits()), |x| {
-                        f(x, params().corrhist_minor_weight() / 25)
+                        f(x, params().corrhist_kpp_weight() / 25)
                     });
             }
         }
