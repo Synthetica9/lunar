@@ -221,7 +221,7 @@ make_tunable_params! {
     tm_complexity_divisor: f64 = 391., 200., 800., 10., 0.002;
 
     corrhist_pawn_weight: Depth = 0.6, 0.0, 1.0, 0.01, 0.002;
-    corrhist_minor_weight: Depth = 0.12890625, 0.0, 0.3, 0.01, 0.002;
+    corrhist_minor_weight: Depth = 0.6, 0.0, 0.3, 0.01, 0.002;
 }
 
 #[cfg(feature = "tunable")]
