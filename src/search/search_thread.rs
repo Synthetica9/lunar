@@ -193,7 +193,8 @@ pub struct HistoryTables {
 
     // Corrhists
     pawn_corr: Stats<(Color, NBits<20>), Millipawns>,
-    kpp_corr: Stats<(Color, Piece, Piece, NBits<15>), Millipawns>,
+    minor_corr: Stats<(Color, NBits<20>), Millipawns>,
+    krp_corr: Stats<(Color, Piece, NBits<16>), Millipawns>,
 
     // Odd one out:
     countermove: CounterMove,
@@ -292,26 +293,28 @@ impl HistoryTables {
             });
 
         let sub_hashes = game.sub_hashes();
-        for piece1 in Piece::iter() {
-            for piece2 in Piece::iter() {
-                if piece1 == Piece::King || piece2 == Piece::King || piece2 <= piece1 {
-                    continue;
-                }
+        let minor_hash = sub_hashes.piece(Piece::Knight)
+            ^ sub_hashes.piece(Piece::Bishop)
+            ^ sub_hashes.piece(Piece::King);
 
-                let h1 = sub_hashes.piece(piece1);
-                let h2 = sub_hashes.piece(piece2);
+        self.minor_corr
+            .update_cell((color, minor_hash.to_nbits()), |x| {
+                f(x, params().corrhist_minor_weight())
+            });
 
-                if h1.0 == 0 || h2.0 == 0 {
-                    continue;
-                }
-
-                let h = h1 ^ h2 ^ sub_hashes.piece(Piece::King);
-
-                self.kpp_corr
-                    .update_cell((color, piece1, piece2, h.to_nbits()), |x| {
-                        f(x, params().corrhist_kpp_weight() / 25)
-                    });
+        for piece in Piece::iter() {
+            if piece == Piece::King || piece == Piece::Rook {
+                continue;
             }
+
+            let h = sub_hashes.piece(piece)
+                ^ sub_hashes.piece(Piece::Rook)
+                ^ sub_hashes.piece(Piece::King);
+
+            self.krp_corr
+                .update_cell((color, piece, h.to_nbits()), |x| {
+                    f(x, params().corrhist_krp_weight() / 5)
+                });
         }
     }
 
