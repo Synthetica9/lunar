@@ -10,7 +10,15 @@ use crate::{
     zobrist_hash::{self, ZobristHash},
 };
 
+// Layout:
+// [0] Pawn
+// ...
+// [5] King
+// [6] Nonpawn White
+// [7] Nonpawn Black
 type Inner = Simd<u64, 8>;
+
+const NONPAWN_OFFSET: usize = 6;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SimdZobrist(Inner);
@@ -23,13 +31,16 @@ static HASHES: [SimdZobrist; 768] = {
     while i > 0 {
         i -= 1;
 
-        let (_color, piece, _square) = zobrist_hash::idx_to_features(i);
+        let (color, piece, _square) = zobrist_hash::idx_to_features(i);
 
         let base = zobrist_hash::constants::PIECE_HASHES[i];
         let mut slice = [0_u64; 8];
         slice[piece as usize] = base;
 
-        // TODO: non-pawn
+        if !matches!(piece, Piece::Pawn) {
+            slice[NONPAWN_OFFSET + color as usize] = base;
+        }
+
         res[i] = SimdZobrist(Inner::from_array(slice));
     }
 
@@ -58,6 +69,10 @@ impl Default for SimdZobrist {
 impl SimdZobrist {
     pub fn piece(&self, piece: Piece) -> ZobristHash {
         ZobristHash(self.0[piece as usize])
+    }
+
+    pub fn nonpawn(&self, color: Color) -> ZobristHash {
+        ZobristHash(self.0[NONPAWN_OFFSET + color as usize])
     }
 
     pub fn new() -> Self {

@@ -196,6 +196,8 @@ pub struct HistoryTables {
     krn_corr: Stats<(Color, NBits<16>), Millipawns>,
     krb_corr: Stats<(Color, NBits<16>), Millipawns>,
     major_corr: Stats<(Color, NBits<16>), Millipawns>,
+    nonpawn_ours_corr: Stats<(Color, NBits<16>), Millipawns>,
+    nonpawn_theirs_corr: Stats<(Color, NBits<16>), Millipawns>,
 
     // Odd one out:
     countermove: CounterMove,
@@ -348,6 +350,16 @@ impl HistoryTables {
             let h = sub_hashes.piece(piece) ^ kr_hash;
             table.update_cell((color, h.to_nbits()), |x| f(x, weight));
         }
+
+        self.nonpawn_ours_corr
+            .update_cell((color, sub_hashes.nonpawn(color).to_nbits()), |x| {
+                f(x, params().corrhist_np_ours_weight())
+            });
+
+        self.nonpawn_theirs_corr
+            .update_cell((color, sub_hashes.nonpawn(color.other()).to_nbits()), |x| {
+                f(x, params().corrhist_np_theirs_weight())
+            });
     }
 
     fn read_corrhist(&self, stack: &History) -> Millipawns {
