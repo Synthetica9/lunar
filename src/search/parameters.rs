@@ -220,14 +220,14 @@ make_tunable_params! {
     tm_complexity_base: f64 = 0.76, 0.3, 2.0, 0.05, 0.002;
     tm_complexity_divisor: f64 = 391., 200., 800., 10., 0.002;
 
-    corrhist_pawn_weight: Depth = 0.4, 0.0, 1.0, 0.05, 0.002;
-    corrhist_minor_weight: Depth = 0.08, 0.0, 1.0, 0.05, 0.002;
-    corrhist_krp_weight: Depth = 0.08, 0.0, 1.0, 0.05, 0.002;
-    corrhist_krn_weight: Depth = 0.08, 0.0, 1.0, 0.05, 0.002;
-    corrhist_krb_weight: Depth = 0.08, 0.0, 1.0, 0.05, 0.002;
-    corrhist_major_weight: Depth = 0.08, 0.0, 1.0, 0.05, 0.002;
-    corrhist_np_ours_weight: Depth = 0.08, 0.0, 1.0, 0.05, 0.002;
-    corrhist_np_theirs_weight: Depth = 0.08, 0.0, 1.0, 0.05, 0.002;
+    corrhist_pawn_weight: Depth = 0.45, 0.0, 1.0, 0.05, 0.002;
+    corrhist_minor_weight: Depth = 0.09, 0.0, 1.0, 0.05, 0.002;
+    corrhist_krp_weight: Depth = 0.09, 0.0, 1.0, 0.05, 0.002;
+    corrhist_krn_weight: Depth = 0.09, 0.0, 1.0, 0.05, 0.002;
+    corrhist_krb_weight: Depth = 0.09, 0.0, 1.0, 0.05, 0.002;
+    corrhist_major_weight: Depth = 0.09, 0.0, 1.0, 0.05, 0.002;
+    corrhist_np_ours_weight: Depth = 0.09, 0.0, 1.0, 0.05, 0.002;
+    corrhist_np_theirs_weight: Depth = 0.09, 0.0, 1.0, 0.05, 0.002;
 }
 
 #[cfg(feature = "tunable")]
