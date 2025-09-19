@@ -193,9 +193,9 @@ make_tunable_params! {
     aw_fail_open_after: i32 = 5, 0, 15, 0.75, 0.002;
     aw_consistency_base: f64 = 0.90597022904253, 0.5, 1., 0.025, 0.002;
 
-    rfp_depth_slope: Depth = 930.0923973641561, 0., 4000., 200., 0.002;
+    rfp_depth_slope: Depth = 800., 0., 4000., 200., 0.002;
     rfp_improving_fac: Depth = 0.5616900049641566, 0., 1., 0.05, 0.002;
-    rfp_min_depth: Depth = 4.611616158400307, 0., 12., 0.5, 0.002;
+    rfp_min_depth: Depth = 6., 0., 12., 0.5, 0.002;
 
     see_pruning_noisy_scaling_factor: Depth = -370.0662456844208, -2000., 0., 100., 0.002;
     see_pruning_quiet_scaling_factor: Depth = -683.4333685655881, -2000., 0., 100., 0.002;
