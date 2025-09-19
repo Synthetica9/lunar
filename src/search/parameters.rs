@@ -230,6 +230,7 @@ make_tunable_params! {
     corrhist_krn_weight: Depth = 0.13794572593135054, 0.0, 1.0, 0.05, 0.002;
     corrhist_krb_weight: Depth = 0.13800219913462022, 0.0, 1.0, 0.05, 0.002;
     corrhist_major_weight: Depth = 0.14567443870487837, 0.0, 1.0, 0.05, 0.002;
+    corrhist_cont_weight: Depth = 0.12, 0.0, 1.0, 0.05, 0.002;
 }
 
 #[cfg(feature = "tunable")]
