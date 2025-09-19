@@ -225,6 +225,8 @@ impl HistoryTables {
         let color = game.to_move();
         let piece = game.board().occupant_piece(ply.src()).unwrap();
 
+        debug_assert!(!ply.is_capture(game) || ply.is_promotion());
+
         self.main.update_cell((color, ply.src(), ply.dst()), |x| {
             f(x, params().mo_main_history_weight())
         });
@@ -279,6 +281,38 @@ impl HistoryTables {
 
     fn write_quiet_hist(&mut self, delta: i32, ply: Ply, stack: &History) {
         self.map_quiet_hist(ply, stack, |x, _read_weight| {
+            x.update(|cur| {
+                let delta = delta.clamp(-MAX_HISTORY, MAX_HISTORY);
+                Millipawns(cur.0 + delta - cur.0 * delta.abs() / MAX_HISTORY)
+            });
+        });
+    }
+
+    fn map_caphist(&self, ply: Ply, stack: &History, mut f: impl FnMut(&Cell<Millipawns>)) {
+        let game = stack.game();
+        let Some(captured) = ply.captured_piece(game) else {
+            return;
+        };
+
+        let color = game.to_move();
+        let piece = ply.moved_piece(game);
+
+        self.capture
+            .update_cell((color, piece, ply.dst(), captured), f);
+    }
+
+    fn read_capthist(&self, ply: Ply, stack: &History) -> i32 {
+        let mut res = 0;
+        let w_res = &mut res;
+
+        // TODO: weight if we add another capthist
+        self.map_caphist(ply, stack, |x| *w_res += x.get().0);
+
+        res
+    }
+
+    fn write_capthist(&mut self, delta: i32, ply: Ply, stack: &History) {
+        self.map_caphist(ply, stack, |x| {
             x.update(|cur| {
                 let delta = delta.clamp(-MAX_HISTORY, MAX_HISTORY);
                 Millipawns(cur.0 + delta - cur.0 * delta.abs() / MAX_HISTORY)
@@ -1158,25 +1192,22 @@ impl ThreadData {
                             self.history_tables
                                 .write_quiet_hist(-bonus, ply, &self.history);
                         }
-                    } else if let Some(captured) = undo.info.captured_piece {
-                        self.history_tables.capture.gravity_history(
-                            (side_to_move, undo.info.our_piece, ply.dst(), captured),
-                            bonus,
-                        );
+                    } else {
+                        self.history_tables
+                            .write_capthist(bonus, ply, &self.history);
                     }
 
-                    for (piece, dst, victim) in bad_captures {
+                    for ply in bad_captures {
                         self.history_tables
-                            .capture
-                            .gravity_history((side_to_move, piece, dst, victim), -bonus);
+                            .write_capthist(-bonus, ply, &self.history);
                     }
                     break;
                 }
 
                 if is_quiet {
                     bad_quiet_moves.push(ply);
-                } else if let Some(captured) = undo.info.captured_piece {
-                    bad_captures.push((undo.info.our_piece, undo.ply.dst(), captured))
+                } else {
+                    bad_captures.push(ply)
                 }
             }
 
