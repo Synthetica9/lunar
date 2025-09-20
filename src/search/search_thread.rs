@@ -188,8 +188,11 @@ pub struct HistoryTables {
     main: Stats<(Color, Square, Square), Millipawns>,
     continuation: Stats<((Color, Piece, Square), (Color, Piece, Square)), Millipawns>,
     threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
-    capture: Stats<(Color, Piece, Square, Piece), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
+
+    // Captures:
+    capture_dst: Stats<(Color, Piece, Square, Piece), Millipawns>,
+    capture_src: Stats<(Color, Piece, Square, Piece), Millipawns>,
 
     // Corrhists
     pawn_corr: Stats<(Color, NBits<20>), Millipawns>,
@@ -288,7 +291,7 @@ impl HistoryTables {
         });
     }
 
-    fn map_caphist(&self, ply: Ply, stack: &History, mut f: impl FnMut(&Cell<Millipawns>)) {
+    fn map_caphist(&self, ply: Ply, stack: &History, mut f: impl FnMut(&Cell<Millipawns>, Depth)) {
         let game = stack.game();
         let Some(captured) = ply.captured_piece(game) else {
             return;
@@ -297,8 +300,15 @@ impl HistoryTables {
         let color = game.to_move();
         let piece = ply.moved_piece(game);
 
-        self.capture
-            .update_cell((color, piece, ply.dst(), captured), f);
+        self.capture_dst
+            .update_cell((color, piece, ply.dst(), captured), |x| {
+                f(x, Depth::ONE * 3 / 4)
+            });
+
+        self.capture_src
+            .update_cell((color, piece, ply.src(), captured), |x| {
+                f(x, Depth::ONE / 4)
+            });
     }
 
     fn read_capthist(&self, ply: Ply, stack: &History) -> i32 {
@@ -306,13 +316,16 @@ impl HistoryTables {
         let w_res = &mut res;
 
         // TODO: weight if we add another capthist
-        self.map_caphist(ply, stack, |x| *w_res += x.get().0);
+        self.map_caphist(ply, stack, |x, weight| {
+            let val = x.get().0;
+            *w_res += (Depth::from_num(val) * weight).to_num::<i32>()
+        });
 
         res
     }
 
     fn write_capthist(&mut self, delta: i32, ply: Ply, stack: &History) {
-        self.map_caphist(ply, stack, |x| {
+        self.map_caphist(ply, stack, |x, _| {
             x.update(|cur| {
                 let delta = delta.clamp(-MAX_HISTORY, MAX_HISTORY);
                 Millipawns(cur.0 + delta - cur.0 * delta.abs() / MAX_HISTORY)
