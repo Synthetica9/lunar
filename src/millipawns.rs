@@ -22,6 +22,7 @@ impl Millipawns {
         }
     }
 
+    #[must_use]
     pub fn clamp_eval(self) -> Self {
         self.clamp(MIN_EVAL, MAX_EVAL)
     }

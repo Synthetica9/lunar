@@ -1,5 +1,3 @@
-use std::num::NonZeroUsize;
-
 use smallvec::SmallVec;
 
 use crate::{
@@ -115,14 +113,14 @@ impl PolyglotBook {
 
         let len = bytes.len();
         if len % ENTRY_SIZE != 0 {
-            Err(format!("{len} not a multiple of {ENTRY_SIZE}"))?
+            Err(format!("{len} not a multiple of {ENTRY_SIZE}"))?;
         }
 
         let vec = {
             let mut res = Vec::new();
             for window in bytes.chunks_exact(ENTRY_SIZE) {
                 let window = TryInto::<[u8; ENTRY_SIZE]>::try_into(window).unwrap();
-                let entry = unsafe { std::mem::transmute(window) };
+                let entry = unsafe { std::mem::transmute::<[u8; 16], PolyglotEntry>(window) };
                 res.push(entry);
             }
 

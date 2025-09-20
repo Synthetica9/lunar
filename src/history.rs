@@ -5,7 +5,6 @@ use crate::ply::{Ply, UndoPly};
 use crate::zobrist_hash::ZobristHash;
 
 pub const HASH_TABLE_SIZE: usize = 1 << 14;
-use fixed::traits::Fixed;
 use fixed::types::I16F16 as ImprovingRate;
 
 #[derive(Clone, Debug)]
@@ -78,8 +77,7 @@ impl History {
 
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
-        let res = self.stack.len();
-        res
+        self.stack.len()
     }
 
     pub fn push(&mut self, ply: Ply) {
@@ -217,10 +215,6 @@ impl History {
             cpy.hard_push(*ply);
         }
         cpy.game_is_finished()
-    }
-
-    pub(crate) fn peek(&self) -> Option<&UndoPly> {
-        self.stack.last().and_then(|x| x.undo.as_ref())
     }
 
     fn full_peek_n_mut(&mut self, n: usize) -> Option<&mut StackElement> {

@@ -366,7 +366,7 @@ impl UCIState {
                 let bench_res = crate::search::bench();
                 let elapsed = start_time.elapsed();
                 let nps = (bench_res * 1000) / elapsed.as_millis() as u64;
-                println!("{bench_res} nodes {nps} nps")
+                println!("{bench_res} nodes {nps} nps");
             }
             _ => {
                 self.log(&format!("Unknown command: {command}"));
@@ -625,12 +625,6 @@ impl AvailableOptions {
 
         Err(format!("Option not found: {name}"))
     }
-
-    pub fn set_option(&self, state: &mut UCIState, name: &str, value: &str) -> Result<(), String> {
-        let option = self.get(name)?;
-        (option.setter)(value, state)?;
-        Ok(())
-    }
 }
 
 pub fn run_uci() {
@@ -667,12 +661,9 @@ fn spawn_reader_thread() -> crossbeam_channel::Receiver<String> {
 
             for arg in cmd_line {
                 println!("info string From command line: {arg}");
-                match tx.send(arg) {
-                    Err(err) => {
-                        println!("info string Could not send command line arg on channel: {err}");
-                    }
-                    Ok(()) => {}
-                };
+                if let Err(err) = tx.send(arg) {
+                    println!("info string Could not send command line arg on channel: {err}");
+                }
             }
 
             tx.send("quit".to_owned()).unwrap();

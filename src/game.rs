@@ -1,5 +1,3 @@
-use std::fmt::DebugSet;
-
 use smallvec::SmallVec;
 
 use crate::basic_enums::{CastleDirection, Color};
@@ -11,10 +9,9 @@ use crate::direction::directions;
 use crate::eval::{to_feature_idx, Accumulator};
 use crate::legality::LegalityChecker;
 use crate::simd_zobrist::SimdZobrist;
-use crate::small_finite_enum::SmallFiniteEnum;
 
 use crate::piece::Piece;
-use crate::ply::{ApplyPly, GameInfoForPly, Ply, SpecialFlag, UndoPly, _combination_moves};
+use crate::ply::{ApplyPly, Ply, SpecialFlag, UndoPly, _combination_moves};
 use crate::plyset::PlySet;
 use crate::search::static_exchange_evaluation;
 use crate::square::Square;

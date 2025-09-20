@@ -1,8 +1,8 @@
 use std::cell::Cell;
 
 use crate::{
-    basic_enums::Color, millipawns::Millipawns, piece::Piece, ply::Ply,
-    small_finite_enum::SmallFiniteEnum, square::Square, zero_init::ZeroInit,
+    basic_enums::Color, piece::Piece, ply::Ply, small_finite_enum::SmallFiniteEnum, square::Square,
+    zero_init::ZeroInit,
 };
 
 pub const MAX_HISTORY: i32 = 512;
@@ -27,30 +27,8 @@ where
     [(); Index::SIZE]: Sized,
     Val: Copy,
 {
-    pub fn splat(val: Val) -> Self {
-        Stats(std::array::from_fn(|_| Cell::new(val)))
-    }
-
     pub fn get_cell(&self, index: Index) -> &Cell<Val> {
         &self.0[index.to_usize()]
-    }
-
-    pub fn get(&self, index: Index) -> Val {
-        self.get_cell(index).get()
-    }
-    pub fn set(&self, index: Index, val: Val) {
-        self.get_cell(index).set(val);
-    }
-
-    pub fn update<F>(&self, index: Index, f: F)
-    where
-        F: FnOnce(Val) -> Val,
-    {
-        self.update_cell(index, |cell| {
-            let val = cell.get();
-            let new_val = f(val);
-            cell.set(new_val);
-        });
     }
 
     pub fn update_cell(&self, index: Index, f: impl FnOnce(&Cell<Val>)) {
@@ -59,20 +37,3 @@ where
 }
 
 pub type CounterMove = Stats<(Color, Piece, Square), Ply>;
-
-impl<Index> Stats<Index, Millipawns>
-where
-    Index: SmallFiniteEnum,
-    [Millipawns; Index::SIZE]: Sized,
-{
-    pub fn gravity_history(&self, index: Index, delta: i32) {
-        let cell = self.get_cell(index);
-        let cur = cell.get().0;
-
-        // History
-        let delta = delta.clamp(-MAX_HISTORY, MAX_HISTORY);
-        let new_val = cur + delta - cur * delta.abs() / MAX_HISTORY;
-
-        cell.set(Millipawns(new_val));
-    }
-}

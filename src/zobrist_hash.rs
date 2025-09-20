@@ -42,8 +42,7 @@ impl ApplyPly for ZobristHash {
 
 pub const fn to_idx(color: Color, piece: Piece, square: Square) -> usize {
     let kind_of_piece = color.as_index() + piece.as_index() * 2;
-    let idx = square.as_index() + kind_of_piece * 64;
-    idx
+    square.as_index() + kind_of_piece * 64
 }
 
 pub const fn idx_to_features(mut idx: usize) -> (Color, Piece, Square) {

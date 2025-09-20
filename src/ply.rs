@@ -381,7 +381,7 @@ pub(crate) trait ApplyPly {
         self._apply_ply_with_info(info, ply);
     }
 
-    fn after_apply(&mut self, info: &GameInfoForPly, ply: Ply) {}
+    fn after_apply(&mut self, _info: GameInfoForPly, _ply: Ply) {}
 
     fn _rough_apply(&mut self, game: &Game, ply: Ply) {
         let info = GameInfoForPly::new(game, ply);
@@ -438,7 +438,7 @@ pub(crate) trait ApplyPly {
         }
 
         if ply.is_null() {
-            self.after_apply(&info, ply);
+            self.after_apply(info, ply);
             return;
         }
 
@@ -542,7 +542,7 @@ pub(crate) trait ApplyPly {
             }
         }
 
-        self.after_apply(&info, ply);
+        self.after_apply(info, ply);
     }
 }
 

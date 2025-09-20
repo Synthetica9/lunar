@@ -39,12 +39,6 @@ const_assert!(std::mem::size_of::<TranspositionLine>() <= CACHE_LINE_SIZE);
 #[repr(align(64))]
 struct TranspositionLine([UnsafeCell<TranspositionPair>; ITEMS_PER_BUCKET]);
 
-impl TranspositionLine {
-    fn empty() -> Self {
-        unsafe { std::mem::zeroed() }
-    }
-}
-
 #[derive(Copy, Clone)]
 struct TranspositionPair {
     key: u64,
@@ -173,6 +167,7 @@ impl TranspositionTable {
 
         // TODO: can this be done better?
         // SAFETY: Box<[MaybeUninit<T>], A> and Box<NonEmptySlice<T>, A> have the same memory layout
+        #[allow(clippy::missing_transmute_annotations)]
         let boxed_nonempty = unsafe { std::mem::transmute(boxed) };
 
         let mut res = Self {
@@ -483,7 +478,7 @@ mod tests {
         let entry2 = tt.get(game.hash());
 
         debug_assert_eq!(entry.age(), 12);
-        debug_assert_eq!(entry.ttpv(), true);
+        debug_assert!(entry.ttpv());
         debug_assert_eq!(entry.value_type(), TranspositionEntryType::Exact);
 
         assert_eq!(Some(entry), entry2);

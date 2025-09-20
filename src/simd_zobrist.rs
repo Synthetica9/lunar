@@ -15,7 +15,7 @@ type Inner = Simd<u64, 8>;
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SimdZobrist(Inner);
 
-const HASHES: [SimdZobrist; 768] = {
+static HASHES: [SimdZobrist; 768] = {
     let mut res = [SimdZobrist(Inner::splat(0)); 768];
 
     let mut i = 768;
@@ -47,6 +47,12 @@ impl ApplyPly for SimdZobrist {
     fn toggle_en_passant(&mut self, _: Square) {}
 
     fn flip_side(&mut self) {}
+}
+
+impl Default for SimdZobrist {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SimdZobrist {

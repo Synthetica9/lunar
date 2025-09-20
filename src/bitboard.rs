@@ -634,7 +634,7 @@ mod tests {
     fn test_size_hint() {
         let bb = DARK_SQUARES;
         let it = bb.iter();
-        assert_eq!(it.size_hint(), (32, Some(32)))
+        assert_eq!(it.size_hint(), (32, Some(32)));
     }
 
     #[test]

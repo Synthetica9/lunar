@@ -2,7 +2,6 @@
 // See: https://web.archive.org/web/20220116101201/http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
 
 use std::cell::Cell;
-use std::i32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -14,8 +13,7 @@ use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
 use super::countermove::CounterMove;
 use crate::basic_enums::Color;
-use crate::bitboard::Bitboard;
-use crate::board::Board;
+use crate::eval;
 use crate::game::Game;
 use crate::history::History;
 use crate::millipawns::Millipawns;
@@ -28,7 +26,6 @@ use crate::square::Square;
 use crate::transposition_table::TranspositionTable;
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
-use crate::{eval, piece};
 
 pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 13;
@@ -183,6 +180,7 @@ pub struct ThreadData {
     history_tables: Box<HistoryTables>,
 }
 
+#[allow(clippy::type_complexity)]
 pub struct HistoryTables {
     // Normal hists:
     main: Stats<(Color, Square, Square), Millipawns>,
@@ -228,12 +226,12 @@ impl HistoryTables {
         debug_assert!(!ply.is_capture(game) || ply.is_promotion());
 
         self.main.update_cell((color, ply.src(), ply.dst()), |x| {
-            f(x, params().mo_main_history_weight())
+            f(x, params().mo_main_history_weight());
         });
 
         let cont_weights = continuation_weights();
 
-        for i in 0..N_CONTINUATION_HISTORIES {
+        for (i, weight) in cont_weights.iter().enumerate() {
             let Some(oppt_info) = stack.peek_n(i) else {
                 continue;
             };
@@ -244,7 +242,7 @@ impl HistoryTables {
 
             self.continuation.update_cell(
                 (oppt_info.color_piece_dst(), (color, piece, ply.dst())),
-                |x| f(x, Depth::from_num(cont_weights[i])),
+                |x| f(x, Depth::from_num(*weight)),
             );
         }
 
@@ -273,7 +271,7 @@ impl HistoryTables {
         let x = &mut val;
 
         self.map_quiet_hist(ply, stack, |cell, weight| {
-            *x += (Depth::from_num(cell.get().0) * (weight)).to_num::<i32>()
+            *x += (Depth::from_num(cell.get().0) * (weight)).to_num::<i32>();
         });
 
         val
@@ -288,7 +286,7 @@ impl HistoryTables {
         });
     }
 
-    fn map_caphist(&self, ply: Ply, stack: &History, mut f: impl FnMut(&Cell<Millipawns>)) {
+    fn map_caphist(&self, ply: Ply, stack: &History, f: impl FnMut(&Cell<Millipawns>)) {
         let game = stack.game();
         let Some(captured) = ply.captured_piece(game) else {
             return;
@@ -328,7 +326,7 @@ impl HistoryTables {
 
         self.pawn_corr
             .update_cell((color, game.pawn_hash().to_nbits()), |x| {
-                f(x, params().corrhist_pawn_weight())
+                f(x, params().corrhist_pawn_weight());
             });
 
         let sub_hashes = game.sub_hashes();
@@ -337,7 +335,7 @@ impl HistoryTables {
 
         self.minor_corr
             .update_cell((color, minor_hash.to_nbits()), |x| {
-                f(x, params().corrhist_minor_weight())
+                f(x, params().corrhist_minor_weight());
             });
 
         let kr_hash = sub_hashes.piece(Rook) ^ sub_hashes.piece(King);
@@ -359,7 +357,7 @@ impl HistoryTables {
         let w_res = &mut res;
 
         self.map_corrhist(stack, |x, weight| {
-            *w_res += T::from_num(x.get().0) * T::from_num(weight)
+            *w_res += T::from_num(x.get().0) * T::from_num(weight);
         });
 
         Millipawns(res.to_num())
@@ -493,7 +491,6 @@ impl ThreadData {
         (self.callback)(msg)
     }
 
-    #[must_use]
     fn communicate(&mut self) -> Result<(), ThreadCommand> {
         match self.send_status_update() {
             Some(ThreadCommand::SoftStop) => {
@@ -690,7 +687,6 @@ impl ThreadData {
 
         let alpha_orig = alpha;
         let mut alpha = alpha;
-        let mut beta = beta;
 
         let eval = self
             .history
@@ -713,7 +709,8 @@ impl ThreadData {
         };
 
         let from_tt = self.transposition_table.get(self.game().hash());
-        let ttpv = from_tt.is_some_and(|x| x.ttpv()) || N::is_pv();
+        let ttpv = from_tt.is_some_and(super::super::transposition_table::TranspositionEntry::ttpv)
+            || N::is_pv();
 
         if let Some(tte) = from_tt {
             if !N::IS_SE && depth <= tte.depth && !self.history.may_be_repetition() {
@@ -993,8 +990,6 @@ impl ThreadData {
                     continue;
                 }
 
-                let hash_before = self.game().hash();
-
                 let mut reduction = Depth::ONE;
                 let mut extension = Depth::ZERO;
 
@@ -1118,7 +1113,7 @@ impl ThreadData {
                             full_depth,
                             root_dist + 1,
                         )?
-                        .0
+                        .0;
                 } else if !is_first_move {
                     x = -self
                         .alpha_beta_search::<CutNode>(
@@ -1146,14 +1141,14 @@ impl ThreadData {
                     debug_assert!(beta - alpha > Millipawns(1), "{beta:?} {alpha:?}");
                     x = -self
                         .alpha_beta_search::<PVNode>(-beta, -alpha, full_depth, root_dist + 1)?
-                        .0
+                        .0;
                 };
 
                 any_moves_searched = true;
 
                 debug_assert_ne!(x, Millipawns(i32::MIN + 1234));
 
-                let undo = self.history.pop();
+                self.history.pop();
 
                 value = value.max(x);
                 if value > alpha {
@@ -1199,7 +1194,7 @@ impl ThreadData {
                 if is_quiet {
                     bad_quiet_moves.push(ply);
                 } else {
-                    bad_captures.push(ply)
+                    bad_captures.push(ply);
                 }
             }
 

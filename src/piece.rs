@@ -32,7 +32,9 @@ impl Piece {
 
     pub const fn from_u8(n: u8) -> Option<Piece> {
         if n < 6 {
-            Some(Piece::PIECES[n as usize])
+            // Safety: here we've checked the invariant
+            let piece = unsafe { Self::unchecked_from_u8(n) };
+            Some(piece)
         } else {
             None
         }

@@ -1,20 +1,15 @@
-use fixed::traits::Fixed;
 use smallvec::SmallVec;
-
-use std::sync::atomic::Ordering;
 
 use crate::basic_enums::Color;
 use crate::bitboard::{self, Bitboard};
-use crate::board::{self, Board};
+use crate::board::Board;
 use crate::game::Game;
 use crate::millipawns::Millipawns;
 use crate::piece::Piece;
 use crate::ply::{Ply, SpecialFlag};
 use crate::search::parameters::params;
-use crate::search::search_thread::Depth;
-use crate::square::Square;
 
-use super::{ThreadData, N_CONTINUATION_HISTORIES};
+use super::ThreadData;
 
 pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
     // Adapted from
@@ -134,7 +129,6 @@ enum GeneratorPhase {
     GenQuiescenceMoves,
     YieldWinningOrEqualCaptures,
     GenKillerMoves,
-    YieldKillerMoves,
     GenQuietMoves,
     YieldOtherMoves,
     Finished,
@@ -316,7 +310,6 @@ impl MoveGenerator for StandardMoveGenerator {
                         debug_assert_eq!(ply.promotion_piece(), Some(Piece::Queen));
                         value += Millipawns(8000);
                     }
-                    let dst = ply.dst();
                     if let Some(victim) = ply.captured_piece(thread.game()) {
                         value.0 += thread.history_tables.read_capthist(ply, &thread.history);
                         value += victim.base_value();
@@ -381,7 +374,6 @@ impl MoveGenerator for StandardMoveGenerator {
                 self.phase = Finished;
             }
             Finished => return None,
-            phase => panic!("unexpected phase {phase:?}"),
         };
 
         // Tail recursive call
@@ -394,7 +386,7 @@ pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
     let board = game.board();
     let promotion = ply
         .promotion_piece()
-        .map_or(Millipawns(0), |x| x.base_value());
+        .map_or(Millipawns(0), crate::piece::Piece::base_value);
 
     // Default: 1 Pawn for en passant
     let victim = board
@@ -421,8 +413,6 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
 }
 
 mod tests {
-    use super::static_exchange_evaluation;
-    use crate::{game::Game, millipawns::Millipawns};
 
     #[test]
     fn see_tests() {
@@ -517,14 +507,14 @@ mod tests {
             let comment = split.next().unwrap();
             assert!(split.next().is_none());
 
-            println!("{}", example);
+            println!("{example}");
             let game = Game::from_fen(fen).unwrap();
             let ply = game.ply_from_name(ply.trim()).unwrap();
             let score = score.trim().parse::<i32>().unwrap();
 
             let see = static_exchange_evaluation(&game, ply);
 
-            debug_assert_eq!(see, Millipawns(10 * score))
+            debug_assert_eq!(see, Millipawns(10 * score));
         }
     }
 }

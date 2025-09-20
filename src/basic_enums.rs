@@ -21,9 +21,10 @@ impl Color {
     }
 
     pub const fn from_bool(is_black: bool) -> Self {
-        match is_black {
-            false => Self::White,
-            true => Self::Black,
+        if is_black {
+            Self::Black
+        } else {
+            Self::White
         }
     }
 

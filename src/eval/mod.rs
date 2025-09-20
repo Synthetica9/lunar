@@ -54,9 +54,10 @@ pub struct Network {
 impl Network {
     /// Calculates the output of the network, starting from the already
     /// calculated hidden layer (done efficiently during makemoves).
+    #[allow(unused_variables)]
     pub fn evaluate(&self, us: &Accumulator, them: &Accumulator) -> i32 {
         // Generic implementation
-        let acc_sum = || {
+        let acc_sum_naive = || {
             let mut res = 0;
 
             // Side-To-Move Accumulator -> Output.
@@ -71,6 +72,8 @@ impl Network {
 
             res
         };
+
+        let acc_sum = acc_sum_naive;
 
         #[cfg(all(target_arch = "x86_64", feature = "asm", target_feature = "avx2"))]
         let acc_sum = || unsafe {
@@ -126,7 +129,10 @@ impl Network {
         // Initialise output with bias.
         let mut output: i64 = 0;
 
-        output += acc_sum() as i64;
+        let val = acc_sum();
+        debug_assert_eq!(val, acc_sum_naive());
+
+        output += val as i64;
         output /= QA as i64;
 
         output += self.output_bias as i64;
@@ -143,7 +149,7 @@ impl Network {
 
 /// A column of the feature-weights matrix.
 /// Note the `align(64)`.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 #[repr(C, align(64))]
 pub struct Accumulator {
     vals: [i16; HIDDEN_SIZE],
@@ -153,7 +159,7 @@ impl Accumulator {
     /// Initialised with bias so we can just efficiently
     /// operate on it afterwards.
     pub fn new_from(net: &Network) -> Self {
-        net.feature_bias
+        net.feature_bias.clone()
     }
 
     pub fn new() -> Self {
@@ -231,6 +237,6 @@ mod tests {
     #[test]
     fn test_extreme_eval() {
         let game = Game::from_fen("8/4k3/8/8/8/8/QQQ5/1K6 w - - 0 1").unwrap();
-        assert!(evaluation(&game) > Millipawns(10000))
+        assert!(evaluation(&game) > Millipawns(10000));
     }
 }
