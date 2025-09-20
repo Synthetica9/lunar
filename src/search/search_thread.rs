@@ -972,16 +972,8 @@ impl ThreadData {
                 if pruning_allowed && !is_quiet && !is_check && see < see_pruning_noisy_cutoff_upper
                 {
                     let mut cutoff = see_pruning_noisy_cutoff_upper - Millipawns(MAX_HISTORY);
-                    if let Some(victim) = ply.captured_piece(self.game()) {
-                        let idx = (
-                            side_to_move,
-                            ply.moved_piece(self.game()),
-                            ply.dst(),
-                            victim,
-                        );
-                        let history = self.history_tables.capture.get(idx);
-                        cutoff -= history
-                    }
+                    let history = self.history_tables.read_capthist(ply, &self.history);
+                    cutoff.0 -= history;
 
                     // TODO: seems a bit strange to cut off nodes with 0 SEE when we don't ever do that in QS...
                     // But using caphist in QS doesn't seem terrible either so this could be removed if that ever
