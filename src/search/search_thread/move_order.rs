@@ -412,7 +412,11 @@ pub fn quiet_move_order(thread: &ThreadData, ply: Ply) -> Millipawns {
     Millipawns(val)
 }
 
+#[cfg(test)]
 mod tests {
+    use crate::{game::Game, millipawns::Millipawns};
+
+    use super::static_exchange_evaluation;
 
     #[test]
     fn see_tests() {
