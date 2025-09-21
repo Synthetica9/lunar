@@ -211,7 +211,7 @@ make_tunable_params! {
     se_beta_scaling: Depth = 21.20828202312381, 0., 100., 5., 0.002;
     se_depth_scaling: Depth = 0.4974783172493165, 0., 1., 0.05, 0.002;
     se_ext: Depth = 0.9289110668077334, 0., 2., 0.1, 0.002;
-    se_multi_ext_scaling: Depth = 20., 5., 50., 5., 0.002;
+    se_multi_ext_scaling: Depth = 20., 5., 50., 3., 0.002;
     se_multi_ext_limit: Depth = 2., 0., 5., 0.2, 0.002;
 
     lmpahp_cutoff_depth: Depth = -2.0846465770501754, -4., 0., 0.2, 0.002;
@@ -220,12 +220,12 @@ make_tunable_params! {
     tm_complexity_base: f64 = 0.76, 0.3, 2.0, 0.05, 0.002;
     tm_complexity_divisor: f64 = 391., 200., 800., 10., 0.002;
 
-    corrhist_pawn_weight: Depth = 0.6, 0.0, 1.0, 0.05, 0.002;
-    corrhist_minor_weight: Depth = 0.12, 0.0, 1.0, 0.05, 0.002;
-    corrhist_krp_weight: Depth = 0.12, 0.0, 1.0, 0.05, 0.002;
-    corrhist_krn_weight: Depth = 0.12, 0.0, 1.0, 0.05, 0.002;
-    corrhist_krb_weight: Depth = 0.12, 0.0, 1.0, 0.05, 0.002;
-    corrhist_major_weight: Depth = 0.12, 0.0, 1.0, 0.05, 0.002;
+    corrhist_pawn_weight: Depth = 0.6, 0.0, 1.0, 0.02, 0.002;
+    corrhist_minor_weight: Depth = 0.12, 0.0, 1.0, 0.02, 0.002;
+    corrhist_krp_weight: Depth = 0.12, 0.0, 1.0, 0.02, 0.002;
+    corrhist_krn_weight: Depth = 0.12, 0.0, 1.0, 0.02, 0.002;
+    corrhist_krb_weight: Depth = 0.12, 0.0, 1.0, 0.02, 0.002;
+    corrhist_major_weight: Depth = 0.12, 0.0, 1.0, 0.02, 0.002;
 }
 
 #[cfg(feature = "tunable")]
