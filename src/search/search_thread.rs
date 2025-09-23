@@ -993,16 +993,21 @@ impl ThreadData {
                 // https://github.com/kelseyde/calvin-chess-engine/compare/9f2316da..9ce7a26c
                 // Bad Noisy FP
                 if let Some(eval) = eval {
-                    let margin =
-                        Millipawns(eval.0 + (1220 * depth).to_num::<i32>() + (3710 * moveno / 128));
-                    if pruning_allowed
+                    let margin = Millipawns(
+                        eval.0
+                            + depth.saturating_mul(Depth::ONE * 1220).to_num::<i32>()
+                            + (3710 * moveno / 128),
+                    );
+                    if any_moves_searched
+                        && pruning_allowed
                         && !is_in_check
                         && depth < 6
                         && see.0 < 0
                         && !is_quiet
                         && margin <= alpha
+                        && 2 < moveno
                     {
-                        if value.is_mate_in_n().is_none() && value <= margin {
+                        if value <= margin {
                             value = margin;
                         }
 
