@@ -200,6 +200,9 @@ make_tunable_params! {
     see_pruning_noisy_scaling_factor: Depth = -221.57834201990678, -2000., 0., 100., 0.002;
     see_pruning_quiet_scaling_factor: Depth = -595.6320103421615, -2000., 0., 100., 0.002;
 
+    bnfp_depth_scaling: Depth = 1220., 100., 3000., 100., 0.002;
+    bnfp_moveno_scaling: Depth = 28.984375, -100., 100., 10., 0.002;
+
     lmp_depth_slope: Depth = 1.7465628021707096, 0., 5., 0.25, 0.002;
     lmp_offset: Depth = 3.2351341873420885, 0., 15., 1., 0.002;
 
