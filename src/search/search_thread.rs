@@ -1292,7 +1292,8 @@ impl ThreadData {
             if write_corr_hist {
                 let eval = eval.unwrap();
                 // TODO: use full fidelity depth
-                let delta = (value - eval) * depth.to_num::<i32>() / 8;
+                let diff = Depth::saturating_from_num(value.0 - eval.0);
+                let delta = Millipawns(diff.saturating_mul(depth / 8).to_num());
                 let delta = delta.clamp(-MAX_CORR_HIST / 4, MAX_CORR_HIST / 4);
 
                 self.history_tables.write_corrhist(&self.history, delta);
