@@ -186,7 +186,7 @@ pub struct HistoryTables {
     main: Stats<(Color, Square, Square), Millipawns>,
     continuation: Stats<((Color, Piece, Square), (Color, Piece, Square)), Millipawns>,
     threat: Stats<(Color, (Piece, Square), (Piece, Square)), Millipawns>,
-    capture: Stats<(Color, Piece, Square, Piece), Millipawns>,
+    capture: Stats<(Color, Piece, Square, Piece, bool, bool), Millipawns>,
     pawn: Stats<(Color, NBits<10>, Piece, Square), Millipawns>,
 
     // Corrhists
@@ -294,9 +294,19 @@ impl HistoryTables {
 
         let color = game.to_move();
         let piece = ply.moved_piece(game);
+        let threatened = stack.threatened_bb();
 
-        self.capture
-            .update_cell((color, piece, ply.dst(), captured), f);
+        self.capture.update_cell(
+            (
+                color,
+                piece,
+                ply.dst(),
+                captured,
+                threatened.get(ply.src()),
+                threatened.get(ply.dst()),
+            ),
+            f,
+        );
     }
 
     fn read_capthist(&self, ply: Ply, stack: &History) -> i32 {
