@@ -763,7 +763,8 @@ impl ThreadData {
             let margin = Millipawns((base_margin * improving_fac).to_num());
 
             if !skip_rfp && eval - margin >= beta && depth <= params().rfp_min_depth() {
-                return Ok((eval, best_move));
+                // TODO: tunable
+                return Ok(((eval + beta) / 2, best_move));
             }
         }
 
