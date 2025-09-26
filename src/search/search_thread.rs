@@ -693,21 +693,21 @@ impl ThreadData {
             || N::is_pv();
 
         let raw_eval = self.history.eval();
-        let eval =
+        let corr_eval =
             raw_eval.map(|x| (x + self.history_tables.read_corrhist(&self.history)).clamp_eval());
 
         let eval = from_tt
             .filter(|x| {
                 !N::IS_SE
                     && x.value.is_mate_in_n().is_none()
-                    && eval.is_some_and(|eval| match x.value_type() {
+                    && corr_eval.is_some_and(|eval| match x.value_type() {
                         Exact => true,
                         LowerBound => x.value >= eval,
                         UpperBound => x.value <= eval,
                     })
             })
             .map(|x| x.value)
-            .or(eval);
+            .or(corr_eval);
 
         debug_assert!(eval.is_none_or(|x| x == x.clamp_eval()));
 
@@ -1301,7 +1301,7 @@ impl ThreadData {
 
             let write_corr_hist = !is_in_check
                 && !best_is_noisy
-                && eval.is_some_and(|eval| match value_type {
+                && corr_eval.is_some_and(|eval| match value_type {
                     Exact => true,
                     LowerBound => value >= eval,
                     UpperBound => value <= eval,
@@ -1309,7 +1309,7 @@ impl ThreadData {
                 && depth >= 1;
 
             if write_corr_hist {
-                let eval = eval.unwrap();
+                let eval = corr_eval.unwrap();
                 // TODO: use full fidelity depth
                 let diff = Depth::saturating_from_num(value.0 - eval.0);
                 let delta = Millipawns(diff.saturating_mul(depth / 8).to_num());
