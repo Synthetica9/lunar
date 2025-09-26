@@ -1057,8 +1057,14 @@ impl ThreadData {
                             params().se_ext() + multi_ext.min(params().se_multi_ext_limit());
                     } else if singular_beta >= beta {
                         // Multi-cut
+
                         return Ok((
-                            singular_beta.clamp_eval(),
+                            if singular_beta.is_mate_in_n().is_some() {
+                                singular_beta
+                            } else {
+                                // TODO: factor
+                                ((beta + singular_beta) / 2).clamp_eval()
+                            },
                             from_tt.and_then(|x| x.best_move()),
                         ));
                     };
