@@ -688,10 +688,29 @@ impl ThreadData {
         let alpha_orig = alpha;
         let mut alpha = alpha;
 
-        let eval = self
-            .history
-            .eval()
-            .map(|x| (x + self.history_tables.read_corrhist(&self.history)).clamp_eval());
+        let from_tt = self.transposition_table.get(self.game().hash());
+        let ttpv = from_tt.is_some_and(super::super::transposition_table::TranspositionEntry::ttpv)
+            || N::is_pv();
+
+        let raw_eval = self.history.eval();
+        let eval =
+            raw_eval.map(|x| (x + self.history_tables.read_corrhist(&self.history)).clamp_eval());
+
+        let eval = from_tt
+            .filter(|x| {
+                !N::IS_SE
+                    && x.value.is_mate_in_n().is_none()
+                    && eval.is_some_and(|eval| match x.value_type() {
+                        Exact => true,
+                        LowerBound => x.value >= eval,
+                        UpperBound => x.value <= eval,
+                    })
+            })
+            .map(|x| x.value)
+            .or(eval);
+
+        debug_assert!(eval.is_none_or(|x| x == x.clamp_eval()));
+
         let is_in_check = self.game().is_in_check();
 
         let futility_pruning = if let Some(eval) = eval {
@@ -707,10 +726,6 @@ impl ThreadData {
         } else {
             false
         };
-
-        let from_tt = self.transposition_table.get(self.game().hash());
-        let ttpv = from_tt.is_some_and(super::super::transposition_table::TranspositionEntry::ttpv)
-            || N::is_pv();
 
         if let Some(tte) = from_tt {
             if !N::IS_SE && depth <= tte.depth && !self.history.may_be_repetition() {
