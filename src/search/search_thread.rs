@@ -762,7 +762,7 @@ impl ThreadData {
                 .saturating_mul(params().rfp_depth_slope());
             let margin = Millipawns((base_margin * improving_fac).to_num());
 
-            if !skip_rfp && eval - margin >= beta && depth <= params().rfp_min_depth() {
+            if !skip_rfp && eval - margin >= beta && depth <= params().rfp_max_depth() {
                 use fixed::types::I32F32 as T;
                 let frac = T::from_num(params().rfp_fail_firm_fac());
                 let val = eval.0 as i64 * frac + beta.0 as i64 * (T::ONE - frac);
