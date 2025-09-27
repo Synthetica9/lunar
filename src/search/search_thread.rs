@@ -1114,8 +1114,11 @@ impl ThreadData {
                     reduction -= Depth::ONE;
                 }
 
-                let corrplexity_lmr = corrplexity * params().corrplexity_lmr_scale();
-                reduction -= corrplexity_lmr;
+                if lmr {
+                    let corrplexity_lmr = corrplexity * params().corrplexity_lmr_scale();
+                    reduction -= corrplexity_lmr;
+                    // println!("mean: {corrplexity_lmr}");
+                }
 
                 reduction = reduction.max(Depth::ONE);
 
