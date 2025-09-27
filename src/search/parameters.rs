@@ -161,9 +161,9 @@ make_tunable_params! {
     iir_tt_limit: Depth = 2.3969631594056007, 0., 6., 0.2, 0.002;
 
     lmr_quiescent_slope: Depth = 0.03351325954988771, 0., 2., 0.1, 0.002;
-    lmr_quiescent_offset: Depth = 1.2183754014239303, 0., 3., 0.15, 0.002;
+    lmr_quiescent_offset: Depth = 1.4, 0., 3., 0.15, 0.002;
     lmr_quiet_slope: Depth = 0.23021449531135602, 0., 2., 0.1, 0.002;
-    lmr_quiet_offset: Depth = 0.7236877520358002, 0., 3., 0.15, 0.002;
+    lmr_quiet_offset: Depth = 0.9, 0., 3., 0.15, 0.002;
     lmr_improving_rate: Depth = 0.14597882047912816, 0., 1., 0.05, 0.002;
 
     lmr_quiet_history_max_red: Depth = 0.47887531191720034, 0., 3., 0.05, 0.002;
