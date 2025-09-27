@@ -350,28 +350,24 @@ impl HistoryTables {
         }
     }
 
-    fn read_corrhist(&self, stack: &History) -> (Millipawns, Millipawns) {
+    fn read_corrhist(&self, stack: &History) -> (Millipawns, Depth) {
         use fixed::types::I32F32 as T;
 
         let mut correction = T::ZERO;
         let w_correction = &mut correction;
         let mut complexity = T::ZERO;
         let w_complexity = &mut complexity;
-        let mut total_weight = T::ZERO;
-        let w_total_weight = &mut total_weight;
 
         self.map_corrhist(stack, |x, weight| {
             let weight = T::from_num(weight);
-            let value = T::from_num(x.get().0) * weight;
-            *w_correction += value;
-            *w_complexity += value * value / 1024;
-            *w_total_weight += weight;
+            let value = T::from_num(x.get().0);
+            let rel_value = value / T::from_num(MAX_CORR_HIST.0);
+
+            *w_correction += value * weight;
+            *w_complexity += rel_value * rel_value * weight;
         });
 
-        (
-            Millipawns(correction.to_num()),
-            Millipawns((complexity / total_weight).to_num()),
-        )
+        (Millipawns(correction.to_num()), complexity.to_num())
     }
 
     fn write_corrhist(&self, stack: &History, delta: Millipawns) {
@@ -1118,10 +1114,8 @@ impl ThreadData {
                     reduction -= Depth::ONE;
                 }
 
-                let corrplexity_lmr = Depth::from_num(corrplexity.0) / params().corrplexity_scale();
-
-                // println!("mean: {corrplexity_lmr}");
-                // reduction -= corrplexity_lmr;
+                let corrplexity_lmr = corrplexity * params().corrplexity_lmr_scale();
+                reduction -= corrplexity_lmr;
 
                 reduction = reduction.max(Depth::ONE);
 
