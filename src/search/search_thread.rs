@@ -31,6 +31,7 @@ pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 13;
 
 pub const MAX_CORR_HIST: Millipawns = Millipawns(1024);
+pub const N_CORRHISTS: usize = 6;
 
 mod move_order;
 
@@ -1115,9 +1116,8 @@ impl ThreadData {
                 }
 
                 if lmr {
-                    let corrplexity_lmr = corrplexity * params().corrplexity_lmr_scale();
+                    let corrplexity_lmr = corrplexity.sqrt() * params().corrplexity_lmr_scale();
                     reduction -= corrplexity_lmr;
-                    // println!("mean: {corrplexity_lmr}");
                 }
 
                 reduction = reduction.max(Depth::ONE);
