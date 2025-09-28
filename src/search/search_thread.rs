@@ -1202,7 +1202,11 @@ impl ThreadData {
                 }
 
                 if alpha >= beta {
-                    let bonus = (depth.saturating_mul(depth)).to_num();
+                    let mut bonus = depth.saturating_mul(depth);
+                    let corrplexity_factor = Depth::ONE * 4 / 5 + corrplexity / 2;
+                    bonus *= corrplexity_factor;
+                    let bonus = bonus.to_num();
+
                     if is_quiet {
                         self.history_tables
                             .write_quiet_hist(bonus, ply, &self.history);
@@ -1302,9 +1306,7 @@ impl ThreadData {
                 let eval = eval.unwrap();
                 // TODO: use full fidelity depth
                 let diff = Depth::saturating_from_num(value.0 - eval.0);
-                let mut bonus = diff.saturating_mul(depth / 8);
-                let corrplexity_factor = Depth::ONE * 4 / 5 + corrplexity / 2;
-                bonus *= corrplexity_factor;
+                let bonus = diff.saturating_mul(depth / 8);
                 let delta = Millipawns(bonus.to_num());
                 let delta = delta.clamp(-MAX_CORR_HIST / 4, MAX_CORR_HIST / 4);
 
