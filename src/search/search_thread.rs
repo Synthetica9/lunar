@@ -782,7 +782,11 @@ impl ThreadData {
             {
                 // Internal iterative reduction
                 // https://www.chessprogramming.org/Internal_Iterative_Reductions
-                depth -= params().iir_reduction();
+                depth -= if N::is_pv() {
+                    params().iir_reduction()
+                } else {
+                    Depth::ONE
+                };
             };
 
             // Null move pruning
