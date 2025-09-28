@@ -777,7 +777,7 @@ impl ThreadData {
             value = self.quiescence_search(alpha, beta);
         } else {
             if from_tt.is_none_or(|x| x.depth < depth - params().iir_tt_limit())
-                && N::is_pv()
+                && !N::is_all()
                 && depth >= params().iir_min_depth()
             {
                 // Internal iterative reduction
