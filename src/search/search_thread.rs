@@ -1197,7 +1197,7 @@ impl ThreadData {
                 }
 
                 if alpha >= beta {
-                    let bonus = (depth.saturating_mul(depth)).to_num();
+                    let bonus = depth_squared.to_num();
                     if is_quiet {
                         self.history_tables
                             .write_quiet_hist(bonus, ply, &self.history);
