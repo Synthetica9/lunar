@@ -231,7 +231,7 @@ make_tunable_params! {
     corrhist_krb_weight: Depth = 0.13800219913462022, 0.0, 1.0, 0.05, 0.002;
     corrhist_major_weight: Depth = 0.14567443870487837, 0.0, 1.0, 0.05, 0.002;
 
-    corrplexity_lmr_scale: Depth = 0.6, 0., 5., 0.1, 0.002;
+    corrplexity_lmr_scale: Depth = 0.57, 0., 5., 0.1, 0.002;
 }
 
 #[cfg(feature = "tunable")]
