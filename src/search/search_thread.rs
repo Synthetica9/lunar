@@ -810,7 +810,7 @@ impl ThreadData {
                 let null_value = -null_res.0;
 
                 if null_value >= beta {
-                    return Ok((null_value, best_move));
+                    return Ok((null_value.clamp_eval(), best_move));
                 }
 
                 if let Some(threat) = null_res.1 {
