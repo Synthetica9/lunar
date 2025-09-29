@@ -843,6 +843,7 @@ impl ThreadData {
             let see_pruning_quiet_cutoff =
                 depth_clamp_zero.saturating_mul(params().see_pruning_quiet_scaling_factor());
 
+            let improving_rate = self.history.improving_rate();
             let lmp_cutoff = (params().lmp_offset() + params().lmp_depth_slope() * depth_squared)
                 .to_num::<i32>();
 
@@ -1077,7 +1078,6 @@ impl ThreadData {
                         (params().lmr_quiet_slope(), params().lmr_quiet_offset())
                     };
 
-                    let improving_rate = self.history.improving_rate();
                     reduction += (a * x + b)
                         * (Depth::ONE - improving_rate * params().lmr_improving_rate())
                             .max(Depth::ONE);
