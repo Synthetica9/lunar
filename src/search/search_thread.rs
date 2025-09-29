@@ -797,7 +797,7 @@ impl ThreadData {
 
             let mut is_mate_threat = false;
 
-            if N::is_cut() && !N::IS_SE && !side_to_move_only_kp && depth >= r && !is_in_check {
+            if N::is_cut() && !N::IS_SE && !side_to_move_only_kp && !is_in_check {
                 self.history.push(Ply::NULL);
                 let null_res = self.alpha_beta_search::<CutNode>(
                     -beta,
