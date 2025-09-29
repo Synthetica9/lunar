@@ -1061,6 +1061,8 @@ impl ThreadData {
                             singular_beta.clamp_eval(),
                             from_tt.and_then(|x| x.best_move()),
                         ));
+                    } else if tt_score >= beta {
+                        extension -= Depth::ONE;
                     };
                 };
 
@@ -1103,7 +1105,6 @@ impl ThreadData {
                 }
 
                 debug_assert!(reduction >= 1, "{reduction} < 1");
-                debug_assert!(extension >= 0, "{extension} < 0");
 
                 if ttpv {
                     reduction -= Depth::ONE;
@@ -1118,8 +1119,10 @@ impl ThreadData {
                 };
                 let full_depth = depth - Depth::ONE + extension;
 
+                let next_depth = full_depth.min(next_depth);
                 let is_reduced = next_depth != full_depth;
                 debug_assert_eq!(is_reduced, next_depth < full_depth);
+                debug_assert!(next_depth <= full_depth);
 
                 // "We have LMP at home" pruning
                 if pruning_allowed
