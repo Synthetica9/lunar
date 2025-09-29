@@ -844,7 +844,10 @@ impl ThreadData {
                 depth_clamp_zero.saturating_mul(params().see_pruning_quiet_scaling_factor());
 
             let improving_rate = self.history.improving_rate();
-            let lmp_cutoff = (params().lmp_offset() + params().lmp_depth_slope() * depth_squared)
+
+            let lmp_improving_fac = Depth::ONE + improving_rate / 8 + Depth::ONE / 25;
+            let lmp_cutoff = (params().lmp_offset()
+                + params().lmp_depth_slope() * depth_squared * lmp_improving_fac)
                 .to_num::<i32>();
 
             let history_pruning_depth_scaling = params()
