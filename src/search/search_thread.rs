@@ -1058,7 +1058,7 @@ impl ThreadData {
                     } else if singular_beta >= beta {
                         // Multi-cut
                         return Ok((
-                            singular_beta.clamp_eval(),
+                            (beta.clamp_eval() + singular_beta.clamp_eval()) / 2,
                             from_tt.and_then(|x| x.best_move()),
                         ));
                     };
@@ -1078,9 +1078,8 @@ impl ThreadData {
                     };
 
                     let improving_rate = self.history.improving_rate();
-                    reduction += (a * x + b)
-                        * (Depth::ONE - improving_rate * params().lmr_improving_rate())
-                            .max(Depth::ONE);
+                    reduction +=
+                        (a * x + b) * (Depth::ONE - improving_rate * params().lmr_improving_rate());
                 }
 
                 if lmr && is_quiet && history_score.0 < 0 {
