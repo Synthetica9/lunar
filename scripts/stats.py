@@ -3,7 +3,7 @@ import re
 import sys
 import statistics
 
-LINE_REGEX = re.compile(r"^(\w+):\s*([0-9]*(?:\.[0-9]*)?)$")
+LINE_REGEX = re.compile(r"^(\w+):\s*(-?[0-9]*(?:\.[0-9]*)?)$")
 BENCH_REGEX = re.compile(r"^[0-9]+ nodes [0-9]+ nps$")
 
 TABLE_COLUMNS = [min, max, statistics.median, statistics.mean, statistics.stdev]
