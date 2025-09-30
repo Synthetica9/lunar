@@ -688,10 +688,10 @@ impl ThreadData {
         let alpha_orig = alpha;
         let mut alpha = alpha;
 
-        let eval = self
-            .history
-            .eval()
-            .map(|x| (x + self.history_tables.read_corrhist(&self.history)).clamp_eval());
+        let raw_eval = self.history.eval();
+        let eval =
+            raw_eval.map(|x| (x + self.history_tables.read_corrhist(&self.history)).clamp_eval());
+
         let is_in_check = self.game().is_in_check();
 
         let futility_pruning = if let Some(eval) = eval {
@@ -711,6 +711,16 @@ impl ThreadData {
         let from_tt = self.transposition_table.get(self.game().hash());
         let ttpv = from_tt.is_some_and(super::super::transposition_table::TranspositionEntry::ttpv)
             || N::is_pv();
+
+        let tt_corrplexity = if let (Some(eval), Some(tte)) = (raw_eval, from_tt) {
+            let diff = eval.0 - tte.value.0;
+            let diff = diff.clamp(-2000, 2000);
+            let diff = Depth::from_num(diff) / 10000;
+            let diff = diff * diff;
+            Depth::from_num(tte.depth as i32 + 1).int_log2() * diff
+        } else {
+            Depth::ZERO
+        };
 
         if let Some(tte) = from_tt {
             if !N::IS_SE && depth <= tte.depth && !self.history.may_be_repetition() {
@@ -1108,6 +1118,11 @@ impl ThreadData {
                 if ttpv {
                     reduction -= Depth::ONE;
                 }
+
+                if is_first_move && N::is_cut() {
+                    extension += tt_corrplexity.clamp(Depth::ZERO, Depth::ONE);
+                }
+
                 reduction = reduction.max(Depth::ONE);
 
                 let virtual_depth = depth - reduction + extension;
