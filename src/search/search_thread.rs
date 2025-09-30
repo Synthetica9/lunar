@@ -23,7 +23,7 @@ use crate::search::countermove::{Stats, MAX_HISTORY};
 use crate::search::parameters::params;
 use crate::small_finite_enum::NBits;
 use crate::square::Square;
-use crate::transposition_table::TranspositionTable;
+use crate::transposition_table::{TranspositionEntry, TranspositionTable};
 use crate::zero_init::ZeroInit;
 use crate::zobrist_hash::ZobristHash;
 
@@ -709,8 +709,7 @@ impl ThreadData {
         };
 
         let from_tt = self.transposition_table.get(self.game().hash());
-        let ttpv = from_tt.is_some_and(super::super::transposition_table::TranspositionEntry::ttpv)
-            || N::is_pv();
+        let ttpv = from_tt.is_some_and(TranspositionEntry::ttpv) || N::is_pv();
 
         if let Some(tte) = from_tt {
             if !N::IS_SE && depth <= tte.depth && !self.history.may_be_repetition() {
@@ -797,7 +796,13 @@ impl ThreadData {
 
             let mut is_mate_threat = false;
 
-            if N::is_cut() && !N::IS_SE && !side_to_move_only_kp && depth >= r && !is_in_check {
+            if N::is_cut()
+                && !ttpv
+                && !N::IS_SE
+                && !side_to_move_only_kp
+                && depth >= r
+                && !is_in_check
+            {
                 self.history.push(Ply::NULL);
                 let null_res = self.alpha_beta_search::<CutNode>(
                     -beta,
