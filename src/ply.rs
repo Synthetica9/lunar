@@ -314,11 +314,16 @@ pub struct UndoPly {
 impl UndoPly {
     pub fn piece_dst(&self) -> (Piece, Square) {
         // Used for a lot of history heuristic stuffs.
-        (self.info.our_piece, self.ply.dst())
+        if self.ply.is_null() {
+            (Piece::Pawn, Square::A1)
+        } else {
+            (self.info.our_piece, self.ply.dst())
+        }
     }
 
     pub(crate) fn color_piece_dst(&self) -> (Color, Piece, Square) {
-        (self.info.to_move, self.info.our_piece, self.ply.dst())
+        let (piece, dst) = self.piece_dst();
+        (self.info.to_move, piece, dst)
     }
 }
 
