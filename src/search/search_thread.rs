@@ -236,10 +236,6 @@ impl HistoryTables {
                 continue;
             };
 
-            if oppt_info.ply.is_null() {
-                continue; // Should this be break?
-            }
-
             self.continuation.update_cell(
                 (oppt_info.color_piece_dst(), (color, piece, ply.dst())),
                 |x| f(x, Depth::from_num(*weight)),
