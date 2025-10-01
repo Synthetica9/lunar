@@ -894,9 +894,12 @@ impl ThreadData {
                     !N::is_pv() && !is_first_move && value.is_mate_in_n().is_none_or(|x| x > 0);
                 let total_nodes_before = self.total_nodes_searched;
 
-                let is_quiet = ply.promotion_piece().is_none_or(|x| x != Piece::Queen)
-                    && !enemy_pieces.get(ply.dst())
-                    && !ply.is_en_passant();
+                let is_capture = enemy_pieces.get(ply.dst()) || ply.is_en_passant();
+                let is_quiet = match ply.promotion_piece() {
+                    Some(Piece::Queen) => false,
+                    Some(_) => true,
+                    None => !is_capture,
+                };
                 let is_check = self.game().is_check(ply);
 
                 // Do the actual futility prune
