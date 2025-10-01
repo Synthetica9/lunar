@@ -1287,7 +1287,7 @@ impl ThreadData {
                     LowerBound => value >= eval,
                     UpperBound => value <= eval,
                 })
-                && depth >= 1;
+                && depth >= 0;
 
             if write_corr_hist {
                 let eval = eval.unwrap();
