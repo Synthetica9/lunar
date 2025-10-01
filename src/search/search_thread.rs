@@ -794,7 +794,7 @@ impl ThreadData {
             // Gedas possible banger?
             // https://gedas.pythonanywhere.com/test/1176/
             r += eval.map_or(Depth::ZERO, |eval| {
-                (Depth::saturating_from_num(eval.0 - beta.0) / 1024)
+                (Depth::saturating_from_num(eval.0 - beta.0) / 2048)
                     .clamp(Depth::ZERO, Depth::ONE * 3)
             });
 
