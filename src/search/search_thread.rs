@@ -791,6 +791,13 @@ impl ThreadData {
             r += eval::game_phase(board) * params().nmp_piece_slope();
             r += depth * params().nmp_depth_slope();
 
+            // Gedas possible banger?
+            // https://gedas.pythonanywhere.com/test/1176/
+            r += eval.map_or(Depth::ZERO, |eval| {
+                (Depth::saturating_from_num(eval.0 - beta.0) / 1024)
+                    .clamp(Depth::ZERO, Depth::ONE * 3)
+            });
+
             let mut is_mate_threat = false;
 
             if N::is_cut() && !N::IS_SE && !side_to_move_only_kp && depth >= r && !is_in_check {
