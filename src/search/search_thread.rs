@@ -509,7 +509,8 @@ impl ThreadData {
             return Err(ThreadCommand::StopSearch);
         }
 
-        for depth in 1..=255 {
+        let mut depth = Depth::ONE;
+        while depth < 255 {
             let mut fail_highs = 0;
             let mut fail_lows = 0;
 
@@ -570,6 +571,7 @@ impl ThreadData {
                         "info string Fail low! α':{alpha:?} < s:{score:?} <= α:{alpha_before:?} < β:{beta:?}"
                     );
 
+                    depth += Depth::ONE / 4;
                     consistent -= 2;
 
                     continue;
@@ -582,6 +584,7 @@ impl ThreadData {
                         "info string Fail high! α:{alpha:?} < β:{beta_before:?} < s:{score:?} < β':{beta:?}"
                     );
 
+                    depth += Depth::ONE / 4;
                     consistent -= 2;
 
                     continue;
@@ -592,7 +595,7 @@ impl ThreadData {
                 let msg = ThreadStatus::SearchFinished {
                     score,
                     best_move,
-                    depth: depth as usize,
+                    depth: depth.to_num(),
                     root_hash: self.root_hash,
                 };
 
@@ -601,7 +604,7 @@ impl ThreadData {
                 }
 
                 // In the window!
-
+                depth += Depth::ONE;
                 break;
             }
         }
