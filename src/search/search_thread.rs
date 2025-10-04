@@ -11,7 +11,6 @@ use smallvec::SmallVec;
 
 use self::move_order::{MoveGenerator, RootMoveGenerator, StandardMoveGenerator};
 
-use super::countermove::CounterMove;
 use crate::basic_enums::Color;
 use crate::eval;
 use crate::game::Game;
@@ -196,9 +195,6 @@ pub struct HistoryTables {
     krn_corr: Stats<(Color, NBits<16>), Millipawns>,
     krb_corr: Stats<(Color, NBits<16>), Millipawns>,
     major_corr: Stats<(Color, NBits<16>), Millipawns>,
-
-    // Odd one out:
-    countermove: CounterMove,
 }
 
 fn continuation_weights() -> [i32; N_CONTINUATION_HISTORIES] {
@@ -1201,10 +1197,6 @@ impl ThreadData {
                         self.history_tables
                             .write_quiet_hist(bonus, ply, &self.history);
 
-                        if let Some(c) = self.countermove_cell() {
-                            c.set(ply);
-                        }
-
                         for ply in bad_quiet_moves {
                             self.history_tables
                                 .write_quiet_hist(-bonus, ply, &self.history);
@@ -1366,30 +1358,5 @@ impl ThreadData {
 
     fn game(&self) -> &'_ Game {
         self.history.game()
-    }
-
-    fn countermove_cell(&self) -> Option<&Cell<Ply>> {
-        let last_info = self.history.peek_n(0)?;
-
-        // TODO: uncomment bugfix, but may influence playing strength:
-        // if last_info.ply.is_null() {
-        //     return None;
-        // }
-
-        debug_assert!(
-            last_info.ply.is_null()
-                || self
-                    .game()
-                    .board()
-                    .occupant_color(last_info.ply.dst())
-                    .unwrap()
-                    == self.game().to_move().other()
-        );
-
-        Some(self.history_tables.countermove.get_cell((
-            self.game().to_move(),
-            last_info.info.our_piece,
-            last_info.ply.dst(),
-        )))
     }
 }

@@ -128,7 +128,6 @@ enum GeneratorPhase {
     NMPThreat,
     GenQuiescenceMoves,
     YieldWinningOrEqualCaptures,
-    GenKillerMoves,
     GenQuietMoves,
     YieldOtherMoves,
     Finished,
@@ -166,7 +165,7 @@ impl QueuedPly {
 
         match self {
             LosingCapture { .. } | QuietMove { .. } => YieldOtherMoves,
-            MVVLVACapture { .. } => GenKillerMoves,
+            MVVLVACapture { .. } => GenQuietMoves,
         }
     }
 }
@@ -342,21 +341,9 @@ impl MoveGenerator for StandardMoveGenerator {
 
                     self.bad_captures.sort_unstable();
                     self.queue.append(&mut self.bad_captures);
-                    self.phase = GenKillerMoves;
+                    self.phase = GenQuietMoves;
                 }
             },
-            GenKillerMoves => {
-                self.phase = GenQuietMoves;
-
-                if let Some(ply) = thread.countermove_cell().and_then(|x| x.get().wrap_null()) {
-                    return Some(Generated {
-                        ply: GeneratedMove::Ply(ply),
-                        guarantee: GuaranteeLevel::HashLike,
-                        score: Millipawns(0),
-                        see: None,
-                    });
-                }
-            }
             GenQuietMoves => {
                 self.phase = YieldOtherMoves;
                 let game = thread.game();
