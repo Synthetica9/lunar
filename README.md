@@ -18,19 +18,21 @@ It is named that because it was started during a (partial) solar eclipse, and th
 <tbody>
   <tr>
     <td><a href="https://github.com/Synthetica9/lunar/releases/tag/0.4.0" target="_blank" rel="noopener noreferrer">0.4.0</a></td>
-    <td colspan="3">3500 (est.)</td>
+    <td><a href="https://computerchess.org.uk/ccrl/404/cgi/engine_details.cgi?match_length=30&each_game=1&print=Details&each_game=1&eng=Lunar%200.4.0%2064-bit#Lunar_0_4_0_64-bit" target="_blank" rel="noopener noreferrer">3521</a></td>
+    <td><a href="https://computerchess.org.uk/ccrl/4040/cgi/engine_details.cgi?match_length=30&each_game=0&print=Details&each_game=0&eng=Lunar%200.4.0%2064-bit#Lunar_0_4_0_64-bit" target="_blank" rel="noopener noreferrer">3462</a></td>
+    <td><a href="http://www.cegt.net/40_40%20Rating%20List/40_40%20All%20Versions/310.html" target="_blank" rel="noopener noreferrer">3373</a></td>
   </tr>
   <tr>
     <td><a href="https://github.com/Synthetica9/lunar/releases/tag/0.3" target="_blank" rel="noopener noreferrer">0.3.0</a></td>
-    <td><a href="https://computerchess.org.uk/ccrl/404/cgi/engine_details.cgi?match_length=30&each_game=1&print=Details&each_game=1&eng=Lunar%200.3.0%2064-bit#Lunar_0_3_0_64" target="_blank" rel="noopener noreferrer">3397</a></td>
+    <td><a href="https://computerchess.org.uk/ccrl/404/cgi/engine_details.cgi?match_length=30&each_game=1&print=Details&each_game=1&eng=Lunar%200.3.0%2064-bit#Lunar_0_3_0_64" target="_blank" rel="noopener noreferrer">3398</a></td>
     <td><a href="https://computerchess.org.uk/ccrl/4040/cgi/engine_details.cgi?print=Details&each_game=0&eng=Lunar%200.3.0%2064-bit#Lunar_0_3_0_64-bit" target="_blank" rel="noopener noreferrer">3344</a></td>
-    <td><a href="http://www.cegt.net/40_40%20Rating%20List/40_40%20SingleVersion/497.html" target="_blank" rel="noopener noreferrer">3238</a></td>
+    <td><a href="http://www.cegt.net/40_40%20Rating%20List/40_40%20All%20Versions/493.html" target="_blank" rel="noopener noreferrer">3243</a></td>
   </tr>
   <tr>
     <td><a href="https://github.com/Synthetica9/lunar/releases/tag/0.2.1" target="_blank" rel="noopener noreferrer">0.2.*</a></td>
     <td><a href="https://computerchess.org.uk/ccrl/404/cgi/engine_details.cgi?print=Details&each_game=1&eng=Lunar%200.2.1%2064-bit#Lunar_0_2_1_64-bit" target="_blank" rel="noopener noreferrer">3235</a></td>
-    <td><a href="https://computerchess.org.uk/ccrl/4040/cgi/engine_details.cgi?print=Details&each_game=0&eng=Lunar%200.2.1%2064-bit#Lunar_0_2_1_64-bit" target="_blank" rel="noopener noreferrer">3199</a></td>
-    <td><a href="http://www.cegt.net/40_40%20Rating%20List/40_40%20BestVersion/697.html" target="_blank" rel="noopener noreferrer">3098</a></td>
+    <td><a href="https://computerchess.org.uk/ccrl/4040/cgi/engine_details.cgi?print=Details&each_game=0&eng=Lunar%200.2.1%2064-bit#Lunar_0_2_1_64-bit" target="_blank" rel="noopener noreferrer">3205</a></td>
+    <td><a href="http://www.cegt.net/40_40%20Rating%20List/40_40%20All%20Versions/702.html" target="_blank" rel="noopener noreferrer">3098</a></td>
   </tr>
   <tr>
     <td><a href="https://github.com/Synthetica9/lunar/releases/tag/0.1.0" target="_blank" rel="noopener noreferrer">0.1.0</a></td>
