@@ -1093,6 +1093,10 @@ impl ThreadData {
                     reduction += params().neg_see_reduction();
                 }
 
+                if lmr && N::is_cut() {
+                    reduction += Depth::ONE / 2;
+                }
+
                 if is_mate_threat {
                     extension += params().mate_threat_extension();
                 }
