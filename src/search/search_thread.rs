@@ -1192,7 +1192,8 @@ impl ThreadData {
                 }
 
                 if alpha >= beta {
-                    let bonus = (depth.saturating_mul(depth)).to_num();
+                    let bonus = depth.saturating_mul(depth).to_num();
+
                     if is_quiet {
                         self.history_tables
                             .write_quiet_hist(bonus, ply, &self.history);
@@ -1272,7 +1273,9 @@ impl ThreadData {
 
             // Corrhist update
             let best_is_noisy = best_move.is_some_and(|x| {
-                self.game().board().occupant_piece(x.dst()).is_some() || x.is_en_passant()
+                self.game().board().occupant_piece(x.dst()).is_some()
+                    || x.is_en_passant()
+                    || x.promotion_piece().is_some_and(|p| p == Piece::Queen)
             });
 
             let write_corr_hist = !is_in_check
