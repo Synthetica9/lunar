@@ -1192,7 +1192,18 @@ impl ThreadData {
                 }
 
                 if alpha >= beta {
-                    let bonus = (depth.saturating_mul(depth)).to_num();
+                    let mut bonus = depth.saturating_mul(depth);
+                    if value.is_mate_in_n().is_none() {
+                        if let Some(eval) = eval {
+                            let diff = Depth::saturating_from_num((eval - value).0.abs());
+                            let diff = (diff / 2750).clamp(Depth::ONE / 4 * 3, Depth::ONE / 2 * 3);
+
+                            bonus = bonus.saturating_mul(diff);
+                        }
+                    }
+
+                    let bonus = bonus.to_num();
+
                     if is_quiet {
                         self.history_tables
                             .write_quiet_hist(bonus, ply, &self.history);
