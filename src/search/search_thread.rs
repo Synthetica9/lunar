@@ -5,7 +5,7 @@ use std::cell::Cell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use fixed::traits::ToFixed;
+use fixed::traits::{Fixed, ToFixed};
 use linear_map::LinearMap;
 use smallvec::SmallVec;
 
@@ -857,6 +857,47 @@ impl ThreadData {
                 hash_moves_played[0] = from_tt.and_then(|x| x.best_move()).unwrap_or(Ply::NULL);
             }
 
+            // Singular extension check
+            let singular_ext = if !N::IS_ROOT
+                && !N::IS_SE
+                && !N::is_all()
+                && depth >= params().se_min_depth()
+                && from_tt.is_some_and(|x| {
+                    x.best_move().is_some()
+                        && x.depth >= depth - params().se_tt_offset()
+                        && x.value_type() != UpperBound
+                }) {
+                let tt_score = from_tt.unwrap().value;
+                let singular_beta =
+                    tt_score - Millipawns((params().se_beta_scaling() * depth).to_num());
+
+                // TODO: we get a interresting second move from this, if it fails high...
+                let singular_value = self
+                    .alpha_beta_search::<SENode>(
+                        singular_beta,
+                        singular_beta + Millipawns(1),
+                        (depth - Depth::ONE) * params().se_depth_scaling(),
+                        root_dist,
+                    )?
+                    .0;
+
+                if singular_value <= singular_beta {
+                    let margin = Depth::saturating_from_num((singular_beta - singular_value).0);
+                    let multi_ext = margin.sqrt() / params().se_multi_ext_scaling();
+                    params().se_ext() + multi_ext.min(params().se_multi_ext_limit())
+                } else if singular_beta >= beta {
+                    // Multi-cut
+                    return Ok((
+                        singular_beta.clamp_eval(),
+                        from_tt.and_then(|x| x.best_move()),
+                    ));
+                } else {
+                    Depth::ZERO
+                }
+            } else {
+                Depth::ZERO
+            };
+
             while let Some(Generated {
                 ply,
                 guarantee,
@@ -1019,46 +1060,6 @@ impl ThreadData {
                 let mut reduction = Depth::ONE;
                 let mut extension = Depth::ZERO;
 
-                // Singular extension check
-                if !N::IS_ROOT
-                    && !N::IS_SE
-                    && !N::is_all()
-                    && is_first_move
-                    && depth >= params().se_min_depth()
-                    && from_tt.is_some_and(|x| {
-                        x.best_move().is_some()
-                            && x.depth >= depth - params().se_tt_offset()
-                            && x.value_type() != UpperBound
-                    })
-                {
-                    let tt_score = from_tt.unwrap().value;
-                    let singular_beta =
-                        tt_score - Millipawns((params().se_beta_scaling() * depth).to_num());
-
-                    // TODO: we get a interresting second move from this, if it fails high...
-                    let singular_value = self
-                        .alpha_beta_search::<SENode>(
-                            singular_beta,
-                            singular_beta + Millipawns(1),
-                            (depth - Depth::ONE) * params().se_depth_scaling(),
-                            root_dist,
-                        )?
-                        .0;
-
-                    if singular_value <= singular_beta {
-                        let margin = Depth::saturating_from_num((singular_beta - singular_value).0);
-                        let multi_ext = margin.sqrt() / params().se_multi_ext_scaling();
-                        extension +=
-                            params().se_ext() + multi_ext.min(params().se_multi_ext_limit());
-                    } else if singular_beta >= beta {
-                        // Multi-cut
-                        return Ok((
-                            singular_beta.clamp_eval(),
-                            from_tt.and_then(|x| x.best_move()),
-                        ));
-                    };
-                };
-
                 let lmr = !is_in_check && !is_first_move;
 
                 if lmr {
@@ -1099,6 +1100,10 @@ impl ThreadData {
 
                 if is_mate_threat {
                     extension += params().mate_threat_extension();
+                }
+
+                if is_first_move {
+                    extension += singular_ext;
                 }
 
                 debug_assert!(reduction >= 1, "{reduction} < 1");
