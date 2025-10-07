@@ -1106,6 +1106,10 @@ impl ThreadData {
                     extension += singular_ext;
                 }
 
+                if lmr {
+                    reduction += singular_ext / 4;
+                }
+
                 debug_assert!(reduction >= 1, "{reduction} < 1");
                 debug_assert!(extension >= 0, "{extension} < 0");
 
