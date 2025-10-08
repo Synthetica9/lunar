@@ -322,15 +322,8 @@ impl TranspositionTable {
         let value = entry.value();
         let hash = entry.hash();
 
-        // Effective age is actually a multi-purpose filter:
-        // - Age is initialized to MAX_AGE / 2, which makes 0 age for unoccpied entries
-        //   a pretty high age at the start.
-        // - Invalid entries quickly get aged out.
-        // If we include is_none before this, we run into a problem! We store every hash 4 times...!
-        // Effectively, this means we discard ~3/4 puts!
-
         // h000 0000 0000 0000
-        // 0aaa aaa0 0000 0000
+        // 0000 00a0 0000 0000
         // 0000 000d dddd ddd0
         // 0000 0000 0000 000t
         // ------------------- |
@@ -339,11 +332,11 @@ impl TranspositionTable {
         #[allow(clippy::identity_op)]
         {
             (((hash != new_hash) as u16) << 15) // 1 bit
-                | (((MAX_AGE - self.effective_age(value)) as u16) << 9) // 6 bits
+                | (((value.age() == self.age()) as u16) << 9) // 1 bit
                 | ((value.depth as u16) << 1) // 8 bits
                 | (((value.value_type() == TranspositionEntryType::Exact) as u16) << 0) // 1 bit
                 | 0
-            // TOTAL: 16 bits.
+            // TOTAL: 11 bits.
         }
     }
 
