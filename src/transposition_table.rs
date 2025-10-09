@@ -323,20 +323,24 @@ impl TranspositionTable {
         let hash = entry.hash();
 
         // h000 0000 0000 0000
-        // 0000 00a0 0000 0000
-        // 0000 000d dddd ddd0
-        // 0000 0000 0000 000t
+        // 0a00 0000 0000 0000
+        // 00dd dddd dd00 0000
+        // 0000 0000 00m0 0000
+        // 0000 0000 000t 0000
+        // 0000 0000 0000 t000
         // ------------------- |
-        // haaa aaad dddd dddt
-
+        // hadd dddd ddmt t000
         #[allow(clippy::identity_op)]
         {
-            (((hash != new_hash) as u16) << 15) // 1 bit
-                | (((value.age() == self.age()) as u16) << 9) // 1 bit
-                | ((value.depth as u16) << 1) // 8 bits
-                | (((value.value_type() == TranspositionEntryType::Exact) as u16) << 0) // 1 bit
-                | 0
-            // TOTAL: 11 bits.
+            0
+                | (((hash != new_hash) as u16) << 15) // 1 bit
+                | (((value.age() == self.age()) as u16) << 14) // 1 bit
+                | ((value.depth as u16) << 6) // 8 bits
+                | (((value.value_type() == TranspositionEntryType::Exact) as u16) << 5) // 1 bit
+                | ((!value.best_move.is_null() as u16) << 4) // 1 bit
+                | ((!value.ttpv() as u16) << 3) // 1 bit
+
+            // TOTAL: 13 bits.
         }
     }
 
