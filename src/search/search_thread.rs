@@ -750,8 +750,8 @@ impl ThreadData {
                 - self.history.improving_rate() * params().rfp_improving_fac())
             .min(Depth::ONE);
             let base_margin = depth
-                .max(Depth::ONE)
-                .saturating_mul(params().rfp_depth_slope());
+                .saturating_mul(params().rfp_depth_slope())
+                .saturating_add(params().rfp_offset());
             let margin = Millipawns((base_margin * improving_fac).to_num());
 
             if !skip_rfp && eval - margin >= beta && depth <= params().rfp_min_depth() {
