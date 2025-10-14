@@ -197,7 +197,7 @@ make_tunable_params! {
     rfp_depth_slope: Depth = 616.6867402764076, 0., 4000., 200., 0.002;
     rfp_offset: Depth = 300., 0., 1500., 100., 0.002;
     rfp_improving_fac: Depth = 0.517856591272757, 0., 1., 0.05, 0.002;
-    rfp_min_depth: Depth = 6.310259989230104, 0., 12., 0.5, 0.002;
+    rfp_min_depth: Depth = 8., 0., 12., 0.5, 0.002;
     rfp_fail_firm_fac: Depth = 0.5, 0.0, 1.0, 0.05, 0.002;
 
     see_pruning_noisy_scaling_factor: Depth = -221.57834201990678, -2000., 0., 100., 0.002;
