@@ -1106,6 +1106,14 @@ impl ThreadData {
                     extension += singular_ext;
                 }
 
+                if is_first_move {
+                    if let Some(tte) = from_tt {
+                        let tt_depth = Depth::from_num(tte.depth);
+                        let diff = tt_depth - depth;
+                        extension = extension.max(diff / 4);
+                    }
+                }
+
                 debug_assert!(reduction >= 1, "{reduction} < 1");
                 debug_assert!(extension >= 0, "{extension} < 0");
 
