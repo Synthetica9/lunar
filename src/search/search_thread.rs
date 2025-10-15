@@ -1106,6 +1106,10 @@ impl ThreadData {
                     extension += singular_ext;
                 }
 
+                if see.0 > 0 && N::is_cut() && !is_quiet {
+                    extension += Depth::ONE / 2;
+                }
+
                 debug_assert!(reduction >= 1, "{reduction} < 1");
                 debug_assert!(extension >= 0, "{extension} < 0");
 
