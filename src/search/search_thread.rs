@@ -1106,11 +1106,14 @@ impl ThreadData {
                     extension += singular_ext;
                 }
 
-                if is_first_move {
+                if is_first_move && N::is_cut() {
                     if let Some(tte) = from_tt {
-                        let tt_depth = Depth::from_num(tte.depth);
-                        let diff = tt_depth - depth;
-                        extension = extension.max(diff / 4);
+                        if tte.best_move().is_some() {
+                            debug_assert!(tte.best_move() == Some(ply));
+                            let tt_depth = Depth::from_num(tte.depth);
+                            let diff = tt_depth - depth;
+                            extension = extension.max(diff / 4);
+                        }
                     }
                 }
 
