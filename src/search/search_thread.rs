@@ -1112,7 +1112,7 @@ impl ThreadData {
                             debug_assert!(tte.best_move() == Some(ply));
                             let tt_depth = Depth::from_num(tte.depth);
                             let diff = tt_depth - depth;
-                            extension = extension.max(diff / 4);
+                            extension = (diff / 2).min(Depth::ONE * 2).max(extension);
                         }
                     }
                 }
