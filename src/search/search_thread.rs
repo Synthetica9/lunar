@@ -1092,10 +1092,10 @@ impl ThreadData {
                     if N::is_cut() {
                         reduction += params().lmr_cutnode();
                     }
-                }
 
-                if !is_first_move && is_quiet && tt_is_capture {
-                    reduction += params().tt_capture_reduction();
+                    if is_quiet && tt_is_capture {
+                        reduction += params().tt_capture_reduction();
+                    }
                 }
 
                 if is_mate_threat {
