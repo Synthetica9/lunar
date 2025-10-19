@@ -1077,25 +1077,25 @@ impl ThreadData {
                     reduction += (a * x + b)
                         * (Depth::ONE - improving_rate * params().lmr_improving_rate())
                             .max(Depth::ONE);
-                }
 
-                if lmr && is_quiet && history_score.0 < 0 {
-                    let base = Depth::saturating_from_num(-history_score.0)
-                        / params().lmr_quiet_history_scale();
-                    let base = base.min(params().lmr_quiet_history_max_red());
-                    reduction += base;
+                    if is_quiet && history_score.0 < 0 {
+                        let base = Depth::saturating_from_num(-history_score.0)
+                            / params().lmr_quiet_history_scale();
+                        let base = base.min(params().lmr_quiet_history_max_red());
+                        reduction += base;
+                    }
+
+                    if see.0 < 0 && !is_check {
+                        reduction += params().neg_see_reduction();
+                    }
+
+                    if N::is_cut() {
+                        reduction += params().lmr_cutnode();
+                    }
                 }
 
                 if !is_first_move && is_quiet && tt_is_capture {
                     reduction += params().tt_capture_reduction();
-                }
-
-                if lmr && see.0 < 0 && !is_check {
-                    reduction += params().neg_see_reduction();
-                }
-
-                if lmr && N::is_cut() {
-                    reduction += params().lmr_cutnode();
                 }
 
                 if is_mate_threat {
