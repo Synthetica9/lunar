@@ -780,6 +780,7 @@ impl SearchThreadPool {
             best_move,
             ref history,
             pv_instability,
+            in_book,
             ..
         } = self.state
         else {
@@ -788,7 +789,13 @@ impl SearchThreadPool {
 
         let mut game = history.game().clone();
 
-        let best_move = best_move.or(self.move_in_state(&game, true, true));
+        let default_best = self.move_in_state(&game, true, true);
+        let best_move = if in_book {
+            default_best
+        } else {
+            best_move.or(default_best)
+        };
+
         debug_assert!(
             best_move.is_some_and(|x| game.is_legal(x)),
             "generated best move not legal in position {} {:?}",
