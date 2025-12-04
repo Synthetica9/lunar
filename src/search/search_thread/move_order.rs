@@ -122,17 +122,6 @@ pub fn static_exchange_evaluation(game: &Game, ply: Ply) -> Millipawns {
     Millipawns(gain[0] as i32 * 1000)
 }
 
-#[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
-enum GeneratorPhase {
-    GetHashMove,
-    NMPThreat,
-    GenQuiescenceMoves,
-    YieldWinningOrEqualCaptures,
-    GenQuietMoves,
-    YieldOtherMoves,
-    Finished,
-}
-
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub enum QueuedPly {
     // Should be searched _last_
@@ -156,16 +145,6 @@ impl QueuedPly {
             QueuedPly::LosingCapture { see: value, .. }
             | QueuedPly::QuietMove { value, .. }
             | QueuedPly::MVVLVACapture { value, .. } => value,
-        }
-    }
-
-    fn min_phase(self) -> GeneratorPhase {
-        use GeneratorPhase::*;
-        use QueuedPly::*;
-
-        match self {
-            LosingCapture { .. } | QuietMove { .. } => YieldOtherMoves,
-            MVVLVACapture { .. } => GenQuietMoves,
         }
     }
 }
@@ -237,136 +216,145 @@ impl MoveGenerator for RootMoveGenerator {
 }
 
 pub struct StandardMoveGenerator {
-    phase: GeneratorPhase,
+    func: fn(&mut StandardMoveGenerator, &mut ThreadData) -> Option<Generated>,
     queue: SmallVec<[QueuedPly; 64]>,
     bad_captures: SmallVec<[QueuedPly; 32]>,
+}
+
+fn next_phase(
+    gen: &mut StandardMoveGenerator,
+    thread: &mut ThreadData,
+    phase: fn(&mut StandardMoveGenerator, &mut ThreadData) -> Option<Generated>,
+) -> Option<Generated> {
+    gen.func = phase;
+    phase(gen, thread)
+}
+
+fn get_hash_move(gen: &mut StandardMoveGenerator, _thread: &mut ThreadData) -> Option<Generated> {
+    gen.func = nmp_threat;
+    return Some(Generated {
+        ply: GeneratedMove::HashMove,
+        guarantee: GuaranteeLevel::HashLike,
+        score: Millipawns(0),
+        see: None,
+    });
+}
+
+fn nmp_threat(gen: &mut StandardMoveGenerator, thread: &mut ThreadData) -> Option<Generated> {
+    gen.func = gen_quiescence_moves;
+    let Some(peek) = thread.history.full_peek_n(1) else {
+        return (gen.func)(gen, thread);
+    };
+
+    let Some(threat) = peek.threat() else {
+        return (gen.func)(gen, thread);
+    };
+
+    if threat.severity <= Millipawns(params().mo_nmp_threat_min_sevr()) {
+        return (gen.func)(gen, thread);
+    }
+
+    return Some(Generated {
+        ply: GeneratedMove::Ply(threat.ply),
+        guarantee: GuaranteeLevel::HashLike,
+        score: threat.severity, // dubious?
+        see: None,
+    });
+}
+
+fn gen_quiescence_moves(
+    gen: &mut StandardMoveGenerator,
+    thread: &mut ThreadData,
+) -> Option<Generated> {
+    thread.game().for_each_pseudo_legal_move::<true>(|ply| {
+        let mut value = Millipawns(0);
+        if ply.is_promotion() {
+            debug_assert_eq!(ply.promotion_piece(), Some(Piece::Queen));
+            value += Millipawns(8000);
+        }
+        if let Some(victim) = ply.captured_piece(thread.game()) {
+            value.0 += thread.history_tables.read_capthist(ply, &thread.history);
+            value += victim.base_value();
+        }
+
+        let command = QueuedPly::MVVLVACapture { ply, value };
+        gen.queue.push(command);
+    });
+
+    gen.queue.sort_unstable();
+
+    next_phase(gen, thread, yield_winning_or_equal)
+}
+
+fn yield_winning_or_equal(
+    gen: &mut StandardMoveGenerator,
+    thread: &mut ThreadData,
+) -> Option<Generated> {
+    match gen.queue.pop() {
+        Some(QueuedPly::MVVLVACapture { ply, value, .. }) => {
+            let game = thread.game();
+            let see = static_exchange_evaluation(game, ply);
+            if see.0 < 0 {
+                gen.bad_captures.push(QueuedPly::LosingCapture { see, ply });
+                yield_winning_or_equal(gen, thread)
+            } else {
+                Some(Generated {
+                    ply: GeneratedMove::Ply(ply),
+                    guarantee: GuaranteeLevel::PseudoLegal,
+                    score: value + see,
+                    see: Some(see),
+                })
+            }
+        }
+        other => {
+            // Save quiet moves.
+            debug_assert!(other.is_none());
+
+            gen.bad_captures.sort_unstable();
+            gen.queue.append(&mut gen.bad_captures);
+            next_phase(gen, thread, gen_quiet_moves)
+        }
+    }
+}
+
+fn gen_quiet_moves(gen: &mut StandardMoveGenerator, thread: &mut ThreadData) -> Option<Generated> {
+    let game = thread.game();
+
+    game.for_each_pseudo_legal_move::<false>(|ply| {
+        let value = quiet_move_order(thread, ply);
+        gen.queue.push(QueuedPly::QuietMove { ply, value });
+    });
+
+    gen.queue.sort_unstable();
+
+    next_phase(gen, thread, yield_other_moves)
+}
+
+fn yield_other_moves(
+    gen: &mut StandardMoveGenerator,
+    _thread: &mut ThreadData,
+) -> Option<Generated> {
+    let queued = gen.queue.pop()?;
+    Some(Generated {
+        ply: GeneratedMove::Ply(queued.ply()),
+        guarantee: GuaranteeLevel::PseudoLegal,
+        score: queued.score(),
+        see: None,
+    })
 }
 
 impl MoveGenerator for StandardMoveGenerator {
     fn init(_thread: &ThreadData) -> Self {
         Self {
-            phase: GeneratorPhase::GetHashMove,
+            func: get_hash_move,
             queue: SmallVec::new(),
             bad_captures: SmallVec::new(),
         }
     }
 
     fn next(&mut self, thread: &mut ThreadData) -> Option<Generated> {
-        use GeneratorPhase::*;
-        use GuaranteeLevel::*;
-        use QueuedPly::*;
-
-        match self.queue.last().copied() {
-            Some(x) if x.min_phase() <= self.phase => {
-                self.queue.pop();
-                return Some(Generated {
-                    ply: GeneratedMove::Ply(x.ply()),
-                    guarantee: GuaranteeLevel::PseudoLegal,
-                    score: x.score(),
-                    see: None,
-                });
-            }
-            _ => {}
-        }
-
-        match self.phase {
-            GetHashMove => {
-                self.phase = NMPThreat;
-                return Some(Generated {
-                    ply: GeneratedMove::HashMove,
-                    guarantee: HashLike,
-                    score: Millipawns(0),
-                    see: None,
-                });
-            }
-            NMPThreat => 'nmp: {
-                self.phase = GenQuiescenceMoves;
-                let Some(peek) = thread.history.full_peek_n(1) else {
-                    break 'nmp;
-                };
-
-                let Some(threat) = peek.threat() else {
-                    break 'nmp;
-                };
-
-                if threat.severity <= Millipawns(params().mo_nmp_threat_min_sevr()) {
-                    break 'nmp;
-                }
-
-                return Some(Generated {
-                    ply: GeneratedMove::Ply(threat.ply),
-                    guarantee: GuaranteeLevel::HashLike,
-                    score: threat.severity, // dubious?
-                    see: None,
-                });
-            }
-            GenQuiescenceMoves => {
-                self.phase = YieldWinningOrEqualCaptures;
-
-                thread.game().for_each_pseudo_legal_move::<true>(|ply| {
-                    let mut value = Millipawns(0);
-                    if ply.is_promotion() {
-                        debug_assert_eq!(ply.promotion_piece(), Some(Piece::Queen));
-                        value += Millipawns(8000);
-                    }
-                    if let Some(victim) = ply.captured_piece(thread.game()) {
-                        value.0 += thread.history_tables.read_capthist(ply, &thread.history);
-                        value += victim.base_value();
-                    }
-
-                    let command = MVVLVACapture { ply, value };
-                    self.queue.push(command);
-                });
-
-                self.queue.sort_unstable();
-            }
-            YieldWinningOrEqualCaptures => match self.queue.pop() {
-                Some(MVVLVACapture { ply, value, .. }) => {
-                    let game = thread.game();
-                    let see = static_exchange_evaluation(game, ply);
-                    if see.0 < 0 {
-                        self.bad_captures.push(LosingCapture { see, ply });
-                    } else {
-                        return Some(Generated {
-                            ply: GeneratedMove::Ply(ply),
-                            guarantee: PseudoLegal,
-                            score: value + see,
-                            see: Some(see),
-                        });
-                    }
-                }
-                other => {
-                    // Save quiet moves.
-                    debug_assert!(other.is_none());
-
-                    self.bad_captures.sort_unstable();
-                    self.queue.append(&mut self.bad_captures);
-                    self.phase = GenQuietMoves;
-                }
-            },
-            GenQuietMoves => {
-                self.phase = YieldOtherMoves;
-                let game = thread.game();
-
-                game.for_each_pseudo_legal_move::<false>(|ply| {
-                    let value = quiet_move_order(thread, ply);
-                    self.queue.push(QuietMove { ply, value });
-                });
-
-                self.queue.sort_unstable();
-
-                self.phase = YieldOtherMoves;
-            }
-            YieldOtherMoves => {
-                self.phase = Finished;
-            }
-            Finished => return None,
-        };
-
-        // Tail recursive call
-        self.next(thread)
+        (self.func)(self, thread)
     }
-    // Also: what would the guarantee be in this case?
 }
 
 pub fn mvv_lva(game: &Game, ply: Ply) -> Millipawns {
