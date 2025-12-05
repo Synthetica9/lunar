@@ -1114,13 +1114,17 @@ impl ThreadData {
                 }
                 reduction = reduction.max(Depth::ONE);
 
+
+                let insanity_factor = if is_quiet { Depth::ONE } else { -Depth::ONE } / 20;
+                let full_depth = depth - (Depth::ONE + insanity_factor) + extension;
+
                 let virtual_depth = depth - reduction + extension;
                 let next_depth = if depth <= 3 {
                     depth - Depth::ONE
                 } else {
                     virtual_depth
                 };
-                let full_depth = depth - Depth::ONE + extension;
+                let next_depth = next_depth.min(full_depth);
 
                 let is_reduced = next_depth != full_depth;
                 debug_assert_eq!(is_reduced, next_depth < full_depth);
