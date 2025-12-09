@@ -169,7 +169,7 @@ make_tunable_params! {
     lmr_quiet_history_max_red: Depth = 0.47887531191720034, 0., 3., 0.05, 0.002;
     lmr_quiet_history_scale: i32 = 16379, 1000, 40000, 800., 0.002;
 
-    lmr_cutnode: Depth = 0.5, 0., 2., 0.1, 0.002;
+    lmr_cutnode: Depth = 1.5, 0., 3., 0.1, 0.002;
     neg_see_reduction: Depth = 0.8768567857333054, 0., 2., 0.1, 0.002;
     mate_threat_extension: Depth = 0.393626325211638, 0., 2., 0.1, 0.002;
 
