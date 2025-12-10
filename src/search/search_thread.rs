@@ -1202,6 +1202,11 @@ impl ThreadData {
 
                 if alpha >= beta {
                     let bonus = (depth.saturating_mul(depth)).to_num();
+
+                    if is_first_move && depth < params().alayan_depth() {
+                        break;
+                    }
+
                     if is_quiet {
                         self.history_tables
                             .write_quiet_hist(bonus, ply, &self.history);
@@ -1219,6 +1224,7 @@ impl ThreadData {
                         self.history_tables
                             .write_capthist(-bonus, ply, &self.history);
                     }
+
                     break;
                 }
 

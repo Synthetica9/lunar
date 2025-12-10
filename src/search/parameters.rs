@@ -166,6 +166,8 @@ make_tunable_params! {
     lmr_quiet_offset: Depth = 0.7236877520358002, 0., 3., 0.15, 0.002;
     lmr_improving_rate: Depth = 0.14597882047912816, 0., 1., 0.05, 0.002;
 
+    alayan_depth: Depth = 2.0, 0., 4., 0.1, 0.002;
+
     lmr_quiet_history_max_red: Depth = 0.47887531191720034, 0., 3., 0.05, 0.002;
     lmr_quiet_history_scale: i32 = 16379, 1000, 40000, 800., 0.002;
 
