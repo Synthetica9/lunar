@@ -1202,22 +1202,26 @@ impl ThreadData {
 
                 if alpha >= beta {
                     let bonus = (depth.saturating_mul(depth)).to_num();
-                    if is_quiet {
-                        self.history_tables
-                            .write_quiet_hist(bonus, ply, &self.history);
+                    let apply_hist = depth >= 2 || !is_first_move;
 
-                        for ply in bad_quiet_moves {
+                    if apply_hist {
+                        if is_quiet {
                             self.history_tables
-                                .write_quiet_hist(-bonus, ply, &self.history);
-                        }
-                    } else {
-                        self.history_tables
-                            .write_capthist(bonus, ply, &self.history);
-                    }
+                                .write_quiet_hist(bonus, ply, &self.history);
 
-                    for ply in bad_captures {
-                        self.history_tables
-                            .write_capthist(-bonus, ply, &self.history);
+                            for ply in bad_quiet_moves {
+                                self.history_tables
+                                    .write_quiet_hist(-bonus, ply, &self.history);
+                            }
+                        } else {
+                            self.history_tables
+                                .write_capthist(bonus, ply, &self.history);
+                        }
+
+                        for ply in bad_captures {
+                            self.history_tables
+                                .write_capthist(-bonus, ply, &self.history);
+                        }
                     }
                     break;
                 }
