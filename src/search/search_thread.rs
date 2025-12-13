@@ -788,6 +788,8 @@ impl ThreadData {
             r += depth * params().nmp_depth_slope();
 
             let mut is_mate_threat = false;
+            let mut threat_is_quiet = false;
+            let mut threat_score = Millipawns(0);
 
             if N::is_cut() && !N::IS_SE && !side_to_move_only_kp && depth >= r && !is_in_check {
                 self.history.push(Ply::NULL);
@@ -806,7 +808,8 @@ impl ThreadData {
                 }
 
                 if let Some(threat) = null_res.1 {
-                    let threat_score = beta - null_value;
+                    threat_score = beta - null_value;
+                    threat_is_quiet = !self.game().board().get_occupied().get(threat.dst());
                     self.history.set_threat(threat, threat_score);
                     debug_assert!(threat_score >= Millipawns(0));
                 }
@@ -1111,6 +1114,12 @@ impl ThreadData {
 
                 if ttpv {
                     reduction -= Depth::ONE;
+                }
+
+                if threat_is_quiet {
+                    let r = Depth::from_num(threat_score.0.clamp(0, 1000)) / 1000;
+
+                    reduction -= r;
                 }
                 reduction = reduction.max(Depth::ONE);
 
