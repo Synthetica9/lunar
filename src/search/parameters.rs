@@ -177,7 +177,7 @@ make_tunable_params! {
 
     futprun_max_depth: Depth = 6.769725812480749, 3., 10., 0.35, 0.002;
     futprun_mp_per_ply: Depth = 661.4562110431374, 0., 1000., 50., 0.002;
-    futprun_min_mp: i32 = 20, 0, 1000, 50., 0.002;
+    futprun_min_mp: i32 = 200, 0, 1000, 50., 0.002;
 
     tt_capture_reduction: Depth = 0.6955054076488821, 0., 2., 0.1, 0.002;
 
