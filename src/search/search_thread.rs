@@ -686,19 +686,16 @@ impl ThreadData {
             .map(|x| (x + self.history_tables.read_corrhist(&self.history)).clamp_eval());
         let is_in_check = self.game().is_in_check();
 
-        let futility_pruning = if let Some(eval) = eval {
+        let futility_pruning = eval.is_some_and(|eval| {
             let fut_margin = Millipawns(
-                (depth.saturating_mul(params().futprun_mp_per_ply()))
-                    .to_num::<i32>()
-                    .max(params().futprun_min_mp()),
+                (depth.saturating_mul(params().futprun_mp_per_ply())).to_num::<i32>()
+                    + params().futprun_min_mp(),
             );
             depth <= params().futprun_max_depth()
                 && eval + fut_margin < alpha
                 && !N::is_pv()
                 && !is_in_check
-        } else {
-            false
-        };
+        });
 
         let from_tt = self.transposition_table.get(self.game().hash());
         let ttpv = from_tt.is_some_and(super::super::transposition_table::TranspositionEntry::ttpv)
