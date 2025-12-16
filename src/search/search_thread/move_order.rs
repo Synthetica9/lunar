@@ -307,11 +307,7 @@ fn yield_winning_or_equal(
             }
         }
         other => {
-            // Save quiet moves.
             debug_assert!(other.is_none());
-
-            gen.bad_captures.sort_unstable();
-            gen.queue.append(&mut gen.bad_captures);
             next_phase(gen, thread, gen_quiet_moves)
         }
     }
@@ -320,6 +316,7 @@ fn yield_winning_or_equal(
 fn gen_quiet_moves(gen: &mut StandardMoveGenerator, thread: &mut ThreadData) -> Option<Generated> {
     let game = thread.game();
 
+    gen.queue.append(&mut gen.bad_captures);
     game.for_each_pseudo_legal_move::<false>(|ply| {
         let value = quiet_move_order(thread, ply);
         gen.queue.push(QueuedPly::QuietMove { ply, value });
