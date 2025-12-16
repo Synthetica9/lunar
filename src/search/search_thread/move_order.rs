@@ -266,11 +266,15 @@ fn gen_quiescence_moves(
     gen: &mut StandardMoveGenerator,
     thread: &mut ThreadData,
 ) -> Option<Generated> {
+    let threat_src = thread.history.threat().map(|x| x.ply.src());
     thread.game().for_each_pseudo_legal_move::<true>(|ply| {
         let mut value = Millipawns(0);
         if ply.is_promotion() {
             debug_assert_eq!(ply.promotion_piece(), Some(Piece::Queen));
             value += Millipawns(8000);
+        }
+        if Some(ply.dst()) == threat_src {
+            value += Millipawns(2000);
         }
         if let Some(victim) = ply.captured_piece(thread.game()) {
             value.0 += thread.history_tables.read_capthist(ply, &thread.history);
