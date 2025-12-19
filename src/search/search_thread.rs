@@ -760,6 +760,28 @@ impl ThreadData {
             }
         }
 
+        let tt_corrplexity = if let (Some(eval), Some(tte)) = (eval, from_tt) {
+            use crate::transposition_table::TranspositionEntryType as TET;
+            let valid = tte.value.is_mate_in_n().is_none()
+                && match tte.value_type() {
+                    Exact => true,
+                    LowerBound => tte.value >= eval,
+                    UpperBound => tte.value <= eval,
+                };
+
+            if valid {
+                use fixed::types::I32F32;
+                let raw = I32F32::from_num(tte.value.0 - eval.0) / 1000;
+                let res = Depth::saturating_from_num(raw.saturating_mul(raw) / 3).min(Depth::ONE);
+                // println!("tt_corr: {res}");
+                res
+            } else {
+                Depth::ZERO
+            }
+        } else {
+            Depth::ZERO
+        };
+
         let mut value = Millipawns(i32::MIN + 12345);
 
         if depth <= 0 && !is_in_check {
@@ -1109,6 +1131,7 @@ impl ThreadData {
                 if ttpv {
                     reduction -= Depth::ONE;
                 }
+                reduction -= tt_corrplexity;
                 reduction = reduction.max(Depth::ONE);
 
                 let virtual_depth = depth - reduction + extension;
