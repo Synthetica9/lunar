@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -301,23 +300,19 @@ impl SearchThreadPool {
     fn recv_any_thread(&mut self, timeout: Duration) -> Option<(usize, ThreadStatus)> {
         let mut sel = crossbeam_channel::Select::new();
 
-        let mut sels = HashMap::new();
-        for (i, handle) in self.threads.iter().enumerate() {
-            let oper = sel.recv(&handle.status_channel);
-            sels.insert(oper, i);
+        for handle in self.threads.iter() {
+            sel.recv(&handle.status_channel);
         }
 
-        match sel.select_timeout(timeout) {
-            Err(_) => None,
-            Ok(oper) => {
-                let i = *sels.get(&oper.index()).unwrap();
-                let handle = &self.threads[i];
-                let status = oper
-                    .recv(&handle.status_channel)
-                    .expect("Couldn't receive message even though we were promised?");
-                Some((i, status))
-            }
-        }
+        sel.select_timeout(timeout).ok().map(|oper| {
+            let i = oper.index();
+            unsafe { std::intrinsics::assume(i < self.threads.len()); }
+            let handle = &self.threads[i];
+            let status = oper
+                .recv(&handle.status_channel)
+                .expect("Couldn't receive message even though we were promised?");
+            (i, status)
+        })
     }
 
     // TODO: returns true when depth has increased but this is super opaque
