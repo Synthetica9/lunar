@@ -44,7 +44,6 @@ enum PoolState {
         clock_start_time: Option<Instant>, // The moment our clock actually started running
 
         is_pondering: bool,
-        is_ponderhit: bool,
         in_book: bool,
 
         score: Millipawns,
@@ -82,6 +81,7 @@ pub struct SearchThreadPool {
     rng: SmallRng,
 
     state: PoolState,
+    ponder_hash: Option<ZobristHash>,
     pv_hash: LruCache<ZobristHash, Ply>,
     pub(crate) opening_book: Option<Arc<PolyglotBook>>,
 }
@@ -150,6 +150,7 @@ impl SearchThreadPool {
             opening_book: None,
             rng,
 
+            ponder_hash: None,
             pv_hash: LruCache::new(NonZeroUsize::new(1024).unwrap()),
         }
     }
@@ -206,7 +207,6 @@ impl SearchThreadPool {
 
             in_book,
             is_pondering,
-            is_ponderhit: false,
             time_policy,
 
             best_move: None,
@@ -231,12 +231,10 @@ impl SearchThreadPool {
             PoolState::Searching {
                 ref mut clock_start_time,
                 ref mut is_pondering,
-                ref mut is_ponderhit,
                 ..
             } if *is_pondering => {
                 *clock_start_time = Some(Instant::now());
                 *is_pondering = false;
-                *is_ponderhit = true;
 
                 true
             }
@@ -468,7 +466,6 @@ impl SearchThreadPool {
             history,
             is_pondering,
             in_book,
-            is_ponderhit,
             pv_instability,
             best_move,
             last_depth_increase,
@@ -609,7 +606,8 @@ impl SearchThreadPool {
                         * pv_instability.clamp(0.1, 5.0)
                         * complexity_fac;
 
-                    if *is_ponderhit {
+                    let is_ponderhit = Some(history.game().hash()) == self.ponder_hash;
+                    if is_ponderhit {
                         // We spent some time on this already, and we're not in an unexpected
                         // scenario. Let's just say it's okay.
                         adjusted_millis /= 1.5;
@@ -800,6 +798,11 @@ impl SearchThreadPool {
         let ponder = best_move.and_then(|best| {
             game.apply_ply(best);
             self.move_in_state(&game, true, true)
+        });
+
+        self.ponder_hash = ponder.map(|ponder| {
+            game.apply_ply(ponder);
+            game.hash()
         });
 
         self.correct_instability(pv_instability);
