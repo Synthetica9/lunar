@@ -1168,7 +1168,6 @@ impl ThreadData {
                     }
                 };
 
-                // XXX: investigate x < beta condition.
                 if N::is_pv() && (is_first_move || (x > alpha && x < beta)) {
                     debug_assert!(beta - alpha > Millipawns(1), "{beta:?} {alpha:?}");
                     x = -self
