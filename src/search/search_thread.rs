@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use fixed::traits::{Fixed, ToFixed};
+use fixed::types::I32F32;
 use linear_map::LinearMap;
 use smallvec::SmallVec;
 
@@ -343,13 +344,11 @@ impl HistoryTables {
     }
 
     fn read_corrhist(&self, stack: &History) -> Millipawns {
-        use fixed::types::I32F32 as T;
-
-        let mut res = T::ZERO;
+        let mut res = I32F32::ZERO;
         let w_res = &mut res;
 
         self.map_corrhist(stack, |x, weight| {
-            *w_res += T::from_num(x.get().0) * T::from_num(weight);
+            *w_res += I32F32::from_num(x.get().0) * I32F32::from_num(weight);
         });
 
         Millipawns(res.to_num())
@@ -715,8 +714,8 @@ impl ThreadData {
                 }
             }
         }
-
-        let mut best_move = from_tt.and_then(|x| x.best_move());
+        let tt_move = from_tt.and_then(|x| x.best_move());
+        let mut best_move = tt_move;
 
         let game = self.game();
         let board = game.board();
@@ -725,11 +724,12 @@ impl ThreadData {
         let enemy_pieces = board.get_color(side_to_move.other());
         let kp = (board.get_piece(Piece::Pawn) | board.get_piece(Piece::King)) & friendly_pieces;
         let side_to_move_only_kp = kp == friendly_pieces;
-        let tt_is_capture =
-            from_tt.is_some_and(|x| x.best_move().is_some_and(|ply| enemy_pieces.get(ply.dst())));
+        let tt_is_capture = tt_move.is_some_and(|ply| enemy_pieces.get(ply.dst()));
 
         // Reverse futility pruning (also known as static null move pruning)
-        if let Some(eval) = eval {
+        'rfp: {
+            let Some(eval) = eval else { break 'rfp };
+
             // https://www.chessprogramming.org/Reverse_Futility_Pruning
             // > It is common to skip RFP when one of the following conditions are met:
             let skip_rfp =
@@ -741,7 +741,8 @@ impl ThreadData {
                 // || from_tt.is_none_or(|x| x.value_type() == TranspositionEntryType::Exact)
                 // > - TT move does not exist or is capture.
                 || tt_is_capture
-                || N::IS_SE;
+                || N::IS_SE
+                || depth > params().rfp_min_depth();
 
             let improving_fac = (Depth::ONE
                 - self.history.improving_rate() * params().rfp_improving_fac())
@@ -751,10 +752,9 @@ impl ThreadData {
                 .saturating_add(params().rfp_offset());
             let margin = Millipawns((base_margin * improving_fac).to_num());
 
-            if !skip_rfp && eval - margin >= beta && depth <= params().rfp_min_depth() {
-                use fixed::types::I32F32 as T;
-                let frac = T::from_num(params().rfp_fail_firm_fac());
-                let val = eval.0 as i64 * frac + beta.0 as i64 * (T::ONE - frac);
+            if !skip_rfp && eval - margin >= beta {
+                let frac = I32F32::from_num(params().rfp_fail_firm_fac());
+                let val = eval.0 as i64 * frac + beta.0 as i64 * (I32F32::ONE - frac);
                 let val = Millipawns(val.to_num());
                 return Ok((val, None));
             }
