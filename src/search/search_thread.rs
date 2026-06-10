@@ -741,6 +741,8 @@ impl ThreadData {
                 // || from_tt.is_none_or(|x| x.value_type() == TranspositionEntryType::Exact)
                 // > - TT move does not exist or is capture.
                 || tt_is_capture
+                || tt_move.is_none()
+
                 || N::IS_SE
                 || depth > params().rfp_min_depth();
 
