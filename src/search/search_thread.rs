@@ -31,6 +31,7 @@ pub const N_CONTINUATION_HISTORIES: usize = 2;
 const COMMS_INTERVAL: usize = 1 << 13;
 
 pub const MAX_CORR_HIST: Millipawns = Millipawns(1024);
+const MILLIPAWNS_UNDEF: Millipawns = Millipawns(i32::MIN + 1234);
 
 mod move_order;
 
@@ -657,6 +658,7 @@ impl ThreadData {
         use move_order::*;
 
         debug_assert_eq!(root_dist == 0, N::IS_ROOT);
+        debug_assert!(alpha < beta, "{alpha:?} >= {beta:?}");
 
         // Must be only incremented here because it is also used to initiate
         // communication.
@@ -1135,7 +1137,7 @@ impl ThreadData {
                 self.history.push(ply);
 
                 // Null-window search
-                let mut x = Millipawns(i32::MIN + 1234);
+                let mut x = MILLIPAWNS_UNDEF;
 
                 if is_first_move && !N::is_pv() {
                     x = -self
@@ -1168,8 +1170,7 @@ impl ThreadData {
                     }
                 };
 
-                if N::is_pv() && (is_first_move || (x > alpha && x < beta)) {
-                    debug_assert!(beta - alpha > Millipawns(1), "{beta:?} {alpha:?}");
+                if N::is_pv() && (is_first_move || x > alpha) {
                     x = -self
                         .alpha_beta_search::<PVNode>(-beta, -alpha, full_depth, root_dist + 1)?
                         .0;
@@ -1177,7 +1178,7 @@ impl ThreadData {
 
                 any_moves_searched = true;
 
-                debug_assert_ne!(x, Millipawns(i32::MIN + 1234));
+                debug_assert_ne!(x, MILLIPAWNS_UNDEF);
 
                 self.history.pop();
 
