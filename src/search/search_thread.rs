@@ -1129,6 +1129,8 @@ impl ThreadData {
                     && is_quiet
                     && !is_check
                 {
+                    debug_assert!(any_moves_searched);
+                    any_moves_pruned = true;
                     continue;
                 }
 
