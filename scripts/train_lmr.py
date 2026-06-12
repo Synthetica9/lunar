@@ -37,7 +37,7 @@ bias_1, bias_2 = clf.intercepts_
 
 all_values = np.concat([arr.ravel() for arr in [layer_1, layer_2, bias_1, bias_2]])
 max_val = np.abs(all_values).max()
-q = 128
+q = int(2 ** 7.5) - 1
 
 
 def quant(xs):
@@ -76,7 +76,7 @@ def to_accum(xs):
     return "\n".join(lines)
 
 
-print("use super::{BareAccum, NUM_FEATURES}")
+print("use super::{BareAccum, NUM_FEATURES};")
 print()
 print(f"pub const OFFSET: f64 = {offset};")
 print(f"pub const MULT: f64 = {mult};")
