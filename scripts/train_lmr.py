@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import log_loss
 from sklearn.model_selection import train_test_split
-from sklearn.neural_network import MLPClassifier
+from sklearn.neural_network import MLPRegressor
 
 headers = "depth base_red extra_red reduced_result full_result is_quiet neg_hist neg_see is_check is_cut tt_is_capture ttpv any_moves_pruned lmp_cut is_capture futility_pruning is_se singular_ext is_mate_threat side_to_move_only_kp".split()
 df = pd.read_csv("lmr_data.csv", names=headers)
@@ -17,9 +17,10 @@ df[bool_headers] = df[bool_headers].map(lambda x: int(x.strip() == "true"))
 
 
 X = df[feature_headers]
-y = (df[result_headers] == [0, 0]).all(axis=1)  # True positives
+# y = (df[result_headers] == [0, 0]).all(axis=1)  # True positives
+y = df["extra_red"]
 
-clf = MLPClassifier(
+clf = MLPRegressor(
     random_state=1,
     max_iter=500,
     hidden_layer_sizes=(16,),
@@ -30,8 +31,10 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, random_sta
 
 clf.fit(X_train, y_train)
 
-probas = clf.predict_proba(X_test)
-print("// Log loss:", log_loss(y_test, probas))
+score = clf.score(X_test, y_test)
+print("// Score:", score)
+# probas = clf.predict_proba(X_test)
+# print("// Log loss:", log_loss(y_test, probas))
 layer_1, layer_2 = clf.coefs_
 bias_1, bias_2 = clf.intercepts_
 
