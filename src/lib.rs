@@ -1,4 +1,5 @@
 #![feature(portable_simd)]
+#![feature(variant_count)]
 #![cfg_attr(unix, feature(allocator_api, slice_ptr_get))]
 #![cfg_attr(feature = "intrinsics", feature(core_intrinsics))]
 #![feature(generic_const_exprs)]

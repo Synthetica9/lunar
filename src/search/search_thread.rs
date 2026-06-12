@@ -32,6 +32,7 @@ const COMMS_INTERVAL: usize = 1 << 13;
 
 pub const MAX_CORR_HIST: Millipawns = Millipawns(1024);
 
+mod lmr;
 mod move_order;
 
 pub use move_order::static_exchange_evaluation;
@@ -895,6 +896,24 @@ impl ThreadData {
                 Depth::ZERO
             };
 
+            let mut lmr_accum = lmr::LMRAccum::new();
+
+            for (feat, cond) in {
+                use lmr::LMRFeature::*;
+                [
+                    (IsCut, N::is_cut()),
+                    (TTIsCapture, tt_is_capture),
+                    (TTPV, ttpv),
+                    (FutilityPruning, futility_pruning),
+                    (IsSE, N::IS_SE),
+                    (SingularExt, singular_ext > 0),
+                    (IsMateThreat, is_mate_threat),
+                    (SideToMoveOnlyKP, side_to_move_only_kp),
+                ]
+            } {
+                lmr_accum.add_cond_unchecked(feat, cond);
+            }
+
             while let Some(Generated {
                 ply,
                 guarantee,
@@ -1075,24 +1094,24 @@ impl ThreadData {
                         * (Depth::ONE - improving_rate * params().lmr_improving_rate())
                             .max(Depth::ONE);
 
-                    if is_quiet && history_score.0 < 0 {
-                        let base = Depth::saturating_from_num(-history_score.0)
-                            / params().lmr_quiet_history_scale();
-                        let base = base.min(params().lmr_quiet_history_max_red());
-                        reduction += base;
+                    let mut accum = lmr_accum.clone();
+
+                    for (feat, cond) in {
+                        use lmr::LMRFeature::*;
+                        [
+                            (IsQuiet, is_quiet),
+                            (NegHist, history_score.0 < 0),
+                            (NegSee, see.0 < 0),
+                            (IsCheck, is_check),
+                            (AnyMovesPruned, any_moves_pruned), // TODO: only once
+                            (LMPCut, moveno > lmp_cutoff),
+                            (IsCapture, is_capture),
+                        ]
+                    } {
+                        accum.add_cond_unchecked(feat, cond);
                     }
 
-                    if see.0 < 0 && !is_check {
-                        reduction += params().neg_see_reduction();
-                    }
-
-                    if N::is_cut() {
-                        reduction += params().lmr_cutnode();
-                    }
-
-                    if is_quiet && tt_is_capture {
-                        reduction += params().tt_capture_reduction();
-                    }
+                    reduction += accum.eval();
                 }
 
                 if is_mate_threat {
@@ -1103,13 +1122,10 @@ impl ThreadData {
                     extension += singular_ext;
                 }
 
+                reduction = reduction.max(Depth::ONE);
+
                 debug_assert!(reduction >= 1, "{reduction} < 1");
                 debug_assert!(extension >= 0, "{extension} < 0");
-
-                if ttpv {
-                    reduction -= Depth::ONE;
-                }
-                reduction = reduction.max(Depth::ONE);
 
                 let virtual_depth = depth - reduction + extension;
                 let next_depth = if depth <= 3 {
