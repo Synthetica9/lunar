@@ -18,7 +18,8 @@ df[bool_headers] = df[bool_headers].map(lambda x: int(x.strip() == "true"))
 
 X = df[feature_headers]
 # y = (df[result_headers] == [0, 0]).all(axis=1)  # True positives
-y = df["extra_red"]
+learn_fac = 0.1
+y = df["extra_red"] + learn_fac * (2 * (df[result_headers] == [0, 0]).all(axis=1) - 1)
 
 clf = MLPRegressor(
     random_state=1,
@@ -27,7 +28,7 @@ clf = MLPRegressor(
     # scoring="neg_log_loss",
 )
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, random_state=4)
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=4)
 
 clf.fit(X_train, y_train)
 
@@ -79,7 +80,7 @@ def to_accum(xs):
     return "\n".join(lines)
 
 
-print("use super::{BareAccum, NUM_FEATURES}")
+print("use super::{BareAccum, NUM_FEATURES};")
 print()
 print(f"pub const OFFSET: f64 = {offset};")
 print(f"pub const MULT: f64 = {mult};")
