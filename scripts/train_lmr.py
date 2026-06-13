@@ -18,8 +18,13 @@ df[bool_headers] = df[bool_headers].map(lambda x: int(x.strip() == "true"))
 
 X = df[feature_headers]
 # y = (df[result_headers] == [0, 0]).all(axis=1)  # True positives
-learn_fac = 0.1
-y = df["extra_red"] + learn_fac * (2 * (df[result_headers] == [0, 0]).all(axis=1) - 1)
+learn_fac = 0.2
+errors = df[result_headers[0]] != df[result_headers[1]]
+y = df["extra_red"].copy()
+error_density = errors.sum() / len(errors)
+print(f"// Error density: {error_density}")
+y[errors] -= learn_fac
+y[~errors] += learn_fac * error_density
 
 clf = MLPRegressor(
     random_state=1,
