@@ -19,7 +19,7 @@ df[bool_headers] = df[bool_headers].map(lambda x: int(x.strip() == "true"))
 X = df[feature_headers]
 # y = (df[result_headers] == [0, 0]).all(axis=1)  # True positives
 learn_fac = 0.1
-y = df["extra_red"] + learn_fac * (2 * (df[result_headers] == [0, 0]).all(axis=1) - 1)
+y = df["extra_red"] + learn_fac * (2 * (df['full_result'] == 0) - 1)
 
 clf = MLPRegressor(
     random_state=1,
