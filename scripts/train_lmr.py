@@ -19,7 +19,13 @@ df[bool_headers] = df[bool_headers].map(lambda x: int(x.strip() == "true"))
 X = df[feature_headers]
 # y = (df[result_headers] == [0, 0]).all(axis=1)  # True positives
 learn_fac = 0.1
-y = df["extra_red"] + learn_fac * (2 * (df[result_headers] == [0, 0]).all(axis=1) - 1)
+true_pos = (df[result_headers] == [0, 0]).all(axis=1)
+true_pos_rate = true_pos.mean()
+print("// True pos rate:", true_pos_rate)
+
+y = df["extra_red"].copy()
+y[true_pos] += learn_fac * (1 - true_pos_rate)
+y[~true_pos] -= learn_fac * true_pos_rate
 
 clf = MLPRegressor(
     random_state=1,
