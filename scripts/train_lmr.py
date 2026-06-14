@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPRegressor
 
 headers = "depth base_red extra_red reduced_result full_result is_quiet neg_hist neg_see is_check is_cut tt_is_capture ttpv any_moves_pruned lmp_cut is_capture futility_pruning is_se singular_ext is_mate_threat side_to_move_only_kp".split()
-df = pd.read_csv("lmr_data.csv", names=headers)
+df = pd.read_csv("lmr_data_2.csv", names=headers)
 
 bool_headers = headers[3:]
 feature_headers = bool_headers[2:]
