@@ -15,7 +15,7 @@ headers = "depth base_red extra_red nodes reduced_result full_result is_quiet ne
 df = pd.read_csv(
     "lmr_data_2.csv",
     names=headers,
-    # nrows=1000,
+    # nrows=10000,
 )
 
 bool_headers = headers[4:]
@@ -29,6 +29,7 @@ effective_red = df["depth"] - effective_depth
 effective_extra = effective_red - df["base_red"] - 1
 diff = effective_extra - df["extra_red"]
 diff_norm = (diff - diff.mean()) / diff.std()
+diff_norm = diff_norm.clip(-1, 1)
 
 # pd.set_option("display.min_rows", 500)
 # pd.set_option("display.max_rows", 500)
@@ -49,7 +50,7 @@ diff_norm = (diff - diff.mean()) / diff.std()
 # )
 
 X = df[feature_headers]
-learn_rate = 0.02
+learn_rate = 0.01
 y = df["extra_red"] + diff_norm * learn_rate
 
 clf = MLPRegressor(
