@@ -51,6 +51,8 @@ jobs:
             flags: "-C target-cpu=x86-64-v2"
           - name: x64-v3
             flags: "-C target-cpu=x86-64-v3"
+          - name: zen2
+            flags: "-C target-cpu=znver2"
           # - name: x64-v4
           #   flags: "-C target-cpu=x86-64-v4"
 
