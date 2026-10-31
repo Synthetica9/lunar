@@ -306,7 +306,10 @@ impl SearchThreadPool {
 
         sel.select_timeout(timeout).ok().map(|oper| {
             let i = oper.index();
+
+            #[cfg(feature = "intrinsics")]
             unsafe { std::intrinsics::assume(i < self.threads.len()); }
+
             let handle = &self.threads[i];
             let status = oper
                 .recv(&handle.status_channel)

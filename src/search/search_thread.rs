@@ -972,7 +972,7 @@ impl ThreadData {
                         "When we are in the root, we will only see legal moves."
                     );
 
-                    #[cfg(not(debug_assertions))]
+                    #[cfg(feature = "intrinsics")]
                     unsafe {
                         std::intrinsics::assume(matches!(guarantee, Legal) || !N::IS_ROOT);
                     };
