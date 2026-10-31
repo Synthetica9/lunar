@@ -1193,6 +1193,7 @@ impl ApplyPly for Game {
     }
 }
 
+#[cfg(feature = "quickcheck")]
 #[mutants::skip]
 impl quickcheck::Arbitrary for Game {
     fn arbitrary(g: &mut quickcheck::Gen) -> Self {

@@ -485,6 +485,7 @@ impl std::ops::Not for Bitboard {
     }
 }
 
+#[cfg(feature = "quickcheck")]
 #[mutants::skip]
 impl quickcheck::Arbitrary for Bitboard {
     fn arbitrary(g: &mut quickcheck::Gen) -> Self {
@@ -652,6 +653,7 @@ mod tests {
         assert_eq!(smeared, FULL);
     }
 
+    #[cfg(feature = "quickcheck")]
     quickcheck::quickcheck! {
         fn test_from_squares(bb: Bitboard) -> bool {
             let squares: Vec<_> = bb.iter().collect();

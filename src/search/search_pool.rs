@@ -93,7 +93,7 @@ impl SearchThreadPool {
     ) -> SearchThreadPool {
         let mut threads = Vec::new();
 
-        let rng = SmallRng::from_entropy();
+        let rng = SmallRng::seed_from_u64(1);
 
         for thread_id in 0..num_threads {
             let (command_s, command_r) = channel::unbounded();

@@ -1,7 +1,5 @@
 use std::cmp::Ordering;
 
-use quickcheck::Arbitrary;
-
 use crate::{
     basic_enums::Color,
     bitboard::{Bitboard, DARK_SQUARES},
@@ -584,7 +582,8 @@ impl ApplyPly for Board {
     fn flip_side(&mut self) {}
 }
 
-impl Arbitrary for Board {
+#[cfg(feature = "quickcheck")]
+impl quickcheck::Arbitrary for Board {
     fn arbitrary(g: &mut quickcheck::Gen) -> Self {
         Game::arbitrary(g).board().clone()
     }

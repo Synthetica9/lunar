@@ -1,5 +1,3 @@
-use quickcheck::Arbitrary;
-
 use crate::basic_enums::{CastleDirection, Color};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -149,7 +147,8 @@ impl Iterator for CastleRightsIter {
     }
 }
 
-impl Arbitrary for CastleRights {
+#[cfg(feature = "quickcheck")]
+impl quickcheck::Arbitrary for CastleRights {
     fn arbitrary(g: &mut quickcheck::Gen) -> Self {
         CastleRights(u8::arbitrary(g) % 16)
     }
