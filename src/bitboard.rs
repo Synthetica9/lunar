@@ -331,7 +331,7 @@ impl Bitboard {
         // %64 to tell the compiler that it'll be okay.
         let (magic, premask, postmask, attack) = magics[sq_idx % 64];
 
-        let bits = attack.len().leading_zeros() + 1;
+        let bits = (attack.len() as u64).leading_zeros() + 1;
 
         debug_assert!(1 << (64 - bits) == attack.len());
 
