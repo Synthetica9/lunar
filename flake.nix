@@ -87,25 +87,26 @@
               '';
             };
 
-          fastchess = with pkgs;
-          stdenv.mkDerivation (self: {
-            pname = "fastchess";
-            version = "1.4.0-alpha";
+          fastchess =
+            with pkgs;
+            stdenv.mkDerivation (self: {
+              pname = "fastchess";
+              version = "1.4.0-alpha";
 
-            src = fetchFromGitHub {
-              owner = "Disservin";
-              repo = self.pname;
-              rev = "v${self.version}";
-              hash = "sha256-fzNpanfeXk7eKftzcs5MIaDBvzumaMQIhhQ8IDFjwPQ=";
-            };
+              src = fetchFromGitHub {
+                owner = "Disservin";
+                repo = self.pname;
+                rev = "v${self.version}";
+                hash = "sha256-fzNpanfeXk7eKftzcs5MIaDBvzumaMQIhhQ8IDFjwPQ=";
+              };
 
-            installPhase = ''
-              export PREFIX=$out
-              make install
-            '';
+              installPhase = ''
+                export PREFIX=$out
+                make install
+              '';
 
-            nativeBuildInputs = [lowdown];
-          });
+              nativeBuildInputs = [ lowdown ];
+            });
         };
       }
     );
