@@ -294,7 +294,7 @@ impl TranspositionTable {
 
         #[cfg(feature = "intrinsics")]
         {
-            unsafe { core::intrinsics::prefetch_read_data(ptr, 3) }
+            unsafe { core::intrinsics::prefetch_read_data::<_, 3>(ptr) }
             return;
         }
     }
@@ -313,7 +313,7 @@ impl TranspositionTable {
 
         #[cfg(feature = "intrinsics")]
         {
-            unsafe { core::intrinsics::prefetch_write_data(ptr, 3) }
+            unsafe { core::intrinsics::prefetch_write_data::<_, 3>(ptr) }
             return;
         }
     }
