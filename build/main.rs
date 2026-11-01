@@ -30,7 +30,7 @@ pub fn main() -> std::io::Result<()> {
     println!("cargo:rerun-if-changed={string_path}");
     println!("cargo:rerun-if-env-changed=EVALFILE");
 
-    // std::thread::sleep(std::time::Duration::from_secs(10));
+    // thread::sleep(std::time::Duration::from_secs(10));
     Ok(())
 }
 

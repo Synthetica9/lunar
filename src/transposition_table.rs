@@ -324,7 +324,7 @@ impl TranspositionTable {
 
         // h000 0000 0000 0000
         // 0000 00a0 0000 0000
-        // 0000 000d dddd ddd0
+        // 0000 000d dddd dgdd0
         // 0000 0000 0000 000t
         // ------------------- |
         // haaa aaad dddd dddt

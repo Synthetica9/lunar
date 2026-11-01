@@ -1,9 +1,15 @@
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::thread::{spawn, JoinHandle};
 use std::time::Duration;
 use std::time::Instant;
+
+// #[cfg(not(feature = "wasm"))]
+use std::thread;
+
+// #[cfg(feature = "wasm")]
+// use wasm_thread as thread;
+// use wasm_bindgen_spawn as thread;
 
 // TODO: use stock rust channels?
 use crossbeam_channel as channel;
@@ -67,7 +73,7 @@ enum PoolState {
 }
 
 pub struct ThreadHandle {
-    join_handle: JoinHandle<()>,
+    join_handle: thread::JoinHandle<()>,
     status_channel: channel::Receiver<ThreadStatus>,
     command_channel: channel::Sender<ThreadCommand>,
     is_searching: bool,
@@ -101,36 +107,37 @@ impl SearchThreadPool {
             let transposition_table = transposition_table.clone();
 
             let mut is_idle = true;
-            let callback = move |status| {
-                // println!("callback!");
-                use ThreadStatus as S;
 
-                // rustc bug it seems?
-                is_idle = matches!(status, S::Idle | S::Quitting);
+            let join_handle = thread::spawn(move || {
+                let callback = move |status| {
+                    // println!("callback!");
+                    use ThreadStatus as S;
 
-                status_s.send(status).expect("Error sending message");
+                    // rustc bug it seems?
+                    is_idle = matches!(status, S::Idle | S::Quitting);
 
-                let timeout = Duration::from_millis(if is_idle { 1000 } else { 0 });
-                match command_r.recv_timeout(timeout) {
-                    Ok(command) => Some(command),
-                    Err(no_command) => {
-                        use crossbeam_channel::RecvTimeoutError as E;
-                        match no_command {
-                            E::Timeout => None,
-                            E::Disconnected => panic!("Channel disconnected!"),
+                    status_s.send(status).expect("Error sending message");
+
+                    let timeout = Duration::from_millis(if is_idle { 1000 } else { 0 });
+                    match command_r.recv_timeout(timeout) {
+                        Ok(command) => Some(command),
+                        Err(no_command) => {
+                            use crossbeam_channel::RecvTimeoutError as E;
+                            match no_command {
+                                E::Timeout => None,
+                                E::Disconnected => panic!("Channel disconnected!"),
+                            }
                         }
                     }
-                }
-            };
+                };
 
-            let thread = spawn(move || {
                 let mut runner =
                     ThreadData::new(thread_id, transposition_table, Box::new(callback));
                 runner.run();
             });
 
             let handle = ThreadHandle {
-                join_handle: thread,
+                join_handle,
                 status_channel: status_r,
                 command_channel: command_s,
                 is_searching: false,
@@ -308,7 +315,9 @@ impl SearchThreadPool {
             let i = oper.index();
 
             #[cfg(feature = "intrinsics")]
-            unsafe { std::intrinsics::assume(i < self.threads.len()); }
+            unsafe {
+                std::intrinsics::assume(i < self.threads.len());
+            }
 
             let handle = &self.threads[i];
             let status = oper

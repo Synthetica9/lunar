@@ -2,6 +2,13 @@ use std::io::Write;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+// #[cfg(not(feature = "wasm"))]
+use std::thread;
+
+// #[cfg(feature = "wasm")]
+// use wasm_bindgen_spawn as thread;
+// use wasm_thread as thread;
+
 use crate::game::Game;
 use crate::history::History;
 use crate::polyglot::PolyglotBook;
@@ -344,7 +351,9 @@ impl UCIState {
                 // Non-standard. Stop accepting commands until the current search is done.
                 while self.search_thread_pool.is_searching() {
                     self.manage_thread_pool();
-                    std::thread::sleep(Duration::from_millis(50));
+
+                    #[cfg(not(feature = "wasm"))]
+                    thread::sleep(Duration::from_millis(50));
                 }
                 self.log("Done waiting");
             }
@@ -635,7 +644,7 @@ pub fn run_uci() {
 fn spawn_reader_thread() -> crossbeam_channel::Receiver<String> {
     let (tx, rx) = crossbeam_channel::unbounded();
 
-    std::thread::spawn(move || {
+    thread::spawn(move || {
         #[cfg(not(feature = "readline"))]
         let lines = {
             use std::io::BufRead;

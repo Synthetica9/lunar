@@ -35,6 +35,8 @@ pub mod uci;
 pub mod zero_init;
 pub mod zobrist_hash;
 
+#[cfg(feature = "wasm")]
+pub mod wasm;
 // pub mod build;
 
 mod generated;

@@ -1,3 +1,4 @@
+#[cfg(not(feature = "wasm"))]
 fn main() {
     use lunar::uci::run_uci;
 

@@ -2,6 +2,10 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -9,15 +13,19 @@
       self,
       flake-utils,
       nixpkgs,
+      rust-overlay,
     }@inputs:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = import nixpkgs { inherit system; };
+        overlays = [ rust-overlay.overlays.default ];
+        pkgs = import nixpkgs { inherit system overlays; };
       in
       {
         packages = rec {
           inherit (pkgs) cutechess;
+
+          lunar-wasm = pkgs.callPackage ./wasm.nix { };
 
           bayesian-elo =
             with pkgs;

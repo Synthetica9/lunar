@@ -20,6 +20,15 @@ readline = ["rustyline"]
 intrinsics = []
 # Allow tuning via UCI
 tunable = []
+wasm = [
+  "wasm-bindgen",
+  "console_error_panic_hook",
+  "wasm-bindgen-spawn",
+  # "wasm_thread",
+]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [profile.release]
 lto = true
@@ -51,6 +60,12 @@ rand = { version = "0.8", features = [
   "alloc",
 ], default-features = false }
 
+# Wasm specific stuff
+wasm-bindgen = { version = "=0.2.129", optional = true }
+console_error_panic_hook = { version = "0.1.7", optional = true }
+# wasm_thread = { version = "0.3", optional = true }
+wasm-bindgen-spawn = { version = "0.0.7", optional = true }
+
 [build-dependencies]
 rand = { version = "0.8", features = ["small_rng"], default-features = false }
 serde = { version = "1.0" }
@@ -64,6 +79,27 @@ rand = { version = "0.8", features = [
   "alloc",
 ], default-features = false }
 serde_yaml = "0.9"
+
+hashbrown = "=0.17.1"
+cfg-if = "=1.0.4"
+rustc-demangle = "*"
+object = "=0.39.1"
+wasip1 = "*"
+wasip2 = "*"
+wasip3 = "=0.9.0+wasi-0.3.0"
+dlmalloc = "*"
+libc = "=0.2.191"
+addr2line = "*"
+hermit-abi = "*"
+moto-rt = "=0.17.4"
+r-efi = "=5.3.0"
+r-efi-alloc = "*"
+vex-sdk = "=0.27.1"
+fortanix-sgx-abi = "=0.6.1"
+rustc-literal-escaper = "*"
+unwinding = "*"
+memchr = "=2.8.3"
+getopts = "*"
 
 [[bench]]
 name = "perft_bench"

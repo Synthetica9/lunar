@@ -1,2 +1,21 @@
 [build]
-rustflags = ["-C", "target-cpu=native"]
+# rustflags = ["-C", "target-cpu=native"]
+
+[target.wasm32-unknown-unknown]
+rustflags = [
+    "-Ctarget-feature=+atomics",
+
+    "-Clink-args=--shared-memory",
+    "-Clink-args=--import-memory",
+    "-Clink-args=--max-memory=1073741824",
+    "-Clink-args=--export=__wasm_init_tls",
+    "-Clink-args=--export=__tls_size",
+    "-Clink-args=--export=__tls_align",
+    "-Clink-args=--export=__tls_base",
+    "-Clink-args=--export=__heap_base",
+
+    "-Cpanic=unwind" # -- remove if you use panic=abort, which is the default
+    # note: DO NOT pass --panic-unwind to wasm-pack because it will override
+    # other RUSTFLAGS needed for threading support
+
+]

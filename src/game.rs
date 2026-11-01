@@ -11,7 +11,7 @@ use crate::legality::LegalityChecker;
 use crate::simd_zobrist::SimdZobrist;
 
 use crate::piece::Piece;
-use crate::ply::{ApplyPly, Ply, SpecialFlag, UndoPly, _combination_moves};
+use crate::ply::{_combination_moves, ApplyPly, Ply, SpecialFlag, UndoPly};
 use crate::plyset::PlySet;
 use crate::search::static_exchange_evaluation;
 use crate::square::Square;
